@@ -10,6 +10,10 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
+const ALLOWED_ORIGINS = String(process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
@@ -86,7 +90,19 @@ function ensureSeedAdmin() {
 
 ensureSeedAdmin();
 
-app.use(cors());
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin) {
+            callback(null, true);
+            return;
+        }
+        if (ALLOWED_ORIGINS.length === 0) {
+            callback(null, true);
+            return;
+        }
+        callback(null, ALLOWED_ORIGINS.includes(origin));
+    }
+}));
 app.use(express.json());
 
 app.get("/health", (_req, res) => {

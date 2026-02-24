@@ -16,7 +16,12 @@ const quotes = [
 
 // Data Storage
 const APP_STATE_VERSION = 1;
-const API_BASE_URL = "http://localhost:4000";
+const API_BASE_URL = (() => {
+    const fromGlobal = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || "";
+    const fromMeta = document.querySelector('meta[name="api-base-url"]')?.getAttribute("content") || "";
+    const fromEnv = fromGlobal || fromMeta || "http://localhost:4000";
+    return String(fromEnv).replace(/\/+$/, "");
+})();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
 const DEFAULT_STUDY_MATERIALS = [
     {
