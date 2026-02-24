@@ -1,0 +1,11 @@
+{
+  "name": "Smart Study Planner",
+  "short_name": "StudyPlanner",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2193b0",
+  "description": "Professional study planning with prioritization, analytics, and smart scheduling.",
+  "icons": []
+}

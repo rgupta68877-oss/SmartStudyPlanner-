@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f766e">
+    <title>Smart Study Planner</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div id="authContainer" class="auth-container">
+    <div class="auth-card">
+        <div class="logo">
+            <i class="fas fa-graduation-cap"></i>
+            <span>Smart Study</span>
+        </div>
+        <h2 id="authTitle">Login</h2>
+
+        <div id="authLoginView">
+            <div class="input-group">
+                <input type="email" id="loginEmail" placeholder="Email address">
+            </div>
+            <div class="input-group">
+                <input type="password" id="loginPassword" placeholder="Password">
+            </div>
+            <button class="add-btn" onclick="loginUser()">Login</button>
+            <div class="auth-actions">
+                <button class="action-btn" onclick="showAuthView('register')">Create account</button>
+                <button class="action-btn" onclick="showAuthView('forgot')">Forgot password</button>
+            </div>
+        </div>
+
+        <div id="authRegisterView" style="display:none;">
+            <div class="input-group">
+                <input type="text" id="registerName" placeholder="Full name">
+            </div>
+            <div class="input-group">
+                <input type="email" id="registerEmail" placeholder="Email address">
+            </div>
+            <div class="input-group">
+                <select id="registerRole">
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <input type="password" id="registerPassword" placeholder="Password (min 6 chars)">
+            </div>
+            <button class="add-btn" onclick="registerUser()">Register</button>
+            <div class="auth-actions">
+                <button class="action-btn" onclick="showAuthView('login')">Already have an account</button>
+            </div>
+        </div>
+
+        <div id="authForgotView" style="display:none;">,
+            <div class="input-group">
+                <input type="email" id="forgotEmail" placeholder="Registered email">
+            </div>
+            <div class="input-group">
+                <input type="password" id="forgotNewPassword" placeholder="New password">
+            </div>
+            <button class="add-btn" onclick="resetPassword()">Reset Password</button>
+            <div class="auth-actions">
+                <button class="action-btn" onclick="showAuthView('login')">Back to login</button>
+            </div>
+        </div>
+
+        <p id="authMessage" class="auth-message"></p>
+    </div>
+</div>
+
+<div class="app-container" id="appContainer" style="display:none;">
+    <nav class="sidebar" id="sidebar">
+        <div class="logo">
+            <i class="fas fa-graduation-cap"></i>
+            <span>Smart Study</span>
+        </div>
+        
+        <ul class="nav-menu">
+            <li class="nav-item active" data-page="dashboard">
+                <a href="#dashboard"><i class="fas fa-th-large"></i> Dashboard</a>
+            </li>
+            <li class="nav-item" data-page="tasks">
+                <a href="#tasks"><i class="fas fa-tasks"></i> Tasks</a>
+            </li>
+            <li class="nav-item" data-page="calendar">
+                <a href="#calendar"><i class="fas fa-calendar-alt"></i> Calendar</a>
+            </li>
+            <li class="nav-item" data-page="notes">
+                <a href="#notes"><i class="fas fa-sticky-note"></i> Notes</a>
+            </li>
+            <li class="nav-item" data-page="flashcards">
+                <a href="#flashcards"><i class="fas fa-layer-group"></i> Flashcards</a>
+            </li>
+            <li class="nav-item" data-page="assignments">
+                <a href="#assignments"><i class="fas fa-file-alt"></i> Assignments</a>
+            </li>
+            <li class="nav-item" data-page="gpa">
+                <a href="#gpa"><i class="fas fa-calculator"></i> GPA Calculator</a>
+            </li>
+            <li class="nav-item" data-page="exams">
+                <a href="#exams"><i class="fas fa-stopwatch"></i> Exam Countdown</a>
+            </li>
+            <li class="nav-item" data-page="analytics">
+                <a href="#analytics"><i class="fas fa-chart-line"></i> Analytics</a>
+            </li>
+            <li class="nav-item" data-page="quiz">
+                <a href="#quiz"><i class="fas fa-question-circle"></i> Quiz</a>
+            </li>
+            <li class="nav-item" data-page="admin">
+                <a href="#admin"><i class="fas fa-user-shield"></i> Admin</a>
+            </li>
+            <li class="nav-item" data-page="subjects">
+                <a href="#subjects"><i class="fas fa-book"></i> Subjects</a>
+            </li>
+            <li class="nav-item" data-page="timetable">
+                <a href="#timetable"><i class="fas fa-table"></i> Timetable</a>
+            </li>
+            <li class="nav-item" data-page="resources">
+                <a href="#resources"><i class="fas fa-link"></i> Resources</a>
+            </li>
+            <li class="nav-item" data-page="study-materials">
+                <a href="#study-materials"><i class="fas fa-book-open-reader"></i> Study Materials</a>
+            </li>
+            <li class="nav-item" data-page="free-notes">
+                <a href="#free-notes"><i class="fas fa-file-arrow-down"></i> Free Notes</a>
+            </li>
+            <li class="nav-item" data-page="achievements">
+                <a href="#achievements"><i class="fas fa-award"></i> Achievements</a>
+            </li>
+            <li class="nav-item" data-page="pomodoro-history">
+                <a href="#pomodoro-history"><i class="fas fa-history"></i> Timer History</a>
+            </li>
+            <li class="nav-item" data-page="goals">
+                <a href="#goals"><i class="fas fa-bullseye"></i> Goals</a>
+            </li>
+            <li class="nav-item" data-page="profile">
+                <a href="#profile"><i class="fas fa-user"></i> Profile</a>
+            </li>
+            <li class="nav-item" data-page="settings">
+                <a href="#settings"><i class="fas fa-cog"></i> Settings</a>
+            </li>
+        </ul>
+        
+        <div class="sidebar-footer">
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+                <i class="fas fa-moon"></i> <span>Dark Mode</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <header class="top-header">
+            <div class="header-left">
+                <h1 id="pageTitle">Dashboard</h1>
+            </div>
+            <div class="header-right">
+                <div class="study-streak" id="networkStatus" aria-live="polite">
+                    <i class="fas fa-wifi"></i>
+                    <span>Online</span>
+                </div>
+                <div class="study-streak" id="userBadge">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="currentUserName">Guest</span>
+                </div>
+                <button class="print-btn" onclick="showPrintModal()">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                <div class="study-streak">
+                    <i class="fas fa-fire"></i>
+                    <span id="streakCount">0</span> Day Streak
+                </div>
+                <button class="export-import-btn" onclick="showExportImportModal()">
+                    <i class="fas fa-download"></i> Backup
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD PAGE -->
+        <div class="page-content active" id="page-dashboard">
+            <div class="quote-card">
+                <p id="quoteText">"Education is the passport to the future."</p>
+                <button class="new-quote-btn" onclick="newQuote()">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <i class="fas fa-list"></i>
+                    <span class="stat-number" id="totalTasks">0</span>
+                    <span class="stat-label">Total Tasks</span>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-check-circle"></i>
+                    <span class="stat-number" id="completedTasks">0</span>
+                    <span class="stat-label">Completed</span>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-clock"></i>
+                    <span class="stat-number" id="pendingTasks">0</span>
+                    <span class="stat-label">Pending</span>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-calendar-check"></i>
+                    <span class="stat-number" id="assignmentsCount">0</span>
+                    <span class="stat-label">Assignments</span>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-stopwatch"></i>
+                    <span class="stat-number" id="studyHours">0</span>
+                    <span class="stat-label">Study Hours</span>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-layer-group"></i>
+                    <span class="stat-number" id="flashcardCount">0</span>
+                    <span class="stat-label">Flashcards</span>
+                </div>
+            </div>
+
+            <div class="card weekly-goals">
+                <h3><i class="fas fa-bullseye"></i> Weekly Goals</h3>
+                <div class="goals-progress">
+                    <div class="goal-item">
+                        <span>Complete 20 tasks</span>
+                        <div class="goal-bar">
+                            <div class="goal-fill" id="goalTaskFill" style="width: 0%"></div>
+                        </div>
+                        <span id="goalTaskText">0/20</span>
+                    </div>
+                    <div class="goal-item">
+                        <span>Study 10 hours</span>
+                        <div class="goal-bar">
+                            <div class="goal-fill" id="goalStudyFill" style="width: 0%"></div>
+                        </div>
+                        <span id="goalStudyText">0/10 hrs</span>
+                    </div>
+                    <div class="goal-item">
+                        <span>Review 50 flashcards</span>
+                        <div class="goal-bar">
+                            <div class="goal-fill" id="goalFlashcardFill" style="width: 0%"></div>
+                        </div>
+                        <span id="goalFlashcardText">0/50</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card quick-actions">
+                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                <div class="action-buttons">
+                    <button class="action-btn" onclick="navigateTo('tasks')">
+                        <i class="fas fa-plus"></i> Add Task
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('notes')">
+                        <i class="fas fa-edit"></i> Add Note
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('flashcards')">
+                        <i class="fas fa-plus-circle"></i> Add Flashcard
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('assignments')">
+                        <i class="fas fa-file-plus"></i> Add Assignment
+                    </button>
+                </div>
+            </div>
+
+            <div class="card do-next">
+                <h3><i class="fas fa-list-check"></i> Do Next</h3>
+                <ul id="doNextList">
+                    <li class="empty-state">No active tasks to prioritize</li>
+                </ul>
+            </div>
+
+            <div class="card recent-activity">
+                <h3><i class="fas fa-history"></i> Recent Activity</h3>
+                <ul id="recentActivityList">
+                    <li class="empty-state">No recent activity</li>
+                </ul>
+            </div>
+
+            <div class="card timer-section">
+                <h3><i class="fas fa-stopwatch"></i> Study Timer</h3>
+                <div class="timer-display">
+                    <span id="timerMinutes">25</span>:<span id="timerSeconds">00</span>
+                </div>
+                <div class="timer-controls">
+                    <button class="timer-btn start" onclick="startTimer()" id="startBtn">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button class="timer-btn pause" onclick="pauseTimer()" id="pauseBtn" disabled>
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
+                    <button class="timer-btn reset" onclick="resetTimer()">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+                <div class="timer-modes">
+                    <button class="mode-btn active" onclick="setTimerMode(25)" data-minutes="25">Focus</button>
+                    <button class="mode-btn" onclick="setTimerMode(5)" data-minutes="5">Short Break</button>
+                    <button class="mode-btn" onclick="setTimerMode(15)" data-minutes="15">Long Break</button>
+                </div>
+            </div>
+
+            <div class="card upcoming-deadlines">
+                <h3><i class="fas fa-exclamation-triangle"></i> Upcoming Deadlines</h3>
+                <ul id="upcomingDeadlines">
+                    <li class="empty-state">No upcoming deadlines</li>
+                </ul>
+            </div>
+
+            <div class="card daily-plan">
+                <h3><i class="fas fa-calendar-day"></i> Daily Auto Plan</h3>
+                <div class="goal-setting">
+                    <label for="planHoursToday">Available study hours today:</label>
+                    <input type="number" id="planHoursToday" min="1" max="16" step="1" value="2">
+                </div>
+                <button class="add-btn" onclick="generateTodayPlan()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Generate Plan
+                </button>
+                <button class="action-btn" onclick="replanMissedTasks()">
+                    <i class="fas fa-rotate-right"></i> Replan Missed Tasks
+                </button>
+                <ul id="todayPlanList">
+                    <li class="empty-state">No plan generated yet</li>
+                </ul>
+            </div>
+
+        </div>
+
+        <!-- TASKS PAGE -->
+        <div class="page-content" id="page-tasks">
+            <div class="add-task-section">
+                <div class="input-group">
+                    <input type="text" id="taskInput" placeholder="Enter your study task..." onkeypress="handleEnter(event)">
+                </div>
+                <div class="task-options">
+                    <select id="subjectSelect">
+                        <option value="">Select Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <select id="prioritySelect">
+                        <option value="medium">Medium Priority</option>
+                        <option value="high">High Priority</option>
+                        <option value="low">Low Priority</option>
+                    </select>
+                    <select id="difficultySelect">
+                        <option value="medium">Medium Difficulty</option>
+                        <option value="hard">Hard Difficulty</option>
+                        <option value="easy">Easy Difficulty</option>
+                    </select>
+                    <input type="number" id="estimatedHoursInput" min="0.5" step="0.5" placeholder="Est. hours">
+                    <input type="date" id="dueDateInput">
+                </div>
+                <button class="add-btn" onclick="addTask()">
+                    <i class="fas fa-plus"></i> Add Task
+                </button>
+            </div>
+
+            <div class="filter-section">
+                <button class="filter-btn active" data-filter="all" onclick="filterTasks('all')">All</button>
+                <button class="filter-btn" data-filter="active" onclick="filterTasks('active')">Active</button>
+                <button class="filter-btn" data-filter="completed" onclick="filterTasks('completed')">Completed</button>
+                <button class="filter-btn" data-filter="overdue" onclick="filterTasks('overdue')">Overdue</button>
+                <button class="filter-btn" data-filter="today" onclick="filterTasks('today')">Due Today</button>
+            </div>
+
+            <div class="task-toolbar">
+                <div class="input-group">
+                    <input type="text" id="taskSearchInput" placeholder="Search tasks by title or subject..." oninput="setTaskSearchQuery(this.value)">
+                </div>
+                <div class="task-options">
+                    <select id="taskSortSelect" onchange="setTaskSortMode(this.value)">
+                        <option value="priority-due">Sort: Priority + Due Date</option>
+                        <option value="due-soon">Sort: Due Soon</option>
+                        <option value="newest">Sort: Newest First</option>
+                        <option value="oldest">Sort: Oldest First</option>
+                    </select>
+                    <button class="action-btn" onclick="selectVisibleTasks()">
+                        <i class="fas fa-list-check"></i> Select Visible
+                    </button>
+                    <button class="add-btn" type="button" onclick="completeSelectedTasks()">
+                        <i class="fas fa-check-double"></i> Complete Selected
+                    </button>
+                    <button class="action-btn" onclick="clearTaskSelection()">
+                        <i class="fas fa-xmark"></i> Clear Selection
+                    </button>
+                    <button class="action-btn" onclick="clearTaskSearch()">
+                        <i class="fas fa-eraser"></i> Clear Search
+                    </button>
+                </div>
+                <p id="selectedTasksInfo" class="selected-tasks-info">0 selected</p>
+            </div>
+
+            <ul id="taskList"></ul>
+
+            <div class="progress-section">
+                <div class="progress-info">
+                    <span>Progress</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="progress-container">
+                    <div id="progressBar"></div>
+                </div>
+            </div>
+
+            <button class="clear-btn" onclick="clearTasks()">
+                <i class="fas fa-trash-alt"></i> Clear All Tasks
+            </button>
+        </div>
+
+        <!-- CALENDAR PAGE -->
+        <div class="page-content" id="page-calendar">
+            <div class="calendar-header">
+                <button class="calendar-nav" onclick="changeMonth(-1)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <h2 id="calendarMonth">January 2025</h2>
+                <button class="calendar-nav" onclick="changeMonth(1)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="calendar-grid">
+                <div class="calendar-day-header">Sun</div>
+                <div class="calendar-day-header">Mon</div>
+                <div class="calendar-day-header">Tue</div>
+                <div class="calendar-day-header">Wed</div>
+                <div class="calendar-day-header">Thu</div>
+                <div class="calendar-day-header">Fri</div>
+                <div class="calendar-day-header">Sat</div>
+                <div id="calendarDays"></div>
+            </div>
+            <div class="calendar-legend">
+                <span><i class="fas fa-circle task-dot"></i> Task Due</span>
+                <span><i class="fas fa-circle assignment-dot"></i> Assignment Due</span>
+                <span><i class="fas fa-circle exam-dot"></i> Exam</span>
+            </div>
+        </div>
+
+        <!-- NOTES PAGE -->
+        <div class="page-content" id="page-notes">
+            <div class="notes-header">
+                <input type="text" id="noteSearch" placeholder="Search notes..." onkeyup="searchNotes()">
+                <button class="add-btn" onclick="showNoteEditor()">
+                    <i class="fas fa-plus"></i> New Note
+                </button>
+            </div>
+            <div class="notes-grid" id="notesGrid"></div>
+        </div>
+
+        <!-- FLASHCARDS PAGE -->
+        <div class="page-content" id="page-flashcards">
+            <div class="flashcard-controls">
+                <select id="flashcardDeck">
+                    <option value="">Select Deck</option>
+                </select>
+                <button class="add-btn" onclick="showFlashcardEditor()">
+                    <i class="fas fa-plus"></i> New Card
+                </button>
+                <button class="add-btn" onclick="createNewDeck()">
+                    <i class="fas fa-folder-plus"></i> New Deck
+                </button>
+            </div>
+            <div class="flashcard-study" id="flashcardStudy">
+                <div class="flashcard" onclick="flipFlashcard()">
+                    <div class="flashcard-front" id="flashcardFront">
+                        <p>Select a deck and click Study to start</p>
+                    </div>
+                    <div class="flashcard-back" id="flashcardBack">
+                        <p></p>
+                    </div>
+                </div>
+                <div class="flashcard-nav">
+                    <button onclick="prevFlashcard()"><i class="fas fa-chevron-left"></i></button>
+                    <span id="flashcardCounter">0 / 0</span>
+                    <button onclick="nextFlashcard()"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <button class="study-btn" onclick="startStudy()">Start Study</button>
+            </div>
+            <div class="deck-cards" id="deckCards"></div>
+        </div>
+
+        <!-- ASSIGNMENTS PAGE -->
+        <div class="page-content" id="page-assignments">
+            <div class="add-task-section">
+                <div class="input-group">
+                    <input type="text" id="assignmentTitle" placeholder="Assignment title...">
+                </div>
+                <div class="task-options">
+                    <select id="assignmentSubject">
+                        <option value="">Select Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <select id="assignmentType">
+                        <option value="Essay">Essay</option>
+                        <option value="Project">Project</option>
+                        <option value="Lab">Lab Report</option>
+                        <option value="Presentation">Presentation</option>
+                        <option value="Quiz">Quiz</option>
+                        <option value="Test">Test</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <input type="date" id="assignmentDue">
+                </div>
+                <textarea id="assignmentDesc" placeholder="Assignment description..." rows="3"></textarea>
+                <button class="add-btn" onclick="addAssignment()">
+                    <i class="fas fa-plus"></i> Add Assignment
+                </button>
+            </div>
+
+            <div class="filter-section">
+                <button class="filter-btn active" data-filter="all" onclick="filterAssignments('all')">All</button>
+                <button class="filter-btn" data-filter="pending" onclick="filterAssignments('pending')">Pending</button>
+                <button class="filter-btn" data-filter="completed" onclick="filterAssignments('completed')">Completed</button>
+                <button class="filter-btn" data-filter="overdue" onclick="filterAssignments('overdue')">Overdue</button>
+            </div>
+
+            <ul id="assignmentsList"></ul>
+        </div>
+
+        <!-- GPA CALCULATOR PAGE -->
+        <div class="page-content" id="page-gpa">
+            <div class="card gpa-calculator">
+                <h3><i class="fas fa-calculator"></i> GPA Calculator</h3>
+                <div class="gpa-settings">
+                    <label>Scale:
+                        <select id="gpaScale">
+                            <option value="4.0">4.0 (US)</option>
+                            <option value="5.0">5.0</option>
+                            <option value="10.0">10.0</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="gpaSubjects">
+                    <div class="gpa-subject-row">
+                        <input type="text" placeholder="Subject Name" class="gpa-subject-name">
+                        <input type="number" placeholder="Credits" class="gpa-credits" min="1" max="10">
+                        <select class="gpa-grade">
+                            <option value="4.0">A (4.0)</option>
+                            <option value="3.7">A- (3.7)</option>
+                            <option value="3.3">B+ (3.3)</option>
+                            <option value="3.0">B (3.0)</option>
+                            <option value="2.7">B- (2.7)</option>
+                            <option value="2.3">C+ (2.3)</option>
+                            <option value="2.0">C (2.0)</option>
+                            <option value="1.7">C- (1.7)</option>
+                            <option value="1.3">D+ (1.3)</option>
+                            <option value="1.0">D (1.0)</option>
+                            <option value="0.0">F (0.0)</option>
+                        </select>
+                        <button class="delete-btn" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <button class="add-btn" onclick="addGPARow()" style="margin-bottom: 15px;">
+                    <i class="fas fa-plus"></i> Add Subject
+                </button>
+                <div class="gpa-result">
+                    <div class="gpa-display">
+                        <span>GPA:</span>
+                        <span id="gpaResult">0.00</span>
+                    </div>
+                    <div class="gpa-display">
+                        <span>Total Credits:</span>
+                        <span id="totalCredits">0</span>
+                    </div>
+                </div>
+                <button class="add-btn" onclick="calculateGPA()">
+                    <i class="fas fa-calculator"></i> Calculate GPA
+                </button>
+            </div>
+            
+            <div class="card gpa-history">
+                <h3><i class="fas fa-history"></i> GPA History</h3>
+                <ul id="gpaHistoryList">
+                    <li class="empty-state">No GPA records yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- EXAM COUNTDOWN PAGE -->
+        <div class="page-content" id="page-exams">
+            <div class="card exam-add">
+                <h3><i class="fas fa-plus-circle"></i> Add Exam</h3>
+                <div class="input-group">
+                    <input type="text" id="examName" placeholder="Exam name (e.g., Math Final)">
+                </div>
+                <div class="task-options">
+                    <select id="examSubject">
+                        <option value="">Select Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Physics">Physics</option>
+                        <option value="Chemistry">Chemistry</option>
+                        <option value="Biology">Biology</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <input type="datetime-local" id="examDate">
+                </div>
+                <textarea id="examNotes" placeholder="Exam topics to cover..." rows="3"></textarea>
+                <button class="add-btn" onclick="addExam()">
+                    <i class="fas fa-plus"></i> Add Exam
+                </button>
+            </div>
+
+            <div class="card exam-add">
+                <h3><i class="fas fa-wand-magic-sparkles"></i> AI Smart Suggestion</h3>
+                <div class="task-options">
+                    <input type="date" id="aiExamDate">
+                    <input type="number" id="aiSubjectCount" min="1" max="20" placeholder="Number of subjects">
+                    <select id="aiDifficultyLevel">
+                        <option value="medium">Medium Difficulty</option>
+                        <option value="hard">Hard Difficulty</option>
+                        <option value="easy">Easy Difficulty</option>
+                    </select>
+                    <select id="aiScheduleRange" onchange="toggleCustomScheduleRange()">
+                        <option value="7">Next 7 days</option>
+                        <option value="14">Next 14 days</option>
+                        <option value="30" selected>Next 30 days</option>
+                        <option value="custom">Custom days</option>
+                    </select>
+                    <input type="number" id="aiCustomRangeDays" min="1" max="180" placeholder="Custom days" style="display:none;">
+                </div>
+                <button class="add-btn" onclick="generateAISmartPlan()">
+                    <i class="fas fa-robot"></i> Generate AI Study Plan
+                </button>
+                <button class="action-btn" onclick="createTasksFromAIPlan()">
+                    <i class="fas fa-list-check"></i> Create Tasks from AI Plan
+                </button>
+                <ul id="aiPlanList">
+                    <li class="empty-state">No AI plan generated yet</li>
+                </ul>
+            </div>
+
+            <div class="exam-countdown-grid" id="examCountdownGrid"></div>
+
+            <div class="card exam-list">
+                <h3><i class="fas fa-list"></i> All Exams</h3>
+                <ul id="examList"></ul>
+            </div>
+        </div>
+
+        <!-- ANALYTICS PAGE -->
+        <div class="page-content" id="page-analytics">
+            <div class="analytics-overview">
+                <div class="card analytics-card">
+                    <h3><i class="fas fa-chart-pie"></i> Task Completion</h3>
+                    <div class="analytics-chart">
+                        <div class="chart-circle">
+                            <span id="taskCompletionPercent">0%</span>
+                        </div>
+                    </div>
+                    <div class="analytics-stats">
+                        <p>Completed: <span id="analyticsCompleted">0</span></p>
+                        <p>Pending: <span id="analyticsPending">0</span></p>
+                    </div>
+                </div>
+
+                <div class="card analytics-card">
+                    <h3><i class="fas fa-clock"></i> Study Time</h3>
+                    <div class="analytics-chart">
+                        <div class="chart-circle study">
+                            <span id="studyTimeHours">0h</span>
+                        </div>
+                    </div>
+                    <div class="analytics-stats">
+                        <p>Today: <span id="studyToday">0 min</span></p>
+                        <p>This Week: <span id="studyWeek">0 hrs</span></p>
+                    </div>
+                </div>
+
+                <div class="card analytics-card">
+                    <h3><i class="fas fa-layer-group"></i> Flashcards</h3>
+                    <div class="analytics-chart">
+                        <div class="chart-circle flashcards">
+                            <span id="flashcardReviewed">0</span>
+                        </div>
+                    </div>
+                    <div class="analytics-stats">
+                        <p>Total Cards: <span id="totalFlashcards">0</span></p>
+                        <p>Decks: <span id="totalDecks">0</span></p>
+                    </div>
+                </div>
+
+                <div class="card analytics-card">
+                    <h3><i class="fas fa-fire"></i> Streak</h3>
+                    <div class="analytics-chart">
+                        <div class="chart-circle streak">
+                            <span id="currentStreak">0</span>
+                        </div>
+                    </div>
+                    <div class="analytics-stats">
+                        <p>Best Streak: <span id="bestStreak">0 days</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card productivity-score">
+                <h3><i class="fas fa-star"></i> Productivity Score</h3>
+                <div class="score-display">
+                    <span id="productivityScore">0</span>
+                    <span class="score-label">/ 100</span>
+                </div>
+                <div class="score-bar">
+                    <div class="score-fill" id="scoreFill"></div>
+                </div>
+            </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-chart-column"></i> Weekly vs Monthly Progress</h3>
+                <canvas id="progressTrendChart" height="120"></canvas>
+            </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-chart-pie"></i> Completed vs Pending</h3>
+                <canvas id="completionSplitChart" height="120"></canvas>
+            </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-file-lines"></i> Progress Report</h3>
+                <p id="weeklyReportText">Weekly report will appear here.</p>
+                <p id="monthlyReportText">Monthly report will appear here.</p>
+            </div>
+        </div>
+
+        <!-- QUIZ PAGE -->
+        <div class="page-content" id="page-quiz">
+            <div class="card exam-add">
+                <h3><i class="fas fa-question-circle"></i> Take Quiz</h3>
+                <div class="task-options">
+                    <select id="quizSubject">
+                        <option value="Any">Any Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="English">English</option>
+                        <option value="Programming">Programming</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                    </select>
+                    <select id="quizDifficulty">
+                        <option value="mixed">Mixed Difficulty</option>
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                    <input type="number" id="quizQuestionCount" min="5" max="25" value="5" placeholder="Questions">
+                </div>
+                <button class="add-btn" onclick="generateQuizSession()">
+                    <i class="fas fa-bolt"></i> Generate Quiz
+                </button>
+            </div>
+            <div id="quizQuestionsContainer">
+                <div class="empty-state">Generate a quiz to start.</div>
+            </div>
+            <div class="card exam-add">
+                <button class="add-btn" onclick="submitQuiz()">
+                    <i class="fas fa-check-circle"></i> Submit Quiz
+                </button>
+                <p><strong>Score:</strong> <span id="quizScoreResult">Not attempted</span></p>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-history"></i> Your Quiz History</h3>
+                <ul id="quizHistoryList">
+                    <li class="empty-state">No quiz attempts yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ADMIN PAGE -->
+        <div class="page-content" id="page-admin">
+            <div class="card settings-section">
+                <h3><i class="fas fa-user-shield"></i> Admin / Teacher Panel</h3>
+                <p id="adminAccessNotice">Checking access...</p>
+            </div>
+            <div class="card settings-section">
+                <h3><i class="fas fa-key"></i> Backend Auth (JWT)</h3>
+                <div class="task-options">
+                    <input type="email" id="backendAuthEmail" placeholder="Backend account email">
+                    <input type="password" id="backendAuthPassword" placeholder="Backend account password">
+                </div>
+                <button class="add-btn" onclick="backendAdminLogin()">
+                    <i class="fas fa-right-to-bracket"></i> Connect Admin Token
+                </button>
+                <button class="action-btn" onclick="backendAdminLogout()">
+                    <i class="fas fa-right-from-bracket"></i> Clear Admin Token
+                </button>
+                <p id="backendAuthStatus">Not connected</p>
+            </div>
+            <div class="card settings-section">
+                <h3><i class="fas fa-envelope"></i> Node Mailer Task Reminder</h3>
+                <div class="task-options">
+                    <input type="email" id="reminderEmailTo" placeholder="Student email">
+                    <input type="text" id="reminderTaskName" placeholder="Task name">
+                    <input type="date" id="reminderDueDate">
+                </div>
+                <button class="add-btn" onclick="sendTaskReminderEmail()">
+                    <i class="fas fa-paper-plane"></i> Send Reminder
+                </button>
+            </div>
+            <div class="card settings-section">
+                <h3><i class="fas fa-bullhorn"></i> Teacher Updates</h3>
+                <div class="input-group">
+                    <input type="text" id="teacherUpdateTitle" placeholder="Update title">
+                </div>
+                <div class="input-group">
+                    <textarea id="teacherUpdateMessage" rows="3" placeholder="Update message"></textarea>
+                </div>
+                <button class="add-btn" onclick="postTeacherUpdate()">
+                    <i class="fas fa-upload"></i> Post Update
+                </button>
+                <ul id="teacherUpdatesList">
+                    <li class="empty-state">No teacher updates yet</li>
+                </ul>
+            </div>
+            <div class="card settings-section">
+                <h3><i class="fas fa-chart-bar"></i> Quiz Scores (Admin Side)</h3>
+                <ul id="adminQuizScoresList">
+                    <li class="empty-state">No quiz scores recorded yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- SUBJECTS PAGE -->
+        <div class="page-content" id="page-subjects">
+            <div class="card subject-add">
+                <h3><i class="fas fa-plus-circle"></i> Add Subject</h3>
+                <div class="input-group">
+                    <input type="text" id="newSubjectName" placeholder="Subject name">
+                </div>
+                <div class="task-options">
+                    <input type="color" id="subjectColor" value="#2193b0">
+                </div>
+                <button class="add-btn" onclick="addSubject()">
+                    <i class="fas fa-plus"></i> Add Subject
+                </button>
+            </div>
+
+            <div class="subjects-grid" id="subjectsGrid"></div>
+        </div>
+
+        <!-- TIMETABLE PAGE -->
+        <div class="page-content" id="page-timetable">
+            <div class="card subject-add">
+                <h3><i class="fas fa-plus-circle"></i> Add Timetable Entry</h3>
+                <div class="task-options">
+                    <select id="timetableDay">
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                    <input type="time" id="timetableTime">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="timetableSubject" placeholder="Subject (e.g., Physics)">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="timetableTopic" placeholder="Topic (optional)">
+                </div>
+                <button class="add-btn" onclick="addTimetableEntry()">
+                    <i class="fas fa-plus"></i> Add Entry
+                </button>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-calendar-week"></i> Weekly Grid View</h3>
+                <div id="timetableGridView"></div>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-table"></i> Weekly Timetable</h3>
+                <ul id="timetableList">
+                    <li class="empty-state">No timetable entries yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- RESOURCES PAGE -->
+        <div class="page-content" id="page-resources">
+            <div class="card subject-add">
+                <h3><i class="fas fa-plus-circle"></i> Add Study Resource</h3>
+                <div class="input-group">
+                    <input type="text" id="resourceTitle" placeholder="Resource title">
+                </div>
+                <div class="task-options">
+                    <input type="text" id="resourceUrl" placeholder="Resource URL">
+                    <select id="resourceType">
+                        <option value="Article">Article</option>
+                        <option value="Video">Video</option>
+                        <option value="Book">Book</option>
+                        <option value="Course">Course</option>
+                        <option value="Tool">Tool</option>
+                    </select>
+                </div>
+                <button class="add-btn" onclick="addResource()">
+                    <i class="fas fa-plus"></i> Add Resource
+                </button>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-filter"></i> Search & Filter</h3>
+                <div class="task-options">
+                    <input type="text" id="resourceSearchInput" placeholder="Search resources..." oninput="searchResources()">
+                    <select id="resourceFilterType" onchange="filterResources()">
+                        <option value="all">All Types</option>
+                        <option value="Article">Article</option>
+                        <option value="Video">Video</option>
+                        <option value="Book">Book</option>
+                        <option value="Course">Course</option>
+                        <option value="Tool">Tool</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-link"></i> Saved Resources</h3>
+                <ul id="resourcesList">
+                    <li class="empty-state">No resources saved yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- STUDY MATERIALS PAGE -->
+        <div class="page-content" id="page-study-materials">
+            <div class="card subject-add">
+                <h3><i class="fas fa-plus-circle"></i> Add Study Material</h3>
+                <div class="input-group">
+                    <input type="text" id="studyMaterialTitleInput" placeholder="Material title">
+                </div>
+                <div class="task-options">
+                    <select id="studyMaterialSubjectInput">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                    <select id="studyMaterialTypeInput">
+                        <option value="Notes">Notes</option>
+                        <option value="Video">Video</option>
+                        <option value="Book">Book</option>
+                        <option value="Practice Set">Practice Set</option>
+                        <option value="Cheat Sheet">Cheat Sheet</option>
+                    </select>
+                    <input type="text" id="studyMaterialUrlInput" placeholder="URL (optional)">
+                </div>
+                <div class="input-group">
+                    <textarea id="studyMaterialDescInput" rows="3" placeholder="Short description"></textarea>
+                </div>
+                <button class="add-btn" onclick="addStudyMaterial()">
+                    <i class="fas fa-plus"></i> Add Material
+                </button>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-filter"></i> Find Material</h3>
+                <div class="task-options">
+                    <input type="text" id="studyMaterialSearchInput" placeholder="Search title, subject, description..." oninput="searchStudyMaterials()">
+                    <select id="studyMaterialFilterSubject" onchange="filterStudyMaterials()">
+                        <option value="all">All Subjects</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                </div>
+                <ul id="studyMaterialsList">
+                    <li class="empty-state">No study materials yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- FREE NOTES PAGE -->
+        <div class="page-content" id="page-free-notes">
+            <div class="card subject-add">
+                <h3><i class="fas fa-file-circle-plus"></i> Create Free Note</h3>
+                <div class="input-group">
+                    <input type="text" id="freeNoteTitleInput" placeholder="Note title">
+                </div>
+                <div class="task-options">
+                    <select id="freeNoteSubjectInput">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                    <input type="text" id="freeNoteLevelInput" placeholder="Class/Level (e.g., Class 10)">
+                </div>
+                <div class="input-group">
+                    <textarea id="freeNoteContentInput" rows="6" placeholder="Write note content. Students can download this for free."></textarea>
+                </div>
+                <button class="add-btn" onclick="addFreeNote()">
+                    <i class="fas fa-plus"></i> Add Free Note
+                </button>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-download"></i> Free Download Notes</h3>
+                <div class="task-options">
+                    <input type="text" id="freeNotesSearchInput" placeholder="Search notes..." oninput="searchFreeNotes()">
+                    <select id="freeNotesFilterSubject" onchange="filterFreeNotes()">
+                        <option value="all">All Subjects</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                </div>
+                <ul id="freeNotesList">
+                    <li class="empty-state">No free notes available yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ACHIEVEMENTS PAGE -->
+        <div class="page-content" id="page-achievements">
+            <div class="card exam-list">
+                <h3><i class="fas fa-award"></i> Achievements & Badges</h3>
+                <ul id="achievementsList">
+                    <li class="empty-state">No badges yet. Keep studying to unlock achievements.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- POMODORO HISTORY PAGE -->
+        <div class="page-content" id="page-pomodoro-history">
+            <div class="card pomodoro-stats">
+                <h3><i class="fas fa-chart-bar"></i> Timer Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-clock"></i>
+                        <span class="stat-number" id="totalFocusTime">0</span>
+                        <span class="stat-label">Total Focus Hours</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-play-circle"></i>
+                        <span class="stat-number" id="totalSessions">0</span>
+                        <span class="stat-label">Total Sessions</span>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-calendar"></i>
+                        <span class="stat-number" id="sessionsToday">0</span>
+                        <span class="stat-label">Today</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card pomodoro-history">
+                <h3><i class="fas fa-history"></i> Session History</h3>
+                <ul id="pomodoroHistoryList">
+                    <li class="empty-state">No sessions yet</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- GOALS PAGE -->
+        <div class="page-content" id="page-goals">
+            <div class="card goal-settings">
+                <h3><i class="fas fa-cog"></i> Weekly Goal Settings</h3>
+                <div class="goal-setting">
+                    <label>Tasks per week:</label>
+                    <input type="number" id="goalTasks" value="20" min="1" max="100">
+                </div>
+                <div class="goal-setting">
+                    <label>Study hours per week:</label>
+                    <input type="number" id="goalStudyHours" value="10" min="1" max="100">
+                </div>
+                <div class="goal-setting">
+                    <label>Flashcards per week:</label>
+                    <input type="number" id="goalFlashcards" value="50" min="1" max="500">
+                </div>
+                <button class="add-btn" onclick="saveGoals()">
+                    <i class="fas fa-save"></i> Save Goals
+                </button>
+            </div>
+
+            <div class="card goal-progress">
+                <h3><i class="fas fa-chart-line"></i> Current Progress</h3>
+                <div class="goal-progress-item">
+                    <div class="goal-info">
+                        <span>Tasks Completed</span>
+                        <span id="goalTasksProgress">0 / 20</span>
+                    </div>
+                    <div class="goal-bar-large">
+                        <div class="goal-fill-large" id="goalTasksFill"></div>
+                    </div>
+                </div>
+                <div class="goal-progress-item">
+                    <div class="goal-info">
+                        <span>Study Hours</span>
+                        <span id="goalStudyProgress">0 / 10</span>
+                    </div>
+                    <div class="goal-bar-large">
+                        <div class="goal-fill-large" id="goalStudyFill"></div>
+                    </div>
+                </div>
+                <div class="goal-progress-item">
+                    <div class="goal-info">
+                        <span>Flashcards Reviewed</span>
+                        <span id="goalFlashcardsProgress">0 / 50</span>
+                    </div>
+                    <div class="goal-bar-large">
+                        <div class="goal-fill-large" id="goalFlashcardsFill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SETTINGS PAGE -->
+        <div class="page-content" id="page-settings">
+            <div class="card settings-section">
+                <h3><i class="fas fa-palette"></i> Appearance</h3>
+                <div class="setting-item">
+                    <label>Theme</label>
+                    <button class="theme-toggle-btn" onclick="toggleTheme()">
+                        <i class="fas fa-moon"></i> Dark Mode
+                    </button>
+                </div>
+            </div>
+
+            <div class="card settings-section">
+                <h3><i class="fas fa-database"></i> Data Management</h3>
+                <button class="add-btn" onclick="showExportImportModal()">
+                    <i class="fas fa-download"></i> Export/Import Data
+                </button>
+                <button class="clear-btn" onclick="clearAllData()">
+                    <i class="fas fa-trash"></i> Clear All Data
+                </button>
+            </div>
+
+            <div class="card settings-section">
+                <h3><i class="fas fa-info-circle"></i> About</h3>
+                <p>Smart Study Planner v1.0</p>
+                <p>Made with <i class="fas fa-heart"></i> for students</p>
+            </div>
+
+            <div class="card settings-section">
+                <h3><i class="fas fa-robot"></i> Smart Features</h3>
+                <div class="goal-setting">
+                    <label for="weakSubjectsInput">Weak subjects (comma separated):</label>
+                    <input type="text" id="weakSubjectsInput" placeholder="Math, Physics">
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="enableRemindersCheck">
+                        Enable due-task reminders
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label for="reminderLeadDaysInput">Reminder window (days before due date)</label>
+                    <input class="setting-control" type="number" id="reminderLeadDaysInput" min="0" max="7" value="1">
+                </div>
+                <div class="setting-item">
+                    <label for="defaultPlanHoursInput">Default daily study hours</label>
+                    <input class="setting-control" type="number" id="defaultPlanHoursInput" min="1" max="16" value="2">
+                </div>
+                <div class="setting-item">
+                    <label for="startPageSelect">Open this page after login</label>
+                    <select class="setting-control" id="startPageSelect">
+                        <option value="dashboard">Dashboard</option>
+                        <option value="tasks">Tasks</option>
+                        <option value="calendar">Calendar</option>
+                        <option value="notes">Notes</option>
+                        <option value="flashcards">Flashcards</option>
+                        <option value="assignments">Assignments</option>
+                        <option value="gpa">GPA Calculator</option>
+                        <option value="exams">Exam Countdown</option>
+                        <option value="analytics">Analytics</option>
+                        <option value="quiz">Quiz</option>
+                        <option value="admin">Admin</option>
+                        <option value="subjects">Subjects</option>
+                        <option value="timetable">Timetable</option>
+                        <option value="resources">Resources</option>
+                        <option value="study-materials">Study Materials</option>
+                        <option value="free-notes">Free Notes</option>
+                        <option value="achievements">Achievements</option>
+                        <option value="pomodoro-history">Timer History</option>
+                        <option value="goals">Goals</option>
+                        <option value="profile">Profile</option>
+                        <option value="settings">Settings</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="compactModeCheck">
+                        Enable compact layout
+                    </label>
+                </div>
+                <button class="add-btn" onclick="saveSmartSettings()">
+                    <i class="fas fa-save"></i> Save Smart Settings
+                </button>
+            </div>
+
+            <div class="card settings-section">
+                <h3><i class="fas fa-mobile-screen-button"></i> Platform</h3>
+                <button class="add-btn" id="installAppBtn" onclick="installPWA()" disabled>
+                    <i class="fas fa-download"></i> Install App
+                </button>
+                <button class="action-btn" onclick="checkForAppUpdates()">
+                    <i class="fas fa-arrows-rotate"></i> Check for Updates
+                </button>
+                <button class="clear-btn" onclick="logoutUser()">
+                    <i class="fas fa-right-from-bracket"></i> Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- PROFILE PAGE -->
+        <div class="page-content" id="page-profile">
+            <div class="card settings-section">
+                <h3><i class="fas fa-id-card"></i> Profile</h3>
+                <div class="goal-setting">
+                    <label for="profileName">Full name:</label>
+                    <input type="text" id="profileName" placeholder="Your name">
+                </div>
+                <div class="goal-setting">
+                    <label for="profileEmail">Email:</label>
+                    <input type="email" id="profileEmail" placeholder="Email" disabled>
+                </div>
+                <div class="goal-setting">
+                    <label for="profileStudyGoal">Study goal:</label>
+                    <input type="text" id="profileStudyGoal" placeholder="Example: 3 hours daily">
+                </div>
+                <div class="goal-setting">
+                    <label for="profileBio">Bio:</label>
+                    <textarea id="profileBio" rows="4" placeholder="Short bio"></textarea>
+                </div>
+                <button class="add-btn" onclick="saveProfile()">
+                    <i class="fas fa-save"></i> Save Profile
+                </button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Note Editor Modal -->
+<div class="modal" id="noteModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit Note</h3>
+            <button class="modal-close" onclick="closeNoteModal()">&times;</button>
+        </div>
+        <input type="text" id="noteTitle" placeholder="Note title...">
+        <select id="noteSubject">
+            <option value="Maths">Maths</option>
+            <option value="Science">Science</option>
+            <option value="English">English</option>
+            <option value="History">History</option>
+            <option value="Programming">Programming</option>
+            <option value="General">General</option>
+        </select>
+        <textarea id="noteContent" placeholder="Write your note..." rows="10"></textarea>
+        <select id="noteColor">
+            <option value="#ffffff">White</option>
+            <option value="#fff9c4">Yellow</option>
+            <option value="#c8e6c9">Green</option>
+            <option value="#bbdefb">Blue</option>
+            <option value="#f8bbd9">Pink</option>
+            <option value="#e1bee7">Purple</option>
+        </select>
+        <button class="add-btn" onclick="saveNote()">Save Note</button>
+    </div>
+</div>
+
+<!-- Flashcard Editor Modal -->
+<div class="modal" id="flashcardModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add Flashcard</h3>
+            <button class="modal-close" onclick="closeFlashcardModal()">&times;</button>
+        </div>
+        <select id="flashcardDeckSelect">
+            <option value="">Select Deck</option>
+        </select>
+        <input type="text" id="flashcardFrontText" placeholder="Front (Question)...">
+        <textarea id="flashcardBackText" placeholder="Back (Answer)..." rows="4"></textarea>
+        <button class="add-btn" onclick="saveFlashcard()">Save Flashcard</button>
+    </div>
+</div>
+
+<!-- Export/Import Modal -->
+<div class="modal" id="exportImportModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Export / Import Data</h3>
+            <button class="modal-close" onclick="closeExportImportModal()">&times;</button>
+        </div>
+        <div class="export-import-options">
+            <button class="action-btn" onclick="exportData()">
+                <i class="fas fa-download"></i> Export All Data
+            </button>
+            <button class="action-btn" onclick="document.getElementById('importFile').click()">
+                <i class="fas fa-upload"></i> Import Data
+            </button>
+            <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+        </div>
+    </div>
+</div>
+
+<!-- Print Modal -->
+<div class="modal" id="printModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Print Study Plan</h3>
+            <button class="modal-close" onclick="closePrintModal()">&times;</button>
+        </div>
+        <div class="print-options">
+            <button class="action-btn" onclick="printDailyPlan()">
+                <i class="fas fa-calendar-day"></i> Print Daily Plan
+            </button>
+            <button class="action-btn" onclick="printWeeklyPlan()">
+                <i class="fas fa-calendar-week"></i> Print Weekly Plan
+            </button>
+            <button class="action-btn" onclick="printTasks()">
+                <i class="fas fa-tasks"></i> Print All Tasks
+            </button>
+            <button class="action-btn" onclick="printAssignments()">
+                <i class="fas fa-file-alt"></i> Print Assignments
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- AI Task Confirmation Modal -->
+<div class="modal" id="aiTaskConfirmModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Create AI Tasks</h3>
+            <button class="modal-close" onclick="closeAITaskConfirmModal()">&times;</button>
+        </div>
+        <div class="setting-item">
+            <label>
+                <input type="checkbox" id="aiWeekdaysOnlyCheck" onchange="refreshAICreationPreviewSummary()">
+                Create only on weekdays (Mon-Fri)
+            </label>
+        </div>
+        <p id="aiTaskConfirmSummary">No summary available.</p>
+        <div class="print-options">
+            <button class="action-btn" onclick="confirmCreateTasksFromAIPlan()">
+                <i class="fas fa-check"></i> Confirm Create
+            </button>
+            <button class="action-btn" onclick="closeAITaskConfirmModal()">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyA0k3KIoJb7idL4R9itmkUFyG_lI_yyocY",
+        authDomain: "smartstudyplanner-d1991.firebaseapp.com",
+        projectId: "smartstudyplanner-d1991",
+        storageBucket: "smartstudyplanner-d1991.firebasestorage.app",
+        messagingSenderId: "1013739387565",
+        appId: "1:1013739387565:web:2cd5b87970bc06a0e42424"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    window.firebaseApp = app;
+</script>
+<script src="script.js"></script>
+</body>
+</html>
+

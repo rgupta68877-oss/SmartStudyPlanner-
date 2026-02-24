@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Study Planner - Scoring Tests</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: #f5f7fb;
+            color: #1f2937;
+            margin: 0;
+            padding: 24px;
+        }
+        .card {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        h1 { margin-top: 0; }
+        .meta { color: #6b7280; margin-bottom: 16px; }
+        button {
+            background: #0ea5e9;
+            border: none;
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .summary {
+            margin: 16px 0;
+            font-weight: 600;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .pass { border-left: 4px solid #16a34a; }
+        .fail { border-left: 4px solid #dc2626; }
+        code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Scoring Logic Tests</h1>
+        <p class="meta">Runs in-browser against <code>script.js</code> pure functions.</p>
+        <button id="runTestsBtn" type="button">Run Tests</button>
+        <p id="summary" class="summary"></p>
+        <ul id="results"></ul>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        function makeTask(overrides) {
+            return {
+                id: "task-1",
+                text: "Sample Task",
+                subject: "Math",
+                priority: "medium",
+                dueDate: "",
+                done: false,
+                createdAt: "2026-02-20T09:00:00.000Z",
+                estimatedHours: 1,
+                difficulty: "medium",
+                ...overrides
+            };
+        }
+
+        function assert(name, condition, details) {
+            return { name, pass: Boolean(condition), details: details || "" };
+        }
+
+        function runScoringTests() {
+            const now = new Date("2026-02-21T09:00:00.000Z");
+            const results = [];
+
+            const overdue = makeTask({ dueDate: "2026-02-20", priority: "medium" });
+            const future = makeTask({ dueDate: "2026-02-25", priority: "high" });
+            results.push(assert(
+                "Overdue scores higher than future high-priority task",
+                scoreTask(overdue, { now }) > scoreTask(future, { now }),
+                `overdue=${scoreTask(overdue, { now })}, future=${scoreTask(future, { now })}`
+            ));
+
+            const noDue = makeTask({ dueDate: "", priority: "medium" });
+            const dueSoon = makeTask({ dueDate: "2026-02-22", priority: "medium" });
+            results.push(assert(
+                "Task due tomorrow scores higher than task with no due date",
+                scoreTask(dueSoon, { now }) > scoreTask(noDue, { now }),
+                `dueSoon=${scoreTask(dueSoon, { now })}, noDue=${scoreTask(noDue, { now })}`
+            ));
+
+            const completed = makeTask({ done: true });
+            results.push(assert(
+                "Completed task gets excluded score",
+                scoreTask(completed, { now }) === Number.NEGATIVE_INFINITY,
+                `score=${scoreTask(completed, { now })}`
+            ));
+
+            const t1 = makeTask({
+                id: "t1",
+                text: "Older task",
+                dueDate: "2026-02-23",
+                createdAt: "2026-02-19T09:00:00.000Z"
+            });
+            const t2 = makeTask({
+                id: "t2",
+                text: "Newer task",
+                dueDate: "2026-02-23",
+                createdAt: "2026-02-20T09:00:00.000Z"
+            });
+            const ranked = rankTasks([t2, t1], { now });
+            results.push(assert(
+                "Tie-break prefers older createdAt first when scores and due dates match",
+                ranked[0] && ranked[0].id === "t1",
+                ranked.map(t => t.id).join(" > ")
+            ));
+
+            const weakSubjectTask = makeTask({ subject: "Physics", dueDate: "2026-02-25" });
+            const normalSubjectTask = makeTask({ subject: "History", dueDate: "2026-02-25" });
+            results.push(assert(
+                "Weak subject context boosts score",
+                scoreTask(weakSubjectTask, { now, weakSubjects: ["Physics"] }) >
+                    scoreTask(normalSubjectTask, { now, weakSubjects: ["Physics"] }),
+                `weak=${scoreTask(weakSubjectTask, { now, weakSubjects: ["Physics"] })}, normal=${scoreTask(normalSubjectTask, { now, weakSubjects: ["Physics"] })}`
+            ));
+
+            return results;
+        }
+
+        function renderResults(results) {
+            const list = document.getElementById("results");
+            const summary = document.getElementById("summary");
+            const passed = results.filter(r => r.pass).length;
+            summary.textContent = `${passed}/${results.length} tests passed`;
+
+            list.innerHTML = results.map(r => `
+                <li class="${r.pass ? "pass" : "fail"}">
+                    <strong>${r.pass ? "PASS" : "FAIL"}:</strong> ${r.name}
+                    ${r.details ? `<div>${r.details}</div>` : ""}
+                </li>
+            `).join("");
+        }
+
+        document.getElementById("runTestsBtn").addEventListener("click", () => {
+            const results = runScoringTests();
+            renderResults(results);
+        });
+
+        renderResults(runScoringTests());
+    </script>
+</body>
+</html>
