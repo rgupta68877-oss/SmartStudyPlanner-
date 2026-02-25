@@ -289,6 +289,18 @@
 
             <div class="card timer-section">
                 <h3><i class="fas fa-stopwatch"></i> Study Timer</h3>
+                <div class="goal-setting">
+                    <label for="timerSubjectSelect">Session subject:</label>
+                    <select id="timerSubjectSelect">
+                        <option value="General">General</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                </div>
                 <div class="timer-display">
                     <span id="timerMinutes">25</span>:<span id="timerSeconds">00</span>
                 </div>
@@ -387,6 +399,13 @@
                         <option value="hard">Hard Difficulty</option>
                         <option value="easy">Easy Difficulty</option>
                     </select>
+                    <select id="examWeightSelect">
+                        <option value="3">Exam Weight: Medium</option>
+                        <option value="5">Exam Weight: Very High</option>
+                        <option value="4">Exam Weight: High</option>
+                        <option value="2">Exam Weight: Low</option>
+                        <option value="1">Exam Weight: Very Low</option>
+                    </select>
                     <input type="number" id="estimatedHoursInput" min="0.5" step="0.5" placeholder="Est. hours">
                     <input type="date" id="dueDateInput">
                 </div>
@@ -409,6 +428,7 @@
                 </div>
                 <div class="task-options">
                     <select id="taskSortSelect" onchange="setTaskSortMode(this.value)">
+                        <option value="smart-score">Sort: Smart Score</option>
                         <option value="priority-due">Sort: Priority + Due Date</option>
                         <option value="due-soon">Sort: Due Soon</option>
                         <option value="newest">Sort: Newest First</option>
@@ -492,12 +512,22 @@
                 <select id="flashcardDeck">
                     <option value="">Select Deck</option>
                 </select>
+                <select id="flashcardStudyModeSelect">
+                    <option value="due">Spaced Repetition (Due First)</option>
+                    <option value="due-today">Due Today Only</option>
+                    <option value="all">All Cards</option>
+                </select>
                 <button class="add-btn" onclick="showFlashcardEditor()">
                     <i class="fas fa-plus"></i> New Card
                 </button>
                 <button class="add-btn" onclick="createNewDeck()">
                     <i class="fas fa-folder-plus"></i> New Deck
                 </button>
+            </div>
+            <div class="flashcard-summary" id="flashcardSummary">
+                <span id="flashcardDueNowCount">Due now: 0</span>
+                <span id="flashcardDueTodayCount">Due today: 0</span>
+                <span id="flashcardUpcomingCount">Upcoming: 0</span>
             </div>
             <div class="flashcard-study" id="flashcardStudy">
                 <div class="flashcard" onclick="flipFlashcard()">
@@ -513,13 +543,14 @@
                     <span id="flashcardCounter">0 / 0</span>
                     <button onclick="nextFlashcard()"><i class="fas fa-chevron-right"></i></button>
                 </div>
+                <p class="flashcard-next-review" id="flashcardNextReviewInfo">Next review: --</p>
                 <div class="flashcard-review-actions" id="flashcardReviewActions">
                     <button class="flashcard-review-btn again" onclick="reviewCurrentFlashcard('again')" disabled>Again</button>
                     <button class="flashcard-review-btn hard" onclick="reviewCurrentFlashcard('hard')" disabled>Hard</button>
                     <button class="flashcard-review-btn good" onclick="reviewCurrentFlashcard('good')" disabled>Good</button>
                     <button class="flashcard-review-btn easy" onclick="reviewCurrentFlashcard('easy')" disabled>Easy</button>
                 </div>
-                <button class="study-btn" onclick="startStudy()">Start Study</button>
+                <button class="study-btn" onclick="startStudy()">Start Session</button>
             </div>
             <div class="deck-cards" id="deckCards"></div>
         </div>
@@ -765,6 +796,22 @@
             <div class="card analytics-card">
                 <h3><i class="fas fa-chart-pie"></i> Completed vs Pending</h3>
                 <canvas id="completionSplitChart" height="120"></canvas>
+            </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-book-open"></i> Weekly Focus by Subject</h3>
+                <canvas id="subjectFocusChart" height="120"></canvas>
+            </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-chart-line"></i> Subject Focus Trend (Last 7 Days)</h3>
+                <div class="goal-setting">
+                    <label for="analyticsTrendSubjectSelect">Subject:</label>
+                    <select id="analyticsTrendSubjectSelect" onchange="setAnalyticsTrendSubject(this.value)">
+                        <option value="all">All Subjects</option>
+                    </select>
+                </div>
+                <canvas id="subjectTrendChart" height="120"></canvas>
             </div>
 
             <div class="card analytics-card">
@@ -1081,6 +1128,12 @@
         <div class="page-content" id="page-pomodoro-history">
             <div class="card pomodoro-stats">
                 <h3><i class="fas fa-chart-bar"></i> Timer Statistics</h3>
+                <div class="goal-setting">
+                    <label for="pomodoroSubjectFilter">Filter subject:</label>
+                    <select id="pomodoroSubjectFilter" onchange="setPomodoroSubjectFilter(this.value)">
+                        <option value="all">All Subjects</option>
+                    </select>
+                </div>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <i class="fas fa-clock"></i>
@@ -1106,6 +1159,13 @@
                     <li class="empty-state">No sessions yet</li>
                 </ul>
             </div>
+
+            <div class="card pomodoro-history">
+                <h3><i class="fas fa-book"></i> Focus Stats by Subject</h3>
+                <ul id="pomodoroSubjectStatsList">
+                    <li class="empty-state">No focus sessions by subject yet</li>
+                </ul>
+            </div>
         </div>
 
         <!-- GOALS PAGE -->
@@ -1127,6 +1187,24 @@
                 <button class="add-btn" onclick="saveGoals()">
                     <i class="fas fa-save"></i> Save Goals
                 </button>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-bullseye"></i> Goal-Based Roadmap</h3>
+                <div class="goal-setting">
+                    <label for="targetGoalInput">Goal statement:</label>
+                    <input type="text" id="targetGoalInput" placeholder="I need 85% in Math">
+                </div>
+                <button class="add-btn" onclick="generateGoalRoadmap()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Generate Target Roadmap
+                </button>
+                <button class="action-btn" onclick="createTasksFromGoalRoadmap()">
+                    <i class="fas fa-list-check"></i> Create Tasks from Roadmap
+                </button>
+                <p id="goalRoadmapSummary">No roadmap generated yet.</p>
+                <ul id="goalRoadmapList">
+                    <li class="empty-state">Add a goal statement to generate your roadmap</li>
+                </ul>
             </div>
 
             <div class="card goal-progress">
@@ -1399,6 +1477,23 @@
                 <i class="fas fa-times"></i> Cancel
             </button>
         </div>
+    </div>
+</div>
+
+<!-- Task Score Breakdown Modal -->
+<div class="modal" id="taskScoreModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="taskScoreModalTitle">Task Score Breakdown</h3>
+            <button class="modal-close" onclick="closeTaskScoreModal()">&times;</button>
+        </div>
+        <div class="score-level-row">
+            <span id="taskScoreLevelBadge" class="score-level-badge">Priority Signal: Neutral</span>
+        </div>
+        <p id="taskScoreTotalText"><strong>Total Score:</strong> 0</p>
+        <ul id="taskScoreBreakdownList" class="score-breakdown-list">
+            <li class="empty-state">No score data available</li>
+        </ul>
     </div>
 </div>
 

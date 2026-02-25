@@ -693,6 +693,77 @@ body {
 .task-due.overdue { color: var(--danger-color); }
 .task-due.today { color: var(--warning-color); }
 
+.task-rank-hint {
+    color: var(--text-light);
+    font-size: 0.85em;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: transparent;
+    font-family: inherit;
+}
+
+.task-rank-hint:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.score-breakdown-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.score-level-row {
+    margin-bottom: 8px;
+}
+
+.score-level-badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.score-level-badge.urgent {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+    border-color: rgba(239, 68, 68, 0.25);
+}
+
+.score-level-badge.moderate {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.score-level-badge.low {
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
+    border-color: rgba(34, 197, 94, 0.28);
+}
+
+.score-breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.score-breakdown-label {
+    color: var(--text-color);
+}
+
+.score-breakdown-value {
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
 .delete-btn {
     background: transparent;
     border: none;
@@ -926,6 +997,12 @@ body {
     border: none;
     border-radius: 8px;
     cursor: pointer;
+}
+
+.flashcard-next-review {
+    margin: 0 0 12px;
+    color: var(--text-light);
+    font-size: 0.9em;
 }
 
 .flashcard-review-actions {
@@ -1227,6 +1304,34 @@ body {
     border-radius: 6px;
     background: var(--card-bg);
     color: var(--text-color);
+}
+
+.flashcard-summary {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.flashcard-summary span {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 0.85em;
+    color: var(--text-light);
+}
+
+#pomodoroSubjectStatsList {
+    list-style: none;
+    padding: 0;
+}
+
+#pomodoroSubjectStatsList li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
 }
 
 body.compact-mode .card {

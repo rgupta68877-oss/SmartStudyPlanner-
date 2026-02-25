@@ -542,6 +542,7 @@ const STORAGE_KEYS = {
     activityLog: "activityLog",
     weeklyStats: "weeklyStats",
     goals: "goals",
+    goalRoadmap: "goalRoadmap",
     timetableEntries: "timetableEntries",
     resources: "resources",
     studyMaterials: "studyMaterials",
@@ -594,6 +595,16 @@ const DEFAULT_STATE = {
         tasks: 20,
         studyHours: 10,
         flashcards: 50
+    },
+    goalRoadmap: {
+        rawText: "",
+        subject: "",
+        targetPercent: 0,
+        baselinePercent: 0,
+        weeklyHours: 0,
+        weeks: 0,
+        milestones: [],
+        generatedAt: ""
     },
     timetableEntries: [],
     resources: DEFAULT_RESOURCES_LIBRARY,
@@ -649,6 +660,7 @@ function normalizeSmartSettings(settings) {
 function normalizeTask(task) {
     const normalized = task && typeof task === "object" ? task : {};
     const parsedEstimatedHours = Number(normalized.estimatedHours);
+    const parsedExamWeight = Number(normalized.examWeight);
     const difficulty = normalized.difficulty || "medium";
     return {
         id: normalized.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -659,7 +671,8 @@ function normalizeTask(task) {
         done: Boolean(normalized.done),
         createdAt: normalized.createdAt || new Date().toISOString(),
         estimatedHours: Number.isFinite(parsedEstimatedHours) && parsedEstimatedHours > 0 ? parsedEstimatedHours : 1,
-        difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "medium"
+        difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "medium",
+        examWeight: Number.isFinite(parsedExamWeight) ? Math.min(5, Math.max(1, Math.round(parsedExamWeight))) : 3
     };
 }
 
@@ -668,6 +681,50 @@ function normalizeTasks(taskList) {
     return taskList
         .map(normalizeTask)
         .filter(task => task.text.length > 0);
+}
+
+function normalizePomodoroSession(session) {
+    const normalized = session && typeof session === "object" ? session : {};
+    const parsedMinutes = Number(normalized.minutes);
+    const type = String(normalized.type || "Focus");
+    const safeType = ["Focus", "Short Break", "Long Break"].includes(type) ? type : "Focus";
+    return {
+        minutes: Number.isFinite(parsedMinutes) && parsedMinutes > 0 ? Math.round(parsedMinutes) : 25,
+        type: safeType,
+        subject: String(normalized.subject || "General").trim() || "General",
+        date: normalized.date || new Date().toISOString()
+    };
+}
+
+function normalizePomodoroSessions(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(normalizePomodoroSession);
+}
+
+function normalizeGoalRoadmap(value) {
+    const normalized = value && typeof value === "object" ? value : {};
+    const targetPercent = Number(normalized.targetPercent);
+    const baselinePercent = Number(normalized.baselinePercent);
+    const weeklyHours = Number(normalized.weeklyHours);
+    const weeks = Number(normalized.weeks);
+    const milestones = Array.isArray(normalized.milestones) ? normalized.milestones : [];
+    return {
+        ...DEFAULT_STATE.goalRoadmap,
+        ...normalized,
+        rawText: String(normalized.rawText || ""),
+        subject: String(normalized.subject || ""),
+        targetPercent: Number.isFinite(targetPercent) ? Math.max(0, Math.min(100, Math.round(targetPercent))) : 0,
+        baselinePercent: Number.isFinite(baselinePercent) ? Math.max(0, Math.min(100, Math.round(baselinePercent))) : 0,
+        weeklyHours: Number.isFinite(weeklyHours) ? Math.max(0, Math.round(weeklyHours * 10) / 10) : 0,
+        weeks: Number.isFinite(weeks) ? Math.max(0, Math.round(weeks)) : 0,
+        milestones: milestones
+            .map(item => ({
+                week: Number(item && item.week),
+                targetPercent: Number(item && item.targetPercent),
+                action: String((item && item.action) || "")
+            }))
+            .filter(item => Number.isFinite(item.week) && Number.isFinite(item.targetPercent))
+    };
 }
 
 function normalizeFlashcardCard(card) {
@@ -733,6 +790,7 @@ function loadState() {
         activityLog: parseStoredJSON(STORAGE_KEYS.activityLog, DEFAULT_STATE.activityLog),
         weeklyStats: parseStoredJSON(STORAGE_KEYS.weeklyStats, DEFAULT_STATE.weeklyStats),
         goals: parseStoredJSON(STORAGE_KEYS.goals, DEFAULT_STATE.goals),
+        goalRoadmap: parseStoredJSON(STORAGE_KEYS.goalRoadmap, DEFAULT_STATE.goalRoadmap),
         timetableEntries: parseStoredJSON(STORAGE_KEYS.timetableEntries, DEFAULT_STATE.timetableEntries),
         resources: parseStoredJSON(STORAGE_KEYS.resources, DEFAULT_STATE.resources),
         studyMaterials: parseStoredJSON(STORAGE_KEYS.studyMaterials, DEFAULT_STATE.studyMaterials),
@@ -753,8 +811,10 @@ function loadState() {
         ...loaded,
         tasks: normalizeTasks(loaded.tasks),
         flashcards: normalizeFlashcards(loaded.flashcards),
+        pomodoroSessions: normalizePomodoroSessions(loaded.pomodoroSessions),
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
         goals: { ...DEFAULT_STATE.goals, ...(loaded.goals || {}) },
+        goalRoadmap: normalizeGoalRoadmap(loaded.goalRoadmap),
         timetableEntries: Array.isArray(loaded.timetableEntries) ? loaded.timetableEntries : [],
         resources: Array.isArray(loaded.resources) && loaded.resources.length > 0
             ? loaded.resources.map(item => ({ ...item }))
@@ -813,6 +873,7 @@ let studyStreak = initialState.studyStreak;
 let bestStreak = initialState.bestStreak;
 let weeklyStats = initialState.weeklyStats;
 let goals = initialState.goals;
+let goalRoadmap = initialState.goalRoadmap;
 let timetableEntries = initialState.timetableEntries;
 let resources = initialState.resources;
 let studyMaterials = initialState.studyMaterials;
@@ -829,12 +890,17 @@ let timerInterval = null;
 let timerMinutes = 25;
 let timerSeconds = 0;
 let isTimerRunning = false;
+let timerModeMinutes = 25;
+let pomodoroSubjectFilter = "all";
 let reminderIntervalId = null;
 let deferredInstallPrompt = null;
 let serviceWorkerRegistration = null;
 let appBootstrapped = false;
 let progressTrendChartInstance = null;
 let completionSplitChartInstance = null;
+let subjectFocusChartInstance = null;
+let subjectTrendChartInstance = null;
+let analyticsTrendSubject = "all";
 let lastAISuggestionPlan = null;
 let pendingAICreationPreview = null;
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
@@ -1207,6 +1273,7 @@ function getCloudStatePayload() {
         studyStreak,
         bestStreak,
         goals,
+        goalRoadmap,
         timetableEntries,
         resources,
         studyMaterials,
@@ -1235,6 +1302,7 @@ function resetUserScopedStateToDefaults() {
     activityLog = Array.isArray(DEFAULT_STATE.activityLog) ? [...DEFAULT_STATE.activityLog] : [];
     weeklyStats = { ...DEFAULT_STATE.weeklyStats };
     goals = { ...DEFAULT_STATE.goals };
+    goalRoadmap = { ...DEFAULT_STATE.goalRoadmap };
     timetableEntries = Array.isArray(DEFAULT_STATE.timetableEntries) ? [...DEFAULT_STATE.timetableEntries] : [];
     resources = DEFAULT_RESOURCES_LIBRARY.map(item => ({ ...item }));
     studyMaterials = DEFAULT_STUDY_MATERIALS.map(item => ({ ...item }));
@@ -1260,6 +1328,7 @@ function resetUserScopedStateToDefaults() {
         studyStreak,
         bestStreak,
         goals,
+        goalRoadmap,
         timetableEntries,
         resources,
         studyMaterials,
@@ -1282,12 +1351,13 @@ function applyCloudState(data) {
         if (Array.isArray(data.exams)) exams = data.exams;
         if (Array.isArray(data.subjects)) subjects = data.subjects;
         if (Array.isArray(data.gpaHistory)) gpaHistory = data.gpaHistory;
-        if (Array.isArray(data.pomodoroSessions)) pomodoroSessions = data.pomodoroSessions;
+        if (Array.isArray(data.pomodoroSessions)) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
         if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
         if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
         if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
         if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
         if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
+        if (data.goalRoadmap) goalRoadmap = normalizeGoalRoadmap(data.goalRoadmap);
         if (Array.isArray(data.timetableEntries)) timetableEntries = data.timetableEntries;
         if (Array.isArray(data.resources)) resources = data.resources;
         if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
@@ -1311,6 +1381,7 @@ function applyCloudState(data) {
             studyStreak,
             bestStreak,
             goals,
+            goalRoadmap,
             timetableEntries,
             resources,
             studyMaterials,
@@ -2041,28 +2112,156 @@ function difficultyWeight(level) {
     return weights[level] || weights.medium;
 }
 
-function scoreTask(task, context = {}) {
-    if (!task || task.done) return Number.NEGATIVE_INFINITY;
+function subjectMatches(taskSubject, examSubject) {
+    const taskValue = String(taskSubject || "").trim().toLowerCase();
+    const examValue = String(examSubject || "").trim().toLowerCase();
+    if (!taskValue || !examValue) return false;
+    return taskValue === examValue;
+}
+
+function examWeightScore(task, context = {}) {
+    const examWeight = Number.isFinite(Number(task && task.examWeight))
+        ? Math.min(5, Math.max(1, Math.round(Number(task.examWeight))))
+        : 3;
+    const manualWeightScore = examWeight * 8;
+    const taskSubject = String(task && task.subject ? task.subject : "").trim();
+    const now = context.now || new Date();
+    const examList = Array.isArray(context.exams) ? context.exams : [];
+    if (!taskSubject || examList.length === 0) return manualWeightScore;
+
+    let nearestDays = Number.POSITIVE_INFINITY;
+    examList.forEach(exam => {
+        if (!subjectMatches(taskSubject, exam && exam.subject)) return;
+        const days = daysUntil(exam.date, now);
+        if (days >= 0 && days < nearestDays) nearestDays = days;
+    });
+
+    let proximityScore = 0;
+    if (nearestDays <= 3) proximityScore = 30;
+    else if (nearestDays <= 7) proximityScore = 24;
+    else if (nearestDays <= 14) proximityScore = 18;
+    else if (nearestDays <= 30) proximityScore = 12;
+    else if (nearestDays <= 60) proximityScore = 6;
+
+    return manualWeightScore + proximityScore;
+}
+
+function getExamSignal(task, context = {}) {
+    const examWeight = Number.isFinite(Number(task && task.examWeight))
+        ? Math.min(5, Math.max(1, Math.round(Number(task.examWeight))))
+        : 3;
+    const manualWeightScore = examWeight * 8;
+    const taskSubject = String(task && task.subject ? task.subject : "").trim();
+    const now = context.now || new Date();
+    const examList = Array.isArray(context.exams) ? context.exams : [];
+    if (!taskSubject || examList.length === 0) {
+        return { manualWeightScore, proximityScore: 0, nearestDays: Number.POSITIVE_INFINITY };
+    }
+
+    let nearestDays = Number.POSITIVE_INFINITY;
+    examList.forEach(exam => {
+        if (!subjectMatches(taskSubject, exam && exam.subject)) return;
+        const days = daysUntil(exam.date, now);
+        if (days >= 0 && days < nearestDays) nearestDays = days;
+    });
+
+    let proximityScore = 0;
+    if (nearestDays <= 3) proximityScore = 30;
+    else if (nearestDays <= 7) proximityScore = 24;
+    else if (nearestDays <= 14) proximityScore = 18;
+    else if (nearestDays <= 30) proximityScore = 12;
+    else if (nearestDays <= 60) proximityScore = 6;
+
+    return { manualWeightScore, proximityScore, nearestDays };
+}
+
+function getTaskScoreBreakdown(task, context = {}) {
+    if (!task || task.done) {
+        return { total: Number.NEGATIVE_INFINITY, items: [] };
+    }
 
     const now = context.now || new Date();
     const weakSubjects = Array.isArray(context.weakSubjects) ? context.weakSubjects : [];
     const taskDaysUntil = daysUntil(task.dueDate, now);
-    let score = 0;
+    const examSignal = getExamSignal(task, context);
+    let dueDateScore = 0;
+    if (taskDaysUntil === Number.POSITIVE_INFINITY) dueDateScore = 8;
+    else if (taskDaysUntil < 0) dueDateScore = 120 + Math.abs(taskDaysUntil) * 10;
+    else dueDateScore = Math.max(0, 70 - taskDaysUntil * 9);
 
-    if (taskDaysUntil === Number.POSITIVE_INFINITY) {
-        score += 8;
-    } else if (taskDaysUntil < 0) {
-        score += 120 + Math.abs(taskDaysUntil) * 10;
-    } else {
-        score += Math.max(0, 70 - taskDaysUntil * 9);
+    const weakSubjectScore = weakSubjects.includes(task.subject) ? 15 : 0;
+    const items = [
+        { label: "Due date urgency", value: dueDateScore },
+        { label: "Priority", value: priorityWeight(task.priority) },
+        { label: "Difficulty", value: difficultyWeight(task.difficulty) },
+        { label: "Exam weight", value: examSignal.manualWeightScore },
+        { label: "Exam proximity", value: examSignal.proximityScore },
+        { label: "Estimated hours", value: Math.min(20, (Number(task.estimatedHours) || 1) * 4) },
+        { label: "Weak-subject boost", value: weakSubjectScore }
+    ];
+
+    const total = Math.round(items.reduce((sum, item) => sum + item.value, 0));
+    return { total, items };
+}
+
+function getTaskScoreHint(task, context = {}, maxItems = 3) {
+    const breakdown = getTaskScoreBreakdown(task, context);
+    const top = breakdown.items
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, Math.max(1, maxItems));
+    if (top.length === 0) return "No active score factors.";
+    return top.map(item => `${item.label} +${Math.round(item.value)}`).join(" | ");
+}
+
+function getTaskScoreLevel(totalScore) {
+    const score = Number(totalScore) || 0;
+    if (score >= 170) {
+        return { label: "Priority Signal: Urgent", className: "urgent" };
     }
+    if (score >= 110) {
+        return { label: "Priority Signal: Moderate", className: "moderate" };
+    }
+    return { label: "Priority Signal: Low", className: "low" };
+}
 
-    score += priorityWeight(task.priority);
-    score += difficultyWeight(task.difficulty);
-    score += Math.min(20, (Number(task.estimatedHours) || 1) * 4);
-    if (weakSubjects.includes(task.subject)) score += 15;
+function openTaskScoreModal(encodedTaskId) {
+    const taskId = decodeURIComponent(String(encodedTaskId || ""));
+    const modal = document.getElementById('taskScoreModal');
+    const titleEl = document.getElementById('taskScoreModalTitle');
+    const totalEl = document.getElementById('taskScoreTotalText');
+    const listEl = document.getElementById('taskScoreBreakdownList');
+    const levelBadgeEl = document.getElementById('taskScoreLevelBadge');
+    if (!modal || !titleEl || !totalEl || !listEl || !levelBadgeEl) return;
 
-    return Math.round(score);
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const context = { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams };
+    const breakdown = getTaskScoreBreakdown(task, context);
+    const level = getTaskScoreLevel(breakdown.total);
+
+    titleEl.textContent = `Task Score Breakdown: ${task.text}`;
+    totalEl.innerHTML = `<strong>Total Score:</strong> ${breakdown.total}`;
+    levelBadgeEl.textContent = level.label;
+    levelBadgeEl.className = `score-level-badge ${level.className}`;
+    listEl.innerHTML = breakdown.items.map(item => `
+        <li class="score-breakdown-item">
+            <span class="score-breakdown-label">${item.label}</span>
+            <span class="score-breakdown-value">+${Math.round(item.value)}</span>
+        </li>
+    `).join('');
+
+    modal.classList.add('active');
+}
+
+function closeTaskScoreModal() {
+    const modal = document.getElementById('taskScoreModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function scoreTask(task, context = {}) {
+    return getTaskScoreBreakdown(task, context).total;
 }
 
 function rankTasks(taskList, context = {}) {
@@ -2094,11 +2293,12 @@ function generateDailyPlan(taskList, options = {}) {
     const now = options.now || new Date();
     const availableHours = Math.max(1, Number(options.availableHours) || 2);
     const weakSubjects = Array.isArray(options.weakSubjects) ? options.weakSubjects : [];
+    const examList = Array.isArray(options.exams) ? options.exams : [];
     const prioritizeTaskIds = new Set(Array.isArray(options.prioritizeTaskIds) ? options.prioritizeTaskIds : []);
     const remainingMinutes = Math.round(availableHours * 60);
     let usedMinutes = 0;
 
-    const ranked = rankTasks(taskList, { now, weakSubjects })
+    const ranked = rankTasks(taskList, { now, weakSubjects, exams: examList })
         .filter(task => !task.done)
         .sort((a, b) => {
             const aPriority = prioritizeTaskIds.has(a.id) ? 1 : 0;
@@ -2146,12 +2346,14 @@ function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
         now,
         availableHours: options.availableHours,
         weakSubjects,
+        exams: options.exams,
         prioritizeTaskIds: Array.from(carryOverIds)
     });
 }
 
 // ==================== DASHBOARD ====================
 function renderDashboard() {
+    renderTimerSubjectOptions();
     const completed = tasks.filter(t => t.done).length;
     document.getElementById('totalTasks').textContent = tasks.length;
     document.getElementById('completedTasks').textContent = completed;
@@ -2216,13 +2418,7 @@ function startFlashcardReviewFromDashboard(encodedDeckName) {
 
     navigateTo('flashcards');
     selectDeck(deckName);
-    flashcardStudyQueue = dueTodayIndexes;
-    flashcardStudyMode = "due-today";
-    currentFlashcardIndex = 0;
-    isFlipped = false;
-    setFlashcardReviewButtonsEnabled(true);
-    document.querySelector('.flashcard').classList.remove('flipped');
-    showFlashcard();
+    startStudy("due-today");
 }
 
 function renderFlashcardsDueToday() {
@@ -2352,19 +2548,24 @@ function renderDoNext() {
 
     const ranked = rankTasks(tasks, {
         now: new Date(),
-        weakSubjects: smartSettings.weakSubjects || []
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
     }).slice(0, 5);
     if (ranked.length === 0) {
         list.innerHTML = '<li class="empty-state">No active tasks to prioritize</li>';
         return;
     }
 
-    list.innerHTML = ranked.map(task => `
+    list.innerHTML = ranked.map(task => {
+        const hint = getTaskScoreHint(task, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams }, 5);
+        return `
         <li>
             <strong>${task.text}</strong>
-            <span>${task.subject || 'General'} • ${task.priority} • Score ${task._score}</span>
+            <span title="${escapeHtmlAttribute(hint)}">${task.subject || 'General'} | ${task.priority} | Score ${task._score}</span>
+            <button class="task-rank-hint" type="button" onclick="openTaskScoreModal('${encodeURIComponent(task.id)}')" title="${escapeHtmlAttribute(hint)}">Why ranked</button>
         </li>
-    `).join('');
+    `;
+    }).join('');
 }
 
 function renderTodayPlan() {
@@ -2397,7 +2598,8 @@ function generateTodayPlan() {
     dailyPlan = generateDailyPlan(tasks, {
         now: new Date(),
         availableHours,
-        weakSubjects: smartSettings.weakSubjects || []
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
     });
     saveState({ dailyPlan });
     renderTodayPlan();
@@ -2427,7 +2629,8 @@ function replanMissedTasks() {
     dailyPlan = replanAfterMissedTasks(tasks, dailyPlan, {
         now: new Date(),
         availableHours,
-        weakSubjects: smartSettings.weakSubjects || []
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
     });
     saveState({ dailyPlan });
     renderTodayPlan();
@@ -2445,7 +2648,8 @@ function autoReplanMissedTasksOnNewDay() {
     dailyPlan = replanAfterMissedTasks(tasks, dailyPlan, {
         now: new Date(),
         availableHours: dailyPlan.availableHours || 2,
-        weakSubjects: smartSettings.weakSubjects || []
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
     });
     saveState({ dailyPlan });
     addActivity('calendar-day', 'Auto Replan Complete', `${unfinishedIds.length} missed task(s) moved to today`);
@@ -2534,7 +2738,7 @@ function addActivity(icon, title, desc) {
 // ==================== TASKS ====================
 let currentTaskFilter = "all";
 let taskSearchQuery = "";
-let taskSortMode = "priority-due";
+let taskSortMode = "smart-score";
 let selectedTaskIds = new Set();
 
 function saveTasks() {
@@ -2605,6 +2809,7 @@ function renderTasks() {
         const li = document.createElement("li");
         li.className = `priority-${task.priority}`;
         if (task.done) li.classList.add("completed");
+        const scoreHint = getTaskScoreHint(task, { now: today, weakSubjects: smartSettings.weakSubjects || [], exams }, 5);
         
         let dueDateClass = "";
         if (task.dueDate) {
@@ -2627,7 +2832,10 @@ function renderTasks() {
                 ${task.subject ? `<span class="task-subject">${task.subject}</span>` : ''}
                 <span class="priority-badge ${task.priority}">${task.priority}</span>
                 <span class="priority-badge">${task.difficulty || 'medium'} diff</span>
+                <span class="priority-badge">exam wt ${task.examWeight || 3}/5</span>
                 <span class="task-subject">${estimateTaskHours(task)}h est</span>
+                <button class="task-rank-hint" type="button" title="${escapeHtmlAttribute(scoreHint)}"
+                    onclick="event.stopPropagation(); openTaskScoreModal('${encodeURIComponent(task.id)}')">Why ranked</button>
                 ${task.dueDate ? `<span class="task-due ${dueDateClass}"><i class="fas fa-calendar-alt"></i> ${formatDate(task.dueDate)}</span>` : ''}
             </div>
         `;
@@ -2668,6 +2876,11 @@ function getCreatedTime(task) {
 }
 
 function compareTasks(a, b, today) {
+    if (taskSortMode === "smart-score") {
+        const scoreA = scoreTask(a, { now: today, weakSubjects: smartSettings.weakSubjects || [], exams });
+        const scoreB = scoreTask(b, { now: today, weakSubjects: smartSettings.weakSubjects || [], exams });
+        if (scoreB !== scoreA) return scoreB - scoreA;
+    }
     if (taskSortMode === "due-soon") {
         return getDueTime(a) - getDueTime(b);
     }
@@ -2695,6 +2908,7 @@ function addTask() {
     const subject = document.getElementById("subjectSelect");
     const priority = document.getElementById("prioritySelect");
     const difficulty = document.getElementById("difficultySelect");
+    const examWeightSelect = document.getElementById("examWeightSelect");
     const estimatedHoursInput = document.getElementById("estimatedHoursInput");
     const dueDate = document.getElementById("dueDateInput");
     
@@ -2705,6 +2919,7 @@ function addTask() {
         subject: subject.value,
         priority: priority.value,
         difficulty: difficulty ? difficulty.value : "medium",
+        examWeight: Math.min(5, Math.max(1, Number(examWeightSelect && examWeightSelect.value ? examWeightSelect.value : 3))),
         estimatedHours: Math.max(0.5, Number(estimatedHoursInput && estimatedHoursInput.value ? estimatedHoursInput.value : 1)),
         dueDate: dueDate.value,
         done: false,
@@ -2721,6 +2936,7 @@ function addTask() {
     subject.value = "";
     priority.value = "medium";
     if (difficulty) difficulty.value = "medium";
+    if (examWeightSelect) examWeightSelect.value = "3";
     if (estimatedHoursInput) estimatedHoursInput.value = "";
     dueDate.value = "";
 }
@@ -2784,7 +3000,7 @@ function setTaskSearchQuery(query) {
 }
 
 function setTaskSortMode(mode) {
-    taskSortMode = mode || "priority-due";
+    taskSortMode = mode || "smart-score";
     renderTasks();
 }
 
@@ -3030,9 +3246,33 @@ function getDueTodayFlashcardIndexes(deckName, now = new Date()) {
     return dueToday;
 }
 
-function buildStudyQueue(deckName) {
+function getFlashcardDueBuckets(deckName, now = new Date()) {
+    const cards = flashcards[deckName] || [];
+    const dueNow = getDueFlashcardIndexes(deckName, now);
+    const dueToday = getDueTodayFlashcardIndexes(deckName, now);
+    return {
+        total: cards.length,
+        dueNow,
+        dueToday,
+        upcoming: Math.max(0, cards.length - dueNow.length)
+    };
+}
+
+function buildStudyQueue(deckName, mode = "due") {
     const cards = flashcards[deckName] || [];
     const dueIndexes = getDueFlashcardIndexes(deckName);
+    const dueTodayIndexes = getDueTodayFlashcardIndexes(deckName);
+
+    if (mode === "all") {
+        flashcardStudyMode = "all";
+        return cards.map((_, idx) => idx);
+    }
+
+    if (mode === "due-today") {
+        flashcardStudyMode = "due-today";
+        return dueTodayIndexes;
+    }
+
     if (dueIndexes.length > 0) {
         flashcardStudyMode = "due";
         return dueIndexes;
@@ -3060,28 +3300,102 @@ function setFlashcardReviewButtonsEnabled(enabled) {
     });
 }
 
+function setFlashcardStudyModeSelectValue(mode) {
+    const modeSelect = document.getElementById('flashcardStudyModeSelect');
+    if (!modeSelect) return;
+    if (modeSelect.value !== mode) modeSelect.value = mode;
+}
+
+function renderFlashcardSummary(deckName) {
+    const dueNowEl = document.getElementById('flashcardDueNowCount');
+    const dueTodayEl = document.getElementById('flashcardDueTodayCount');
+    const upcomingEl = document.getElementById('flashcardUpcomingCount');
+    if (!dueNowEl || !dueTodayEl || !upcomingEl) return;
+
+    if (!deckName || !flashcards[deckName]) {
+        dueNowEl.textContent = 'Due now: 0';
+        dueTodayEl.textContent = 'Due today: 0';
+        upcomingEl.textContent = 'Upcoming: 0';
+        return;
+    }
+
+    const buckets = getFlashcardDueBuckets(deckName);
+    dueNowEl.textContent = `Due now: ${buckets.dueNow.length}`;
+    dueTodayEl.textContent = `Due today: ${buckets.dueToday.length}`;
+    upcomingEl.textContent = `Upcoming: ${buckets.upcoming}`;
+}
+
+function formatRelativeReviewTime(dateLike, now = new Date()) {
+    const target = new Date(dateLike);
+    const targetMs = target.getTime();
+    if (!Number.isFinite(targetMs)) return "unscheduled";
+
+    const diffMs = targetMs - now.getTime();
+    const diffMins = Math.round(diffMs / (1000 * 60));
+    if (diffMins <= 0) return "now";
+    if (diffMins < 60) return `in ${diffMins} min`;
+
+    const diffHours = Math.round(diffMins / 60);
+    if (diffHours < 24) return `in ${diffHours} hr`;
+
+    const diffDays = Math.round(diffHours / 24);
+    return `in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+}
+
+function updateFlashcardNextReviewInfo(card) {
+    const infoEl = document.getElementById('flashcardNextReviewInfo');
+    if (!infoEl) return;
+    if (!card) {
+        infoEl.textContent = 'Next review: --';
+        return;
+    }
+
+    const nextAt = card.nextReviewAt ? new Date(card.nextReviewAt) : null;
+    if (!nextAt || !Number.isFinite(nextAt.getTime())) {
+        infoEl.textContent = 'Next review: unscheduled';
+        return;
+    }
+
+    const absolute = nextAt.toLocaleString();
+    const relative = formatRelativeReviewTime(nextAt);
+    infoEl.textContent = `Next review: ${absolute} (${relative})`;
+}
+
 function getNextIntervalFromRating(card, rating) {
     const previousInterval = Math.max(0, Number(card.intervalDays) || 0);
     const previousEase = Math.max(1.3, Number(card.ease) || 2.5);
+    const reviewCount = Math.max(0, Number(card.reviewCount) || 0);
+    const lapses = Math.max(0, Number(card.lapses) || 0);
     let intervalDays = previousInterval;
     let ease = previousEase;
+    let nextReviewMinutes = 0;
 
     if (rating === "again") {
         intervalDays = 0;
         ease = Math.max(1.3, previousEase - 0.2);
+        nextReviewMinutes = 10;
     } else if (rating === "hard") {
         intervalDays = previousInterval <= 1 ? 1 : Math.max(1, Math.round(previousInterval * 1.2));
         ease = Math.max(1.3, previousEase - 0.15);
     } else if (rating === "easy") {
-        intervalDays = previousInterval === 0 ? 4 : Math.max(2, Math.round(previousInterval * previousEase * 1.3));
+        intervalDays = previousInterval === 0
+            ? 4
+            : Math.max(2, Math.round(previousInterval * previousEase * 1.35));
         ease = Math.min(3.5, previousEase + 0.15);
     } else {
-        intervalDays = previousInterval === 0 ? 1 : Math.max(1, Math.round(previousInterval * previousEase));
+        intervalDays = previousInterval === 0
+            ? 2
+            : Math.max(1, Math.round(previousInterval * previousEase));
+    }
+
+    if (reviewCount > 0 && rating !== "again" && lapses > 0) {
+        intervalDays = Math.max(1, Math.round(intervalDays * 0.9));
     }
 
     return {
         intervalDays,
-        ease: Math.round(ease * 100) / 100
+        ease: Math.round(ease * 100) / 100,
+        nextReviewMinutes
     };
 }
 
@@ -3094,7 +3408,11 @@ function reviewCurrentFlashcard(rating) {
     const now = new Date();
     const schedule = getNextIntervalFromRating(ref.card, safeRating);
     const nextDate = new Date(now);
-    nextDate.setDate(nextDate.getDate() + schedule.intervalDays);
+    if (schedule.nextReviewMinutes > 0) {
+        nextDate.setMinutes(nextDate.getMinutes() + schedule.nextReviewMinutes);
+    } else {
+        nextDate.setDate(nextDate.getDate() + schedule.intervalDays);
+    }
 
     flashcards[ref.deck][ref.cardIndex] = {
         ...ref.card,
@@ -3105,10 +3423,16 @@ function reviewCurrentFlashcard(rating) {
         lastReviewedAt: now.toISOString(),
         nextReviewAt: nextDate.toISOString()
     };
+    updateFlashcardNextReviewInfo(flashcards[ref.deck][ref.cardIndex]);
+
+    if (safeRating === "again") {
+        flashcardStudyQueue.push(ref.cardIndex);
+    }
 
     weeklyStats.flashcardsReviewed++;
     saveState({ flashcards, weeklyStats });
     saveFlashcardsToBackend();
+    renderFlashcardSummary(ref.deck);
 
     if (currentFlashcardIndex < flashcardStudyQueue.length - 1) {
         currentFlashcardIndex++;
@@ -3155,9 +3479,12 @@ function renderFlashcards() {
     flashcardStudyQueue = [];
     currentFlashcardIndex = 0;
     setFlashcardReviewButtonsEnabled(false);
+    setFlashcardStudyModeSelectValue("due");
     document.getElementById('flashcardCounter').textContent = '0 / 0';
     document.getElementById('flashcardFront').innerHTML = '<p>Select a deck and click Study to start</p>';
     document.getElementById('flashcardBack').innerHTML = '<p></p>';
+    updateFlashcardNextReviewInfo(null);
+    renderFlashcardSummary(currentDeck);
 }
 
 function selectDeck(deck) {
@@ -3168,6 +3495,7 @@ function selectDeck(deck) {
     setFlashcardReviewButtonsEnabled(false);
     document.getElementById('flashcardDeck').value = deck;
     document.querySelector('.flashcard').classList.remove('flipped');
+    renderFlashcardSummary(deck);
 }
 
 function showFlashcardEditor() {
@@ -3210,20 +3538,23 @@ function createNewDeck() {
     }
 }
 
-function startStudy() {
+function startStudy(modeOverride = "") {
     if (!currentDeck || !flashcards[currentDeck] || flashcards[currentDeck].length === 0) {
         alert('Please select a deck first!');
         return;
     }
-    
-    flashcardStudyQueue = buildStudyQueue(currentDeck);
+
+    const modeSelect = document.getElementById('flashcardStudyModeSelect');
+    const requestedMode = modeOverride || (modeSelect ? modeSelect.value : "due");
+    flashcardStudyQueue = buildStudyQueue(currentDeck, requestedMode);
     if (flashcardStudyQueue.length === 0) {
-        alert('No cards available in this deck.');
+        alert(requestedMode === "due-today" ? 'No flashcards due today in this deck.' : 'No cards available in this deck.');
         return;
     }
     currentFlashcardIndex = 0;
     isFlipped = false;
     setFlashcardReviewButtonsEnabled(true);
+    setFlashcardStudyModeSelectValue(flashcardStudyMode);
     document.querySelector('.flashcard').classList.remove('flipped');
     showFlashcard();
 }
@@ -3234,9 +3565,14 @@ function showFlashcard() {
     const card = ref.card;
     document.getElementById('flashcardFront').innerHTML = `<p>${card.front}</p>`;
     document.getElementById('flashcardBack').innerHTML = `<p>${card.back}</p>`;
+    updateFlashcardNextReviewInfo(card);
     const dueCount = getDueFlashcardIndexes(currentDeck).length;
-    const modeLabel = flashcardStudyMode === "due" ? "Due Session" : "All Cards";
-    document.getElementById('flashcardCounter').textContent = `${currentFlashcardIndex + 1} / ${flashcardStudyQueue.length} • ${modeLabel} • ${dueCount} due`;
+    const modeLabel = flashcardStudyMode === "due"
+        ? "Due Session"
+        : flashcardStudyMode === "due-today"
+            ? "Due Today Session"
+            : "All Cards";
+    document.getElementById('flashcardCounter').textContent = `${currentFlashcardIndex + 1} / ${flashcardStudyQueue.length} | ${modeLabel} | ${dueCount} due`;
 }
 
 function flipFlashcard() {
@@ -3752,12 +4088,87 @@ function getStudyHoursForDays(daysBack) {
     return Math.round((totalMinutes / 60) * 10) / 10;
 }
 
+function getWeeklySubjectFocusData() {
+    const now = new Date();
+    const from = new Date(now);
+    from.setDate(now.getDate() - 6);
+    from.setHours(0, 0, 0, 0);
+
+    const bySubject = new Map();
+    pomodoroSessions
+        .filter(session => session.type === 'Focus')
+        .filter(session => new Date(session.date) >= from)
+        .forEach(session => {
+            const subject = session.subject || 'General';
+            const next = (bySubject.get(subject) || 0) + (Number(session.minutes) || 0);
+            bySubject.set(subject, next);
+        });
+
+    return [...bySubject.entries()]
+        .map(([subject, minutes]) => ({
+            subject,
+            hours: Math.round((minutes / 60) * 10) / 10
+        }))
+        .sort((a, b) => b.hours - a.hours)
+        .slice(0, 8);
+}
+
+function getAnalyticsTrendSubjectOptions() {
+    const fromSessions = pomodoroSessions
+        .filter(session => session.type === 'Focus')
+        .map(session => String(session.subject || '').trim())
+        .filter(Boolean);
+    return [...new Set(fromSessions)].sort((a, b) => a.localeCompare(b));
+}
+
+function renderAnalyticsTrendSubjectOptions() {
+    const select = document.getElementById('analyticsTrendSubjectSelect');
+    if (!select) return;
+    const options = getAnalyticsTrendSubjectOptions();
+    select.innerHTML = ['<option value="all">All Subjects</option>', ...options.map(subject => `<option value="${subject}">${subject}</option>`)].join('');
+    select.value = options.includes(analyticsTrendSubject) ? analyticsTrendSubject : 'all';
+    analyticsTrendSubject = select.value;
+}
+
+function setAnalyticsTrendSubject(value) {
+    analyticsTrendSubject = String(value || 'all');
+    renderAnalytics();
+}
+
+function getSubjectTrendData(subject = "all") {
+    const labels = [];
+    const values = [];
+    const now = new Date();
+    for (let offset = 6; offset >= 0; offset--) {
+        const day = new Date(now);
+        day.setHours(0, 0, 0, 0);
+        day.setDate(day.getDate() - offset);
+        const nextDay = new Date(day);
+        nextDay.setDate(nextDay.getDate() + 1);
+
+        labels.push(day.toLocaleDateString('en-US', { weekday: 'short' }));
+        const minutes = pomodoroSessions
+            .filter(session => session.type === 'Focus')
+            .filter(session => subject === 'all' || (session.subject || 'General') === subject)
+            .filter(session => {
+                const sessionDate = new Date(session.date);
+                return sessionDate >= day && sessionDate < nextDay;
+            })
+            .reduce((sum, session) => sum + (Number(session.minutes) || 0), 0);
+        values.push(Math.round((minutes / 60) * 10) / 10);
+    }
+    return { labels, values };
+}
+
 function renderAnalyticsCharts(completed, pending) {
     if (typeof Chart === 'undefined') return;
 
     const trendCanvas = document.getElementById('progressTrendChart');
     const splitCanvas = document.getElementById('completionSplitChart');
-    if (!trendCanvas || !splitCanvas) return;
+    const subjectCanvas = document.getElementById('subjectFocusChart');
+    const subjectTrendCanvas = document.getElementById('subjectTrendChart');
+    if (!trendCanvas || !splitCanvas || !subjectCanvas || !subjectTrendCanvas) return;
+    renderAnalyticsTrendSubjectOptions();
 
     const weeklyCompleted = getCompletionCountForDays(7);
     const monthlyCompleted = getCompletionCountForDays(30);
@@ -3804,6 +4215,61 @@ function renderAnalyticsCharts(completed, pending) {
             responsive: true,
             plugins: {
                 legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    const subjectData = getWeeklySubjectFocusData();
+    if (subjectFocusChartInstance) subjectFocusChartInstance.destroy();
+    subjectFocusChartInstance = new Chart(subjectCanvas, {
+        type: 'bar',
+        data: {
+            labels: subjectData.length > 0 ? subjectData.map(item => item.subject) : ['No focus sessions'],
+            datasets: [{
+                label: 'Focus Hours (Last 7 days)',
+                data: subjectData.length > 0 ? subjectData.map(item => item.hours) : [0],
+                backgroundColor: '#f59e0b'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    const subjectTrend = getSubjectTrendData(analyticsTrendSubject);
+    if (subjectTrendChartInstance) subjectTrendChartInstance.destroy();
+    subjectTrendChartInstance = new Chart(subjectTrendCanvas, {
+        type: 'line',
+        data: {
+            labels: subjectTrend.labels,
+            datasets: [{
+                label: analyticsTrendSubject === 'all'
+                    ? 'All Subjects Focus Hours'
+                    : `${analyticsTrendSubject} Focus Hours`,
+                data: subjectTrend.values,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.18)',
+                tension: 0.35,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'top' }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
             }
         }
     });
@@ -3880,6 +4346,7 @@ function renderAnalytics() {
 
 // ==================== SUBJECTS ====================
 function renderSubjects() {
+    renderTimerSubjectOptions();
     const grid = document.getElementById('subjectsGrid');
     
     if (subjects.length === 0) {
@@ -4744,6 +5211,7 @@ async function submitQuiz() {
         id: `quiz-${Date.now()}`,
         userEmail: user ? user.email : 'unknown',
         userName: user ? user.name : 'Unknown',
+        subject: document.getElementById('quizSubject')?.value || 'Any',
         score,
         total: currentQuizSession.length,
         percent,
@@ -4940,18 +5408,51 @@ async function loadQuizScoresFromServer() {
 }
 
 // ==================== POMODORO HISTORY ====================
+function getPomodoroSubjectOptions() {
+    const defaults = ["General", "Math", "Science", "English", "History", "Geography", "Programming", "Break"];
+    const fromSessions = pomodoroSessions
+        .map(session => String((session && session.subject) || "").trim())
+        .filter(Boolean);
+    const fromSubjects = subjects
+        .map(subject => String((subject && subject.name) || "").trim())
+        .filter(Boolean);
+    return [...new Set([...defaults, ...fromSubjects, ...fromSessions])];
+}
+
+function renderPomodoroSubjectFilter() {
+    const select = document.getElementById('pomodoroSubjectFilter');
+    if (!select) return;
+    const options = getPomodoroSubjectOptions();
+    select.innerHTML = ['<option value="all">All Subjects</option>', ...options.map(name => `<option value="${name}">${name}</option>`)].join('');
+    select.value = options.includes(pomodoroSubjectFilter) ? pomodoroSubjectFilter : "all";
+    pomodoroSubjectFilter = select.value;
+}
+
+function setPomodoroSubjectFilter(value) {
+    pomodoroSubjectFilter = String(value || "all");
+    renderPomodoroHistory();
+}
+
 function renderPomodoroHistory() {
-    document.getElementById('totalFocusTime').textContent = Math.round(pomodoroSessions.reduce((sum, s) => sum + s.minutes, 0) / 60 * 10) / 10;
-    document.getElementById('totalSessions').textContent = pomodoroSessions.length;
-    
+    renderPomodoroSubjectFilter();
+    const filteredSessions = pomodoroSubjectFilter === "all"
+        ? pomodoroSessions
+        : pomodoroSessions.filter(session => (session.subject || "General") === pomodoroSubjectFilter);
+
+    const totalFocusMinutes = filteredSessions
+        .filter(s => s.type === 'Focus')
+        .reduce((sum, s) => sum + (Number(s.minutes) || 0), 0);
+    document.getElementById('totalFocusTime').textContent = Math.round(totalFocusMinutes / 60 * 10) / 10;
+    document.getElementById('totalSessions').textContent = filteredSessions.length;
+
     const today = new Date();
-    const todaySessions = pomodoroSessions.filter(s => new Date(s.date).toDateString() === today.toDateString());
+    const todaySessions = filteredSessions.filter(s => new Date(s.date).toDateString() === today.toDateString());
     document.getElementById('sessionsToday').textContent = todaySessions.length;
-    
+
     // Find longest streak
     let longest = 0;
     let current = 0;
-    const dates = [...new Set(pomodoroSessions.map(s => new Date(s.date).toDateString()))].sort();
+    const dates = [...new Set(filteredSessions.map(s => new Date(s.date).toDateString()))].sort();
     dates.forEach((date, i) => {
         if (i === 0) current = 1;
         else {
@@ -4964,23 +5465,271 @@ function renderPomodoroHistory() {
         if (current > longest) longest = current;
     });
     document.getElementById('longestStreak').textContent = longest;
-    
+
     // List
     const list = document.getElementById('pomodoroHistoryList');
-    if (pomodoroSessions.length === 0) {
+    if (filteredSessions.length === 0) {
         list.innerHTML = '<li class="empty-state">No sessions yet</li>';
+    } else {
+        list.innerHTML = filteredSessions.slice(0, 20).map(session => `
+        <li>
+            <span>${session.minutes} min ${session.type} | ${session.subject || 'General'}</span>
+            <span class="activity-time">${formatDate(session.date)}</span>
+        </li>
+    `).join('');
+    }
+
+    const subjectStatsList = document.getElementById('pomodoroSubjectStatsList');
+    if (!subjectStatsList) return;
+    const bySubject = new Map();
+    filteredSessions
+        .filter(session => session.type === 'Focus')
+        .forEach(session => {
+            const subject = session.subject || 'General';
+            const current = bySubject.get(subject) || { subject, minutes: 0, sessions: 0 };
+            current.minutes += Number(session.minutes) || 0;
+            current.sessions += 1;
+            bySubject.set(subject, current);
+        });
+
+    const sorted = [...bySubject.values()].sort((a, b) => b.minutes - a.minutes);
+    if (sorted.length === 0) {
+        subjectStatsList.innerHTML = '<li class="empty-state">No focus sessions by subject yet</li>';
         return;
     }
-    
-    list.innerHTML = pomodoroSessions.slice(0, 20).map(session => `
+
+    subjectStatsList.innerHTML = sorted.map(item => `
         <li>
-            <span>${session.minutes} min ${session.type}</span>
-            <span class="activity-time">${formatDate(session.date)}</span>
+            <span>${item.subject}</span>
+            <span>${(Math.round((item.minutes / 60) * 10) / 10)}h | ${item.sessions} sessions</span>
         </li>
     `).join('');
 }
 
 // ==================== GOALS ====================
+function getKnownGoalSubjects() {
+    const fromSubjects = Array.isArray(subjects) ? subjects.map(item => String((item && item.name) || "").trim()).filter(Boolean) : [];
+    const fromTasks = tasks.map(task => String(task.subject || "").trim()).filter(Boolean);
+    const fromQuiz = quizScores.map(score => String(score.subject || "").trim()).filter(Boolean);
+    const defaults = ["Math", "Science", "English", "History", "Geography", "Programming", "General"];
+    return [...new Set([...defaults, ...fromSubjects, ...fromTasks, ...fromQuiz])];
+}
+
+function parseGoalStatement(text) {
+    const rawText = String(text || "").trim();
+    if (!rawText) return null;
+    const targetMatch = rawText.match(/(\d{1,3})\s*%/);
+    const targetPercent = targetMatch ? Math.max(1, Math.min(100, Math.round(Number(targetMatch[1])))) : NaN;
+    if (!Number.isFinite(targetPercent)) return null;
+
+    const knownSubjects = getKnownGoalSubjects();
+    const lower = rawText.toLowerCase();
+    let subject = "";
+    let bestLen = 0;
+    knownSubjects.forEach(name => {
+        const normalized = name.toLowerCase();
+        if (!normalized) return;
+        if (lower.includes(normalized) && normalized.length > bestLen) {
+            subject = name;
+            bestLen = normalized.length;
+        }
+    });
+
+    if (!subject) {
+        const phraseMatch = rawText.match(/(?:in|for)\s+([a-zA-Z][a-zA-Z\s&-]{1,40})/i);
+        if (phraseMatch && phraseMatch[1]) {
+            subject = phraseMatch[1].trim().replace(/\s+/g, " ");
+        }
+    }
+
+    return {
+        rawText,
+        targetPercent,
+        subject: subject.trim()
+    };
+}
+
+function getSubjectQuizBaseline(subjectName) {
+    const subjectScores = quizScores
+        .filter(score => score && score.subject && subjectMatches(score.subject, subjectName))
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 10);
+    if (subjectScores.length > 0) {
+        const avg = subjectScores.reduce((sum, score) => sum + (Number(score.percent) || 0), 0) / subjectScores.length;
+        return Math.max(0, Math.min(100, Math.round(avg)));
+    }
+
+    const overall = quizScores
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        .slice(0, 10);
+    if (overall.length > 0) {
+        const avg = overall.reduce((sum, score) => sum + (Number(score.percent) || 0), 0) / overall.length;
+        return Math.max(0, Math.min(100, Math.round(avg * 0.92)));
+    }
+    return null;
+}
+
+function getSubjectTaskStats(subjectName) {
+    const related = tasks.filter(task => subjectMatches(task.subject || "", subjectName));
+    const done = related.filter(task => task.done).length;
+    const pending = related.length - done;
+    const completionPercent = related.length > 0 ? Math.round((done / related.length) * 100) : null;
+    return { total: related.length, done, pending, completionPercent };
+}
+
+function getSubjectFocusHours(subjectName, daysBack = 14) {
+    const from = new Date();
+    from.setDate(from.getDate() - Math.max(1, Number(daysBack) || 14));
+    from.setHours(0, 0, 0, 0);
+    const minutes = pomodoroSessions
+        .filter(session => session.type === "Focus")
+        .filter(session => subjectMatches(session.subject || "", subjectName))
+        .filter(session => new Date(session.date) >= from)
+        .reduce((sum, session) => sum + (Number(session.minutes) || 0), 0);
+    return Math.round((minutes / 60) * 10) / 10;
+}
+
+function buildGoalRoadmapPlan(parsedGoal) {
+    const subject = parsedGoal.subject || "General";
+    const targetPercent = parsedGoal.targetPercent;
+    const quizBaseline = getSubjectQuizBaseline(subject);
+    const taskStats = getSubjectTaskStats(subject);
+    const focusHours = getSubjectFocusHours(subject, 14);
+
+    const weighted = [];
+    if (Number.isFinite(quizBaseline)) weighted.push({ value: quizBaseline, weight: 0.5 });
+    if (Number.isFinite(taskStats.completionPercent)) weighted.push({ value: taskStats.completionPercent, weight: 0.3 });
+    if (focusHours > 0) weighted.push({ value: Math.min(92, Math.round(40 + focusHours * 4)), weight: 0.2 });
+
+    let baselinePercent = 60;
+    if (weighted.length > 0) {
+        const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+        baselinePercent = Math.round(weighted.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight);
+    }
+
+    const gap = Math.max(0, targetPercent - baselinePercent);
+    const weeks = Math.max(2, Math.min(16, Math.ceil(gap / 4) || 2));
+    const weeklyHours = Math.max(2, Math.min(20, Math.round((2 + gap * 0.22 + (taskStats.pending * 0.25)) * 10) / 10));
+
+    const milestoneTemplates = [
+        "Build core concepts and fix weak chapter notes.",
+        "Practice mixed-level questions and maintain error log.",
+        "Run timed topic tests and revise mistakes daily.",
+        "Take full-length mocks and optimize exam strategy."
+    ];
+    const milestones = [];
+    for (let week = 1; week <= weeks; week++) {
+        const weekTarget = Math.round(baselinePercent + ((targetPercent - baselinePercent) * week) / weeks);
+        const templateIndex = Math.min(milestoneTemplates.length - 1, Math.floor(((week - 1) / weeks) * milestoneTemplates.length));
+        milestones.push({
+            week,
+            targetPercent: Math.max(0, Math.min(100, weekTarget)),
+            action: milestoneTemplates[templateIndex]
+        });
+    }
+
+    return {
+        rawText: parsedGoal.rawText,
+        subject,
+        targetPercent,
+        baselinePercent,
+        weeklyHours,
+        weeks,
+        milestones,
+        generatedAt: new Date().toISOString(),
+        quizBaseline,
+        taskCompletionBaseline: taskStats.completionPercent,
+        focusHours14d: focusHours
+    };
+}
+
+function renderGoalRoadmap() {
+    const summaryEl = document.getElementById('goalRoadmapSummary');
+    const listEl = document.getElementById('goalRoadmapList');
+    const inputEl = document.getElementById('targetGoalInput');
+    if (!summaryEl || !listEl) return;
+
+    const hasRoadmap = goalRoadmap && goalRoadmap.subject && Array.isArray(goalRoadmap.milestones) && goalRoadmap.milestones.length > 0;
+    if (inputEl && goalRoadmap && goalRoadmap.rawText) {
+        inputEl.value = goalRoadmap.rawText;
+    }
+    if (!hasRoadmap) {
+        summaryEl.textContent = 'No roadmap generated yet.';
+        listEl.innerHTML = '<li class="empty-state">Add a goal statement to generate your roadmap</li>';
+        return;
+    }
+
+    summaryEl.textContent = `Target: ${goalRoadmap.targetPercent}% in ${goalRoadmap.subject} | Baseline: ${goalRoadmap.baselinePercent}% | Plan: ${goalRoadmap.weeks} weeks | Suggested: ${goalRoadmap.weeklyHours} hrs/week`;
+    listEl.innerHTML = goalRoadmap.milestones.map(item => `
+        <li>
+            <strong>Week ${item.week}: Aim ${item.targetPercent}%</strong>
+            <span>${item.action}</span>
+        </li>
+    `).join('');
+}
+
+function generateGoalRoadmap() {
+    const input = document.getElementById('targetGoalInput');
+    const rawText = input ? input.value : '';
+    const parsed = parseGoalStatement(rawText);
+    if (!parsed || !parsed.subject || !parsed.targetPercent) {
+        alert('Use a clear statement like: "I need 85% in Math".');
+        return;
+    }
+
+    goalRoadmap = buildGoalRoadmapPlan(parsed);
+    saveState({ goalRoadmap });
+    renderGoalRoadmap();
+    addActivity('bullseye', 'Goal Roadmap Generated', `${goalRoadmap.targetPercent}% in ${goalRoadmap.subject}`);
+}
+
+function createTasksFromGoalRoadmap() {
+    const hasRoadmap = goalRoadmap && goalRoadmap.subject && Array.isArray(goalRoadmap.milestones) && goalRoadmap.milestones.length > 0;
+    if (!hasRoadmap) {
+        alert('Generate a roadmap first.');
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const perTaskHours = Math.max(1, Math.min(4, Math.round(((Number(goalRoadmap.weeklyHours) || 4) / 3) * 10) / 10));
+    const baseExamWeight = Math.max(3, Math.min(5, Math.round(((Number(goalRoadmap.targetPercent) || 80) - (Number(goalRoadmap.baselinePercent) || 60)) / 10) + 3));
+    let created = 0;
+
+    goalRoadmap.milestones.forEach(item => {
+        const weekNumber = Number(item.week) || 1;
+        const taskText = `Roadmap Week ${weekNumber}: ${goalRoadmap.subject} target ${item.targetPercent}%`;
+        const alreadyExists = tasks.some(task => String(task.text || "").trim() === taskText && subjectMatches(task.subject || "", goalRoadmap.subject || ""));
+        if (alreadyExists) return;
+
+        const due = new Date(today);
+        due.setDate(due.getDate() + (weekNumber * 7) - 1);
+        tasks.push({
+            text: taskText,
+            subject: goalRoadmap.subject || "General",
+            priority: weekNumber <= 2 ? "high" : "medium",
+            difficulty: weekNumber <= 2 ? "hard" : "medium",
+            examWeight: baseExamWeight,
+            estimatedHours: perTaskHours,
+            dueDate: due.toISOString().split('T')[0],
+            done: false,
+            createdAt: new Date().toISOString()
+        });
+        created++;
+    });
+
+    if (created === 0) {
+        alert('Roadmap tasks already exist.');
+        return;
+    }
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('list-check', 'Roadmap Tasks Created', `${created} tasks for ${goalRoadmap.subject}`);
+    alert(`${created} roadmap task(s) created.`);
+}
+
 function renderGoals() {
     document.getElementById('goalTasks').value = goals.tasks;
     document.getElementById('goalStudyHours').value = goals.studyHours;
@@ -4996,6 +5745,7 @@ function renderGoals() {
     document.getElementById('goalStudyProgress').textContent = `${Math.round(weeklyStats.studyHours)} / ${goals.studyHours}`;
     document.getElementById('goalFlashcardsFill').style.width = flashcardPercent + '%';
     document.getElementById('goalFlashcardsProgress').textContent = `${weeklyStats.flashcardsReviewed} / ${goals.flashcards}`;
+    renderGoalRoadmap();
 }
 
 function saveGoals() {
@@ -5009,6 +5759,30 @@ function saveGoals() {
 }
 
 // ==================== TIMER ====================
+function getTimerModeLabel(minutes) {
+    if (minutes >= 25) return 'Focus';
+    if (minutes >= 15) return 'Long Break';
+    return 'Short Break';
+}
+
+function getSelectedTimerSubject() {
+    const select = document.getElementById('timerSubjectSelect');
+    return select && select.value ? select.value : 'General';
+}
+
+function renderTimerSubjectOptions() {
+    const select = document.getElementById('timerSubjectSelect');
+    if (!select) return;
+    const existing = select.value || 'General';
+    const defaultSubjects = ['General', 'Math', 'Science', 'English', 'History', 'Geography', 'Programming'];
+    const customSubjects = subjects
+        .map(s => String((s && s.name) || '').trim())
+        .filter(Boolean);
+    const options = [...new Set([...defaultSubjects, ...customSubjects])];
+    select.innerHTML = options.map(name => `<option value="${name}">${name}</option>`).join('');
+    select.value = options.includes(existing) ? existing : 'General';
+}
+
 function updateTimerDisplay() {
     document.getElementById('timerMinutes').textContent = timerMinutes.toString().padStart(2, '0');
     document.getElementById('timerSeconds').textContent = timerSeconds.toString().padStart(2, '0');
@@ -5028,12 +5802,26 @@ function startTimer() {
                 playNotificationSound();
                 
                 // Save session
-                const sessionMinutes = timerMinutes;
-                const type = sessionMinutes >= 25 ? 'Focus' : sessionMinutes >= 15 ? 'Long Break' : 'Short Break';
-                pomodoroSessions.push({ minutes: 25, type, date: new Date().toISOString() });
-                localStorage.setItem('pomodoroSessions', JSON.stringify(pomodoroSessions));
+                const sessionMinutes = timerModeMinutes;
+                const type = getTimerModeLabel(timerModeMinutes);
+                const subject = type === 'Focus' ? getSelectedTimerSubject() : 'Break';
+                pomodoroSessions.push(normalizePomodoroSession({
+                    minutes: sessionMinutes,
+                    type,
+                    subject,
+                    date: new Date().toISOString()
+                }));
+                if (type === 'Focus') {
+                    weeklyStats.studyHours += (sessionMinutes / 60);
+                }
+                saveState({ pomodoroSessions, weeklyStats });
+                renderPomodoroHistory();
+                renderDashboard();
+                renderAnalytics();
                 
                 alert('Timer complete! Take a break!');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('pauseBtn').disabled = true;
                 return;
             }
             timerMinutes--;
@@ -5041,13 +5829,7 @@ function startTimer() {
         } else {
             timerSeconds--;
         }
-        
-        // Track study time every minute
-        if (timerSeconds === 59 && timerMinutes < 25) {
-            weeklyStats.studyHours += 1/60;
-            localStorage.setItem('weeklyStats', JSON.stringify(weeklyStats));
-        }
-        
+
         updateTimerDisplay();
     }, 1000);
 }
@@ -5061,10 +5843,11 @@ function pauseTimer() {
 
 function resetTimer() {
     pauseTimer();
-    setTimerMode(25);
+    setTimerMode(timerModeMinutes || 25);
 }
 
 function setTimerMode(minutes) {
+    timerModeMinutes = minutes;
     timerMinutes = minutes;
     timerSeconds = 0;
     updateTimerDisplay();
@@ -5122,7 +5905,7 @@ function checkDueTaskReminders() {
 
     if (dueSoon.length === 0) return;
 
-    const topTask = rankTasks(dueSoon, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [] })[0];
+    const topTask = rankTasks(dueSoon, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams })[0];
     const message = dueSoon.length === 1
         ? `1 task is due soon: ${topTask.text}`
         : `${dueSoon.length} tasks are due soon. Start with: ${topTask.text}`;
@@ -5156,6 +5939,7 @@ function exportData() {
         studyStreak,
         bestStreak,
         goals,
+        goalRoadmap,
         timetableEntries,
         resources,
         studyMaterials,
@@ -5194,12 +5978,13 @@ function importData(event) {
             if (data.exams) exams = data.exams;
             if (data.subjects) subjects = data.subjects;
             if (data.gpaHistory) gpaHistory = data.gpaHistory;
-            if (data.pomodoroSessions) pomodoroSessions = data.pomodoroSessions;
+            if (data.pomodoroSessions) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
             if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
             if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
             if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
             if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
             if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
+            if (data.goalRoadmap) goalRoadmap = normalizeGoalRoadmap(data.goalRoadmap);
             if (Array.isArray(data.timetableEntries)) timetableEntries = data.timetableEntries;
             if (Array.isArray(data.resources)) resources = data.resources;
             if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
@@ -5224,6 +6009,7 @@ function importData(event) {
                 studyStreak,
                 bestStreak,
                 goals,
+                goalRoadmap,
                 timetableEntries,
                 resources,
                 studyMaterials,
@@ -5356,6 +6142,15 @@ function formatDate(dateStr) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function escapeHtmlAttribute(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/'/g, "&#39;");
+}
+
 function bootstrapAuthenticatedApp() {
     if (appBootstrapped) return;
     appBootstrapped = true;
@@ -5416,6 +6211,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupFirebaseAuthObserver();
     applyAuthState();
+
+    const taskScoreModal = document.getElementById('taskScoreModal');
+    if (taskScoreModal) {
+        taskScoreModal.addEventListener('click', (event) => {
+            if (event.target === taskScoreModal) {
+                closeTaskScoreModal();
+            }
+        });
+    }
 });
+
+
+
 
 
