@@ -84,67 +84,51 @@
         </div>
         
         <ul class="nav-menu">
-            <li class="nav-item active" data-page="dashboard">
+            <li class="nav-item active" data-page="dashboard" data-nav-role="student teacher admin">
                 <a href="#dashboard"><i class="fas fa-th-large"></i> Dashboard</a>
             </li>
-            <li class="nav-item" data-page="tasks">
+
+            <li class="nav-item" data-page="tasks" data-nav-role="student">
                 <a href="#tasks"><i class="fas fa-tasks"></i> Tasks</a>
             </li>
-            <li class="nav-item" data-page="calendar">
+            <li class="nav-item" data-page="calendar" data-nav-role="student">
                 <a href="#calendar"><i class="fas fa-calendar-alt"></i> Calendar</a>
             </li>
-            <li class="nav-item" data-page="notes">
-                <a href="#notes"><i class="fas fa-sticky-note"></i> Notes</a>
-            </li>
-            <li class="nav-item" data-page="flashcards">
+            <li class="nav-item" data-page="flashcards" data-nav-role="student">
                 <a href="#flashcards"><i class="fas fa-layer-group"></i> Flashcards</a>
             </li>
-            <li class="nav-item" data-page="assignments">
-                <a href="#assignments"><i class="fas fa-file-alt"></i> Assignments</a>
+            <li class="nav-item" data-page="student-quiz-weak" data-nav-role="student">
+                <a href="#quiz"><i class="fas fa-question-circle"></i> Quiz &amp; Weak Topics</a>
             </li>
-            <li class="nav-item" data-page="gpa">
-                <a href="#gpa"><i class="fas fa-calculator"></i> GPA Calculator</a>
+            <li class="nav-item" data-page="student-timer" data-nav-role="student">
+                <a href="#pomodoro-history"><i class="fas fa-stopwatch"></i> Timer</a>
             </li>
-            <li class="nav-item" data-page="exams">
-                <a href="#exams"><i class="fas fa-stopwatch"></i> Exam Countdown</a>
-            </li>
-            <li class="nav-item" data-page="analytics">
-                <a href="#analytics"><i class="fas fa-chart-line"></i> Analytics</a>
-            </li>
-            <li class="nav-item" data-page="quiz">
-                <a href="#quiz"><i class="fas fa-question-circle"></i> Quiz</a>
-            </li>
-            <li class="nav-item" data-page="admin">
-                <a href="#admin"><i class="fas fa-user-shield"></i> Admin</a>
-            </li>
-            <li class="nav-item" data-page="subjects">
-                <a href="#subjects"><i class="fas fa-book"></i> Subjects</a>
-            </li>
-            <li class="nav-item" data-page="timetable">
-                <a href="#timetable"><i class="fas fa-table"></i> Timetable</a>
-            </li>
-            <li class="nav-item" data-page="resources">
-                <a href="#resources"><i class="fas fa-link"></i> Resources</a>
-            </li>
-            <li class="nav-item" data-page="study-materials">
-                <a href="#study-materials"><i class="fas fa-book-open-reader"></i> Study Materials</a>
-            </li>
-            <li class="nav-item" data-page="free-notes">
-                <a href="#free-notes"><i class="fas fa-file-arrow-down"></i> Free Notes</a>
-            </li>
-            <li class="nav-item" data-page="achievements">
-                <a href="#achievements"><i class="fas fa-award"></i> Achievements</a>
-            </li>
-            <li class="nav-item" data-page="pomodoro-history">
-                <a href="#pomodoro-history"><i class="fas fa-history"></i> Timer History</a>
-            </li>
-            <li class="nav-item" data-page="goals">
+            <li class="nav-item" data-page="goals" data-nav-role="student">
                 <a href="#goals"><i class="fas fa-bullseye"></i> Goals</a>
             </li>
-            <li class="nav-item" data-page="profile">
+            <li class="nav-item" data-page="profile" data-nav-role="student">
                 <a href="#profile"><i class="fas fa-user"></i> Profile</a>
             </li>
-            <li class="nav-item" data-page="settings">
+
+            <li class="nav-item" data-page="teacher-class-updates" data-nav-role="teacher admin">
+                <a href="#admin"><i class="fas fa-bullhorn"></i> Class Updates</a>
+            </li>
+            <li class="nav-item" data-page="teacher-quiz-scores" data-nav-role="teacher admin">
+                <a href="#quiz"><i class="fas fa-chart-bar"></i> Quiz Scores</a>
+            </li>
+            <li class="nav-item" data-page="teacher-student-progress" data-nav-role="teacher admin">
+                <a href="#analytics"><i class="fas fa-chart-line"></i> Student Progress</a>
+            </li>
+            <li class="nav-item" data-page="teacher-notes-library" data-nav-role="teacher admin">
+                <a href="#free-notes"><i class="fas fa-file-arrow-down"></i> Notes Library</a>
+            </li>
+            <li class="nav-item" data-page="timetable" data-nav-role="teacher admin">
+                <a href="#timetable"><i class="fas fa-table"></i> Timetable</a>
+            </li>
+            <li class="nav-item" data-page="teacher-reminders" data-nav-role="teacher admin">
+                <a href="#admin"><i class="fas fa-envelope"></i> Reminders</a>
+            </li>
+            <li class="nav-item" data-page="settings" data-nav-role="teacher admin">
                 <a href="#settings"><i class="fas fa-cog"></i> Settings</a>
             </li>
         </ul>
@@ -170,10 +154,10 @@
                     <i class="fas fa-user-circle"></i>
                     <span id="currentUserName">Guest</span>
                 </div>
-                <button class="print-btn" onclick="showPrintModal()">
+                <button class="print-btn" data-ui-role="teacher admin" onclick="showPrintModal()">
                     <i class="fas fa-print"></i> Print
                 </button>
-                <button class="export-import-btn" onclick="showExportImportModal()">
+                <button class="export-import-btn" data-ui-role="teacher admin" onclick="showExportImportModal()">
                     <i class="fas fa-download"></i> Backup
                 </button>
             </div>
@@ -203,11 +187,6 @@
                     <i class="fas fa-clock"></i>
                     <span class="stat-number" id="pendingTasks">0</span>
                     <span class="stat-label">Pending</span>
-                </div>
-                <div class="stat-card">
-                    <i class="fas fa-calendar-check"></i>
-                    <span class="stat-number" id="assignmentsCount">0</span>
-                    <span class="stat-label">Assignments</span>
                 </div>
                 <div class="stat-card">
                     <i class="fas fa-stopwatch"></i>
@@ -254,14 +233,14 @@
                     <button class="action-btn" onclick="navigateTo('tasks')">
                         <i class="fas fa-plus"></i> Add Task
                     </button>
-                    <button class="action-btn" onclick="navigateTo('notes')">
-                        <i class="fas fa-edit"></i> Add Note
-                    </button>
                     <button class="action-btn" onclick="navigateTo('flashcards')">
                         <i class="fas fa-plus-circle"></i> Add Flashcard
                     </button>
-                    <button class="action-btn" onclick="navigateTo('assignments')">
-                        <i class="fas fa-file-plus"></i> Add Assignment
+                    <button class="action-btn" onclick="navigateTo('student-quiz-weak')">
+                        <i class="fas fa-question-circle"></i> Take Quiz
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('goals')">
+                        <i class="fas fa-bullseye"></i> Set Goal
                     </button>
                 </div>
             </div>
@@ -270,6 +249,13 @@
                 <h3><i class="fas fa-list-check"></i> Do Next</h3>
                 <ul id="doNextList">
                     <li class="empty-state">No active tasks to prioritize</li>
+                </ul>
+            </div>
+
+            <div class="card weak-topics">
+                <h3><i class="fas fa-triangle-exclamation"></i> Weak Topic Detection</h3>
+                <ul id="weakTopicList">
+                    <li class="empty-state">No weak topics detected yet. Submit quizzes to build insights.</li>
                 </ul>
             </div>
 
@@ -490,21 +476,9 @@
             <div class="calendar-grid" id="calendarDays"></div>
             <div class="calendar-legend">
                 <span><i class="fas fa-circle task-dot"></i> Task Due</span>
-                <span><i class="fas fa-circle assignment-dot"></i> Assignment Due</span>
-                <span><i class="fas fa-circle exam-dot"></i> Exam</span>
             </div>
         </div>
 
-        <!-- NOTES PAGE -->
-        <div class="page-content" id="page-notes">
-            <div class="notes-header">
-                <input type="text" id="noteSearch" placeholder="Search notes..." onkeyup="searchNotes()">
-                <button class="add-btn" onclick="showNoteEditor()">
-                    <i class="fas fa-plus"></i> New Note
-                </button>
-            </div>
-            <div class="notes-grid" id="notesGrid"></div>
-        </div>
 
         <!-- FLASHCARDS PAGE -->
         <div class="page-content" id="page-flashcards">
@@ -555,172 +529,8 @@
             <div class="deck-cards" id="deckCards"></div>
         </div>
 
-        <!-- ASSIGNMENTS PAGE -->
-        <div class="page-content" id="page-assignments">
-            <div class="add-task-section">
-                <div class="input-group">
-                    <input type="text" id="assignmentTitle" placeholder="Assignment title...">
-                </div>
-                <div class="task-options">
-                    <select id="assignmentSubject">
-                        <option value="">Select Subject</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Programming">Programming</option>
-                        <option value="Other">Other</option>
-                    </select>
-                    <select id="assignmentType">
-                        <option value="Essay">Essay</option>
-                        <option value="Project">Project</option>
-                        <option value="Lab">Lab Report</option>
-                        <option value="Presentation">Presentation</option>
-                        <option value="Quiz">Quiz</option>
-                        <option value="Test">Test</option>
-                        <option value="Other">Other</option>
-                    </select>
-                    <input type="date" id="assignmentDue">
-                </div>
-                <textarea id="assignmentDesc" placeholder="Assignment description..." rows="3"></textarea>
-                <button class="add-btn" onclick="addAssignment()">
-                    <i class="fas fa-plus"></i> Add Assignment
-                </button>
-            </div>
 
-            <div class="filter-section">
-                <button class="filter-btn active" data-filter="all" onclick="filterAssignments('all')">All</button>
-                <button class="filter-btn" data-filter="pending" onclick="filterAssignments('pending')">Pending</button>
-                <button class="filter-btn" data-filter="completed" onclick="filterAssignments('completed')">Completed</button>
-                <button class="filter-btn" data-filter="overdue" onclick="filterAssignments('overdue')">Overdue</button>
-            </div>
 
-            <ul id="assignmentsList"></ul>
-        </div>
-
-        <!-- GPA CALCULATOR PAGE -->
-        <div class="page-content" id="page-gpa">
-            <div class="card gpa-calculator">
-                <h3><i class="fas fa-calculator"></i> GPA Calculator</h3>
-                <div class="gpa-settings">
-                    <label>Scale:
-                        <select id="gpaScale">
-                            <option value="4.0">4.0 (US)</option>
-                            <option value="5.0">5.0</option>
-                            <option value="10.0">10.0</option>
-                        </select>
-                    </label>
-                </div>
-                <div id="gpaSubjects">
-                    <div class="gpa-subject-row">
-                        <input type="text" placeholder="Subject Name" class="gpa-subject-name">
-                        <input type="number" placeholder="Credits" class="gpa-credits" min="1" max="10">
-                        <select class="gpa-grade">
-                            <option value="4.0">A (4.0)</option>
-                            <option value="3.7">A- (3.7)</option>
-                            <option value="3.3">B+ (3.3)</option>
-                            <option value="3.0">B (3.0)</option>
-                            <option value="2.7">B- (2.7)</option>
-                            <option value="2.3">C+ (2.3)</option>
-                            <option value="2.0">C (2.0)</option>
-                            <option value="1.7">C- (1.7)</option>
-                            <option value="1.3">D+ (1.3)</option>
-                            <option value="1.0">D (1.0)</option>
-                            <option value="0.0">F (0.0)</option>
-                        </select>
-                        <button class="delete-btn" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
-                    </div>
-                </div>
-                <button class="add-btn" onclick="addGPARow()" style="margin-bottom: 15px;">
-                    <i class="fas fa-plus"></i> Add Subject
-                </button>
-                <div class="gpa-result">
-                    <div class="gpa-display">
-                        <span>GPA:</span>
-                        <span id="gpaResult">0.00</span>
-                    </div>
-                    <div class="gpa-display">
-                        <span>Total Credits:</span>
-                        <span id="totalCredits">0</span>
-                    </div>
-                </div>
-                <button class="add-btn" onclick="calculateGPA()">
-                    <i class="fas fa-calculator"></i> Calculate GPA
-                </button>
-            </div>
-            
-            <div class="card gpa-history">
-                <h3><i class="fas fa-history"></i> GPA History</h3>
-                <ul id="gpaHistoryList">
-                    <li class="empty-state">No GPA records yet</li>
-                </ul>
-            </div>
-        </div>
-
-        <!-- EXAM COUNTDOWN PAGE -->
-        <div class="page-content" id="page-exams">
-            <div class="card exam-add">
-                <h3><i class="fas fa-plus-circle"></i> Add Exam</h3>
-                <div class="input-group">
-                    <input type="text" id="examName" placeholder="Exam name (e.g., Math Final)">
-                </div>
-                <div class="task-options">
-                    <select id="examSubject">
-                        <option value="">Select Subject</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
-                        <option value="Physics">Physics</option>
-                        <option value="Chemistry">Chemistry</option>
-                        <option value="Biology">Biology</option>
-                        <option value="Programming">Programming</option>
-                    </select>
-                    <input type="datetime-local" id="examDate">
-                </div>
-                <textarea id="examNotes" placeholder="Exam topics to cover..." rows="3"></textarea>
-                <button class="add-btn" onclick="addExam()">
-                    <i class="fas fa-plus"></i> Add Exam
-                </button>
-            </div>
-
-            <div class="card exam-add">
-                <h3><i class="fas fa-wand-magic-sparkles"></i> AI Smart Suggestion</h3>
-                <div class="task-options">
-                    <input type="date" id="aiExamDate">
-                    <input type="number" id="aiSubjectCount" min="1" max="20" placeholder="Number of subjects">
-                    <select id="aiDifficultyLevel">
-                        <option value="medium">Medium Difficulty</option>
-                        <option value="hard">Hard Difficulty</option>
-                        <option value="easy">Easy Difficulty</option>
-                    </select>
-                    <select id="aiScheduleRange" onchange="toggleCustomScheduleRange()">
-                        <option value="7">Next 7 days</option>
-                        <option value="14">Next 14 days</option>
-                        <option value="30" selected>Next 30 days</option>
-                        <option value="custom">Custom days</option>
-                    </select>
-                    <input type="number" id="aiCustomRangeDays" min="1" max="180" placeholder="Custom days" style="display:none;">
-                </div>
-                <button class="add-btn" onclick="generateAISmartPlan()">
-                    <i class="fas fa-robot"></i> Generate AI Study Plan
-                </button>
-                <button class="action-btn" onclick="createTasksFromAIPlan()">
-                    <i class="fas fa-list-check"></i> Create Tasks from AI Plan
-                </button>
-                <ul id="aiPlanList">
-                    <li class="empty-state">No AI plan generated yet</li>
-                </ul>
-            </div>
-
-            <div class="exam-countdown-grid" id="examCountdownGrid"></div>
-
-            <div class="card exam-list">
-                <h3><i class="fas fa-list"></i> All Exams</h3>
-                <ul id="examList"></ul>
-            </div>
-        </div>
 
         <!-- ANALYTICS PAGE -->
         <div class="page-content" id="page-analytics">
@@ -914,23 +724,6 @@
             </div>
         </div>
 
-        <!-- SUBJECTS PAGE -->
-        <div class="page-content" id="page-subjects">
-            <div class="card subject-add">
-                <h3><i class="fas fa-plus-circle"></i> Add Subject</h3>
-                <div class="input-group">
-                    <input type="text" id="newSubjectName" placeholder="Subject name">
-                </div>
-                <div class="task-options">
-                    <input type="color" id="subjectColor" value="#2193b0">
-                </div>
-                <button class="add-btn" onclick="addSubject()">
-                    <i class="fas fa-plus"></i> Add Subject
-                </button>
-            </div>
-
-            <div class="subjects-grid" id="subjectsGrid"></div>
-        </div>
 
         <!-- TIMETABLE PAGE -->
         <div class="page-content" id="page-timetable">
@@ -970,102 +763,7 @@
             </div>
         </div>
 
-        <!-- RESOURCES PAGE -->
-        <div class="page-content" id="page-resources">
-            <div class="card subject-add">
-                <h3><i class="fas fa-plus-circle"></i> Add Study Resource</h3>
-                <div class="input-group">
-                    <input type="text" id="resourceTitle" placeholder="Resource title">
-                </div>
-                <div class="task-options">
-                    <input type="text" id="resourceUrl" placeholder="Resource URL">
-                    <select id="resourceType">
-                        <option value="Article">Article</option>
-                        <option value="Video">Video</option>
-                        <option value="Book">Book</option>
-                        <option value="Course">Course</option>
-                        <option value="Tool">Tool</option>
-                    </select>
-                </div>
-                <button class="add-btn" onclick="addResource()">
-                    <i class="fas fa-plus"></i> Add Resource
-                </button>
-            </div>
-            <div class="card exam-list">
-                <h3><i class="fas fa-filter"></i> Search & Filter</h3>
-                <div class="task-options">
-                    <input type="text" id="resourceSearchInput" placeholder="Search resources..." oninput="searchResources()">
-                    <select id="resourceFilterType" onchange="filterResources()">
-                        <option value="all">All Types</option>
-                        <option value="Article">Article</option>
-                        <option value="Video">Video</option>
-                        <option value="Book">Book</option>
-                        <option value="Course">Course</option>
-                        <option value="Tool">Tool</option>
-                    </select>
-                </div>
-            </div>
-            <div class="card exam-list">
-                <h3><i class="fas fa-link"></i> Saved Resources</h3>
-                <ul id="resourcesList">
-                    <li class="empty-state">No resources saved yet</li>
-                </ul>
-            </div>
-        </div>
 
-        <!-- STUDY MATERIALS PAGE -->
-        <div class="page-content" id="page-study-materials">
-            <div class="card subject-add">
-                <h3><i class="fas fa-plus-circle"></i> Add Study Material</h3>
-                <div class="input-group">
-                    <input type="text" id="studyMaterialTitleInput" placeholder="Material title">
-                </div>
-                <div class="task-options">
-                    <select id="studyMaterialSubjectInput">
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
-                        <option value="Programming">Programming</option>
-                        <option value="General">General</option>
-                    </select>
-                    <select id="studyMaterialTypeInput">
-                        <option value="Notes">Notes</option>
-                        <option value="Video">Video</option>
-                        <option value="Book">Book</option>
-                        <option value="Practice Set">Practice Set</option>
-                        <option value="Cheat Sheet">Cheat Sheet</option>
-                    </select>
-                    <input type="text" id="studyMaterialUrlInput" placeholder="URL (optional)">
-                </div>
-                <div class="input-group">
-                    <textarea id="studyMaterialDescInput" rows="3" placeholder="Short description"></textarea>
-                </div>
-                <button class="add-btn" onclick="addStudyMaterial()">
-                    <i class="fas fa-plus"></i> Add Material
-                </button>
-            </div>
-            <div class="card exam-list">
-                <h3><i class="fas fa-filter"></i> Find Material</h3>
-                <div class="task-options">
-                    <input type="text" id="studyMaterialSearchInput" placeholder="Search title, subject, description..." oninput="searchStudyMaterials()">
-                    <select id="studyMaterialFilterSubject" onchange="filterStudyMaterials()">
-                        <option value="all">All Subjects</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
-                        <option value="Programming">Programming</option>
-                        <option value="General">General</option>
-                    </select>
-                </div>
-                <ul id="studyMaterialsList">
-                    <li class="empty-state">No study materials yet</li>
-                </ul>
-            </div>
-        </div>
 
         <!-- FREE NOTES PAGE -->
         <div class="page-content" id="page-free-notes">
@@ -1114,15 +812,6 @@
             </div>
         </div>
 
-        <!-- ACHIEVEMENTS PAGE -->
-        <div class="page-content" id="page-achievements">
-            <div class="card exam-list">
-                <h3><i class="fas fa-award"></i> Achievements & Badges</h3>
-                <ul id="achievementsList">
-                    <li class="empty-state">No badges yet. Keep studying to unlock achievements.</li>
-                </ul>
-            </div>
-        </div>
 
         <!-- POMODORO HISTORY PAGE -->
         <div class="page-content" id="page-pomodoro-history">
@@ -1293,21 +982,13 @@
                         <option value="dashboard">Dashboard</option>
                         <option value="tasks">Tasks</option>
                         <option value="calendar">Calendar</option>
-                        <option value="notes">Notes</option>
                         <option value="flashcards">Flashcards</option>
-                        <option value="assignments">Assignments</option>
-                        <option value="gpa">GPA Calculator</option>
-                        <option value="exams">Exam Countdown</option>
-                        <option value="analytics">Analytics</option>
+                        <option value="analytics">Student Progress</option>
                         <option value="quiz">Quiz</option>
-                        <option value="admin">Admin</option>
-                        <option value="subjects">Subjects</option>
+                        <option value="admin">Class Updates &amp; Reminders</option>
                         <option value="timetable">Timetable</option>
-                        <option value="resources">Resources</option>
-                        <option value="study-materials">Study Materials</option>
-                        <option value="free-notes">Free Notes</option>
-                        <option value="achievements">Achievements</option>
-                        <option value="pomodoro-history">Timer History</option>
+                        <option value="free-notes">Notes Library</option>
+                        <option value="pomodoro-history">Timer</option>
                         <option value="goals">Goals</option>
                         <option value="profile">Profile</option>
                         <option value="settings">Settings</option>
@@ -1366,36 +1047,6 @@
     </main>
 </div>
 
-<!-- Note Editor Modal -->
-<div class="modal" id="noteModal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Edit Note</h3>
-            <button class="modal-close" onclick="closeNoteModal()">&times;</button>
-        </div>
-        <input type="text" id="noteTitle" placeholder="Note title...">
-        <select id="noteSubject">
-            <option value="Maths">Maths</option>
-            <option value="Science">Science</option>
-            <option value="English">English</option>
-            <option value="History">History</option>
-            <option value="Geography">Geography</option>
-            <option value="Programming">Programming</option>
-            <option value="General">General</option>
-        </select>
-        <textarea id="noteContent" placeholder="Write your note..." rows="10"></textarea>
-        <select id="noteColor">
-            <option value="#ffffff">White</option>
-            <option value="#fff9c4">Yellow</option>
-            <option value="#c8e6c9">Green</option>
-            <option value="#bbdefb">Blue</option>
-            <option value="#f8bbd9">Pink</option>
-            <option value="#e1bee7">Purple</option>
-        </select>
-        <button class="add-btn" onclick="saveNote()">Save Note</button>
-    </div>
-</div>
-
 <!-- Flashcard Editor Modal -->
 <div class="modal" id="flashcardModal">
     <div class="modal-content">
@@ -1447,9 +1098,6 @@
             </button>
             <button class="action-btn" onclick="printTasks()">
                 <i class="fas fa-tasks"></i> Print All Tasks
-            </button>
-            <button class="action-btn" onclick="printAssignments()">
-                <i class="fas fa-file-alt"></i> Print Assignments
             </button>
         </div>
     </div>
@@ -1515,6 +1163,8 @@
 <script src="script.js"></script>
 </body>
 </html>
+
+
 
 
 

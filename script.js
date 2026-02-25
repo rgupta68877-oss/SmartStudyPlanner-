@@ -543,6 +543,7 @@ const STORAGE_KEYS = {
     weeklyStats: "weeklyStats",
     goals: "goals",
     goalRoadmap: "goalRoadmap",
+    weakTopicStats: "weakTopicStats",
     timetableEntries: "timetableEntries",
     resources: "resources",
     studyMaterials: "studyMaterials",
@@ -591,6 +592,7 @@ const DEFAULT_STATE = {
         studyHours: 0,
         flashcardsReviewed: 0
     },
+    weakTopicStats: {},
     goals: {
         tasks: 20,
         studyHours: 10,
@@ -637,9 +639,9 @@ function normalizeSmartSettings(settings) {
     const defaultPlanHours = Number(normalized.defaultPlanHours);
     const startPage = String(normalized.startPage || "dashboard");
     const allowedStartPages = new Set([
-        "dashboard", "tasks", "calendar", "notes", "flashcards", "assignments",
-        "gpa", "exams", "analytics", "quiz", "admin", "subjects", "timetable",
-        "resources", "study-materials", "free-notes", "achievements",
+        "dashboard", "tasks", "calendar", "flashcards",
+        "analytics", "quiz", "admin", "timetable",
+        "free-notes",
         "pomodoro-history", "goals", "profile", "settings"
     ]);
 
@@ -727,6 +729,26 @@ function normalizeGoalRoadmap(value) {
     };
 }
 
+function normalizeWeakTopicStats(value) {
+    if (!value || typeof value !== "object") return {};
+    const normalized = {};
+    Object.entries(value).forEach(([key, item]) => {
+        const topic = String((item && item.topic) || "").trim();
+        const subject = String((item && item.subject) || "General").trim() || "General";
+        const attempts = Number(item && item.attempts);
+        const wrong = Number(item && item.wrong);
+        if (!topic) return;
+        normalized[key] = {
+            topic,
+            subject,
+            attempts: Number.isFinite(attempts) ? Math.max(0, Math.round(attempts)) : 0,
+            wrong: Number.isFinite(wrong) ? Math.max(0, Math.round(wrong)) : 0,
+            lastSeenAt: item && item.lastSeenAt ? item.lastSeenAt : new Date().toISOString()
+        };
+    });
+    return normalized;
+}
+
 function normalizeFlashcardCard(card) {
     const normalized = card && typeof card === "object" ? card : {};
     const front = String(normalized.front || "").trim();
@@ -789,6 +811,7 @@ function loadState() {
         pomodoroSessions: parseStoredJSON(STORAGE_KEYS.pomodoroSessions, DEFAULT_STATE.pomodoroSessions),
         activityLog: parseStoredJSON(STORAGE_KEYS.activityLog, DEFAULT_STATE.activityLog),
         weeklyStats: parseStoredJSON(STORAGE_KEYS.weeklyStats, DEFAULT_STATE.weeklyStats),
+        weakTopicStats: parseStoredJSON(STORAGE_KEYS.weakTopicStats, DEFAULT_STATE.weakTopicStats),
         goals: parseStoredJSON(STORAGE_KEYS.goals, DEFAULT_STATE.goals),
         goalRoadmap: parseStoredJSON(STORAGE_KEYS.goalRoadmap, DEFAULT_STATE.goalRoadmap),
         timetableEntries: parseStoredJSON(STORAGE_KEYS.timetableEntries, DEFAULT_STATE.timetableEntries),
@@ -813,6 +836,7 @@ function loadState() {
         flashcards: normalizeFlashcards(loaded.flashcards),
         pomodoroSessions: normalizePomodoroSessions(loaded.pomodoroSessions),
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
+        weakTopicStats: normalizeWeakTopicStats(loaded.weakTopicStats),
         goals: { ...DEFAULT_STATE.goals, ...(loaded.goals || {}) },
         goalRoadmap: normalizeGoalRoadmap(loaded.goalRoadmap),
         timetableEntries: Array.isArray(loaded.timetableEntries) ? loaded.timetableEntries : [],
@@ -872,6 +896,7 @@ let activityLog = initialState.activityLog;
 let studyStreak = initialState.studyStreak;
 let bestStreak = initialState.bestStreak;
 let weeklyStats = initialState.weeklyStats;
+let weakTopicStats = initialState.weakTopicStats;
 let goals = initialState.goals;
 let goalRoadmap = initialState.goalRoadmap;
 let timetableEntries = initialState.timetableEntries;
@@ -981,66 +1006,141 @@ function loadTheme() {
 }
 
 // ==================== NAVIGATION ====================
+const PAGE_ALIASES = {
+    "student-quiz-weak": "quiz",
+    "student-timer": "pomodoro-history",
+    "teacher-class-updates": "admin",
+    "teacher-quiz-scores": "admin",
+    "teacher-student-progress": "analytics",
+    "teacher-notes-library": "free-notes",
+    "teacher-reminders": "admin"
+};
+
+const SIDEBAR_DEFAULT_PAGE = {
+    student: "dashboard",
+    teacher: "dashboard",
+    admin: "dashboard"
+};
+
+const SIDEBAR_PAGES_BY_ROLE = {
+    student: new Set(["dashboard", "tasks", "calendar", "flashcards", "student-quiz-weak", "student-timer", "goals", "profile"]),
+    teacher: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings"]),
+    admin: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings"])
+};
+
+function resolvePageAlias(page) {
+    return PAGE_ALIASES[page] || page;
+}
+
+function getCurrentSidebarRole() {
+    const user = getCurrentUser();
+    if (!user) return "student";
+    return (user.role === "teacher" || user.role === "admin") ? user.role : "student";
+}
+
+function isSidebarPageAllowed(page) {
+    const role = getCurrentSidebarRole();
+    const allowedPages = SIDEBAR_PAGES_BY_ROLE[role] || SIDEBAR_PAGES_BY_ROLE.student;
+    return allowedPages.has(page);
+}
+
+function applyRoleBasedSidebar() {
+    const role = getCurrentSidebarRole();
+    const navItems = Array.from(document.querySelectorAll(".nav-item"));
+    navItems.forEach(item => {
+        const rolesAttr = String(item.dataset.navRole || "").trim();
+        if (!rolesAttr) {
+            item.style.display = "none";
+            return;
+        }
+        const allowedRoles = rolesAttr.split(/\s+/).filter(Boolean);
+        item.style.display = allowedRoles.includes(role) ? "list-item" : "none";
+    });
+}
+
+function applyRoleBasedUIVisibility() {
+    const role = getCurrentSidebarRole();
+    const roleScopedElements = Array.from(document.querySelectorAll("[data-ui-role]"));
+    roleScopedElements.forEach(el => {
+        const rolesAttr = String(el.getAttribute("data-ui-role") || "").trim();
+        if (!rolesAttr) {
+            el.style.display = "";
+            return;
+        }
+        const allowedRoles = rolesAttr.split(/\s+/).filter(Boolean);
+        el.style.display = allowedRoles.includes(role) ? "" : "none";
+    });
+}
+
 function navigateTo(page) {
-    if (page === 'admin' && !canAccessAdmin()) {
-        alert('Admin page requires teacher/admin account.');
-        page = 'dashboard';
+    if (!isSidebarPageAllowed(page)) {
+        page = SIDEBAR_DEFAULT_PAGE[getCurrentSidebarRole()] || "dashboard";
     }
 
+    const requestedPage = page;
+    const resolvedPage = resolvePageAlias(requestedPage);
+
+    if (resolvedPage === 'admin' && !canAccessAdmin()) {
+        alert('Admin page requires teacher/admin account.');
+        page = SIDEBAR_DEFAULT_PAGE[getCurrentSidebarRole()] || 'dashboard';
+    } else {
+        page = requestedPage;
+    }
+    const targetPage = resolvePageAlias(page);
+
     document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
-    document.getElementById(`page-${page}`).classList.add('active');
-    
+    const targetPageEl = document.getElementById(`page-${targetPage}`);
+    if (!targetPageEl) {
+        document.getElementById('page-dashboard').classList.add('active');
+    } else {
+        targetPageEl.classList.add('active');
+    }
+
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
-    
+    const activeNavItem = document.querySelector(`.nav-item[data-page="${page}"]`) || document.querySelector(`.nav-item[data-page="${targetPage}"]`);
+    if (activeNavItem) {
+        activeNavItem.classList.add('active');
+    }
+
     const titles = {
         'dashboard': 'Dashboard',
         'tasks': 'Tasks',
         'calendar': 'Calendar',
-        'notes': 'Notes',
         'flashcards': 'Flashcards',
-        'assignments': 'Assignments',
-        'gpa': 'GPA Calculator',
-        'exams': 'Exam Countdown',
-        'analytics': 'Analytics',
+        'analytics': 'Student Progress',
         'quiz': 'Quiz',
-        'admin': 'Admin',
-        'subjects': 'Subjects',
+        'admin': 'Class Updates & Reminders',
         'timetable': 'Timetable',
-        'resources': 'Resources',
-        'study-materials': 'Study Materials',
-        'free-notes': 'Free Notes',
-        'achievements': 'Achievements',
-        'pomodoro-history': 'Timer History',
+        'free-notes': 'Notes Library',
+        'pomodoro-history': 'Timer',
         'goals': 'Goals',
         'profile': 'Profile',
-        'settings': 'Settings'
+        'settings': 'Settings',
+        'student-quiz-weak': 'Quiz & Weak Topics',
+        'student-timer': 'Timer',
+        'teacher-class-updates': 'Class Updates',
+        'teacher-quiz-scores': 'Quiz Scores',
+        'teacher-student-progress': 'Student Progress',
+        'teacher-notes-library': 'Notes Library',
+        'teacher-reminders': 'Reminders'
     };
-    document.getElementById('pageTitle').textContent = titles[page] || 'Dashboard';
-    
+    document.getElementById('pageTitle').textContent = titles[page] || titles[targetPage] || 'Dashboard';
+
     // Refresh page data
-    if (page === 'dashboard') renderDashboard();
-    if (page === 'tasks') renderTasks();
-    if (page === 'calendar') renderCalendar();
-    if (page === 'notes') renderNotes();
-    if (page === 'flashcards') renderFlashcards();
-    if (page === 'assignments') renderAssignments();
-    if (page === 'gpa') renderGPAPage();
-    if (page === 'exams') renderExams();
-    if (page === 'analytics') renderAnalytics();
-    if (page === 'quiz') renderQuizPage();
-    if (page === 'admin') renderAdminPage();
-    if (page === 'subjects') renderSubjects();
-    if (page === 'timetable') renderTimetable();
-    if (page === 'resources') renderResources();
-    if (page === 'study-materials') renderStudyMaterials();
-    if (page === 'free-notes') renderFreeNotes();
-    if (page === 'achievements') renderAchievements();
-    if (page === 'pomodoro-history') renderPomodoroHistory();
-    if (page === 'goals') renderGoals();
-    if (page === 'profile') renderProfile();
-    if (page === 'settings') renderSmartSettings();
-    
+    if (targetPage === 'dashboard') renderDashboard();
+    if (targetPage === 'tasks') renderTasks();
+    if (targetPage === 'calendar') renderCalendar();
+    if (targetPage === 'flashcards') renderFlashcards();
+    if (targetPage === 'analytics') renderAnalytics();
+    if (targetPage === 'quiz') renderQuizPage();
+    if (targetPage === 'admin') renderAdminPage();
+    if (targetPage === 'timetable') renderTimetable();
+    if (targetPage === 'free-notes') renderFreeNotes();
+    if (targetPage === 'pomodoro-history') renderPomodoroHistory();
+    if (targetPage === 'goals') renderGoals();
+    if (targetPage === 'profile') renderProfile();
+    if (targetPage === 'settings') renderSmartSettings();
+
     // Close mobile menu
     if (window.innerWidth <= 768) {
         document.getElementById('sidebar').style.display = 'none';
@@ -1051,7 +1151,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', (event) => {
         event.preventDefault();
         const page = item.dataset.page;
-        if (page === "admin" && !canAccessAdmin()) {
+        const targetPage = resolvePageAlias(page);
+        if (targetPage === "admin" && !canAccessAdmin()) {
             alert('Admin page requires teacher/admin account.');
             return;
         }
@@ -1270,6 +1371,7 @@ function getCloudStatePayload() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        weakTopicStats,
         studyStreak,
         bestStreak,
         goals,
@@ -1301,6 +1403,7 @@ function resetUserScopedStateToDefaults() {
     pomodoroSessions = Array.isArray(DEFAULT_STATE.pomodoroSessions) ? [...DEFAULT_STATE.pomodoroSessions] : [];
     activityLog = Array.isArray(DEFAULT_STATE.activityLog) ? [...DEFAULT_STATE.activityLog] : [];
     weeklyStats = { ...DEFAULT_STATE.weeklyStats };
+    weakTopicStats = { ...DEFAULT_STATE.weakTopicStats };
     goals = { ...DEFAULT_STATE.goals };
     goalRoadmap = { ...DEFAULT_STATE.goalRoadmap };
     timetableEntries = Array.isArray(DEFAULT_STATE.timetableEntries) ? [...DEFAULT_STATE.timetableEntries] : [];
@@ -1325,6 +1428,7 @@ function resetUserScopedStateToDefaults() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        weakTopicStats,
         studyStreak,
         bestStreak,
         goals,
@@ -1354,6 +1458,7 @@ function applyCloudState(data) {
         if (Array.isArray(data.pomodoroSessions)) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
         if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
         if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
+        if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
         if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
         if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
         if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
@@ -1378,6 +1483,7 @@ function applyCloudState(data) {
             pomodoroSessions,
             activityLog,
             weeklyStats,
+            weakTopicStats,
             studyStreak,
             bestStreak,
             goals,
@@ -1654,10 +1760,8 @@ function applyAuthState() {
         updateOnlineStudentsVisibility();
         const currentUserName = document.getElementById("currentUserName");
         if (currentUserName) currentUserName.textContent = user.name || "User";
-        const adminNavItem = document.querySelector('[data-page="admin"]');
-        if (adminNavItem) {
-            adminNavItem.style.display = canAccessAdmin() ? "list-item" : "none";
-        }
+        applyRoleBasedSidebar();
+        applyRoleBasedUIVisibility();
         bootstrapAuthenticatedApp();
         startPresenceTracking();
         renderProfile();
@@ -2358,7 +2462,8 @@ function renderDashboard() {
     document.getElementById('totalTasks').textContent = tasks.length;
     document.getElementById('completedTasks').textContent = completed;
     document.getElementById('pendingTasks').textContent = tasks.length - completed;
-    document.getElementById('assignmentsCount').textContent = assignments.length;
+    const assignmentsCountEl = document.getElementById('assignmentsCount');
+    if (assignmentsCountEl) assignmentsCountEl.textContent = assignments.length;
     document.getElementById('studyHours').textContent = Math.round(weeklyStats.studyHours * 10) / 10;
     
     let totalFlashcards = 0;
@@ -2389,6 +2494,7 @@ function renderDashboard() {
     // Upcoming deadlines
     renderUpcomingDeadlines();
     renderDoNext();
+    renderWeakTopicDetection();
     renderFlashcardsDueToday();
     renderTodayPlan();
     renderDashboardQuestionBank();
@@ -2566,6 +2672,128 @@ function renderDoNext() {
         </li>
     `;
     }).join('');
+}
+
+function extractTopicFromQuestion(questionLike) {
+    const rawQuestion = String((questionLike && questionLike.question) || "").trim();
+    if (questionLike && typeof questionLike.topic === "string" && questionLike.topic.trim()) {
+        return questionLike.topic.trim();
+    }
+    if (!rawQuestion) return "General Concepts";
+
+    let normalized = rawQuestion
+        .replace(/\?.*$/, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    normalized = normalized.replace(/^(what|which|choose|solve|find|if|how|why|when|where)\s+/i, '');
+    normalized = normalized.replace(/^(is|are|was|were|the|a|an)\s+/i, '');
+    const words = normalized.split(' ').filter(Boolean).slice(0, 5);
+    if (words.length === 0) return "General Concepts";
+    const topic = words.join(' ');
+    return topic.charAt(0).toUpperCase() + topic.slice(1);
+}
+
+function buildWeakTopicKey(subject, topic) {
+    return `${String(subject || "General").trim().toLowerCase()}::${String(topic || "General Concepts").trim().toLowerCase()}`;
+}
+
+function trackWeakTopicAttempt(questionLike, isCorrect) {
+    const subject = String((questionLike && questionLike.subject) || "General").trim() || "General";
+    const topic = extractTopicFromQuestion(questionLike);
+    const key = buildWeakTopicKey(subject, topic);
+    const current = weakTopicStats[key] || {
+        subject,
+        topic,
+        attempts: 0,
+        wrong: 0,
+        lastSeenAt: new Date().toISOString()
+    };
+    weakTopicStats[key] = {
+        ...current,
+        subject,
+        topic,
+        attempts: (Number(current.attempts) || 0) + 1,
+        wrong: (Number(current.wrong) || 0) + (isCorrect ? 0 : 1),
+        lastSeenAt: new Date().toISOString()
+    };
+}
+
+function getWeakTopics(limit = 5) {
+    return Object.entries(weakTopicStats || {})
+        .map(([key, item]) => {
+            const attempts = Number(item.attempts) || 0;
+            const wrong = Number(item.wrong) || 0;
+            const wrongRate = attempts > 0 ? wrong / attempts : 0;
+            const severity = Math.round((wrongRate * 100) + Math.min(25, attempts * 2));
+            return {
+                key,
+                subject: item.subject || "General",
+                topic: item.topic || "General Concepts",
+                attempts,
+                wrong,
+                wrongRate,
+                severity
+            };
+        })
+        .filter(item => item.attempts >= 2 && item.wrongRate >= 0.4)
+        .sort((a, b) => {
+            if (b.severity !== a.severity) return b.severity - a.severity;
+            return b.attempts - a.attempts;
+        })
+        .slice(0, Math.max(1, limit));
+}
+
+function addWeakTopicPracticeTask(encodedKey) {
+    const key = decodeURIComponent(String(encodedKey || ""));
+    const weak = (weakTopicStats && weakTopicStats[key]) ? weakTopicStats[key] : null;
+    if (!weak) {
+        alert('Weak topic not found.');
+        return;
+    }
+
+    const title = `Practice weak topic: ${weak.topic}`;
+    const exists = tasks.some(task => String(task.text || "").trim() === title && subjectMatches(task.subject || "", weak.subject || ""));
+    if (exists) {
+        alert('Practice task already exists for this topic.');
+        return;
+    }
+
+    const due = new Date();
+    due.setDate(due.getDate() + 2);
+    tasks.push({
+        text: title,
+        subject: weak.subject || "General",
+        priority: "high",
+        difficulty: "hard",
+        examWeight: 4,
+        estimatedHours: 1.5,
+        dueDate: due.toISOString().split('T')[0],
+        done: false,
+        createdAt: new Date().toISOString()
+    });
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('book-open', 'Practice Task Added', `${weak.subject}: ${weak.topic}`);
+}
+
+function renderWeakTopicDetection() {
+    const list = document.getElementById('weakTopicList');
+    if (!list) return;
+    const weakTopics = getWeakTopics(5);
+    if (weakTopics.length === 0) {
+        list.innerHTML = '<li class="empty-state">No weak topics detected yet. Submit quizzes to build insights.</li>';
+        return;
+    }
+
+    list.innerHTML = weakTopics.map(item => `
+        <li>
+            <strong>${item.subject}: ${item.topic}</strong>
+            <span>Accuracy ${Math.round((1 - item.wrongRate) * 100)}% (${item.attempts} attempts)</span>
+            <button class="action-btn" onclick="addWeakTopicPracticeTask('${encodeURIComponent(item.key)}')">Add Practice</button>
+        </li>
+    `).join('');
 }
 
 function renderTodayPlan() {
@@ -5203,7 +5431,9 @@ async function submitQuiz() {
     let score = 0;
     currentQuizSession.forEach((q, idx) => {
         const selected = document.querySelector(`input[name="quiz-q-${idx}"]:checked`);
-        if (selected && Number(selected.value) === q.answerIndex) score++;
+        const isCorrect = Boolean(selected) && Number(selected.value) === q.answerIndex;
+        if (isCorrect) score++;
+        trackWeakTopicAttempt(q, isCorrect);
     });
     const percent = Math.round((score / currentQuizSession.length) * 100);
     const user = getCurrentUser();
@@ -5218,7 +5448,7 @@ async function submitQuiz() {
         createdAt: new Date().toISOString()
     };
     quizScores.unshift(record);
-    saveState({ quizScores });
+    saveState({ quizScores, weakTopicStats });
     document.getElementById('quizScoreResult').textContent = `${score}/${currentQuizSession.length} (${percent}%)`;
     addActivity('graduation-cap', 'Quiz Submitted', `Score ${percent}%`);
     await syncQuizScoreWithServer(record);
@@ -5936,6 +6166,7 @@ function exportData() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        weakTopicStats,
         studyStreak,
         bestStreak,
         goals,
@@ -5981,6 +6212,7 @@ function importData(event) {
             if (data.pomodoroSessions) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
             if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
             if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
+            if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
             if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
             if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
             if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
@@ -6006,6 +6238,7 @@ function importData(event) {
                 pomodoroSessions,
                 activityLog,
                 weeklyStats,
+                weakTopicStats,
                 studyStreak,
                 bestStreak,
                 goals,
@@ -6166,18 +6399,14 @@ function bootstrapAuthenticatedApp() {
     renderDashboard();
     renderTasks();
     renderCalendar();
-    renderNotes();
     renderFlashcards();
-    renderAssignments();
-    renderExams();
     renderQuizPage();
     renderAdminPage();
-    renderSubjects();
     renderTimetable();
-    renderResources();
-    renderStudyMaterials();
     renderFreeNotes();
-    renderAchievements();
+    renderAnalytics();
+    renderPomodoroHistory();
+    renderProfile();
     renderGoals();
     renderSmartSettings();
     updateTimerDisplay();

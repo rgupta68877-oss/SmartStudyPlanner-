@@ -496,6 +496,28 @@ body {
     padding: 8px 14px;
 }
 
+.weak-topics ul {
+    list-style: none;
+    padding: 0;
+}
+
+.weak-topics li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.weak-topics li span {
+    color: var(--text-light);
+}
+
+.weak-topics .action-btn {
+    margin-left: auto;
+    padding: 8px 12px;
+}
+
 /* Add Task Section */
 .add-task-section { margin-bottom: 20px; }
 
