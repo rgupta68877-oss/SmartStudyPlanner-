@@ -1,4 +1,4 @@
-const CACHE_NAME = "smart-study-planner-v3";
+const CACHE_NAME = "smart-study-planner-v4";
 const APP_SHELL_FILES = [
     "./",
     "./index.html",

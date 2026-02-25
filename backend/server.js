@@ -20,6 +20,9 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 const UPDATES_FILE = path.join(DATA_DIR, "teacher-updates.json");
 const SCORES_FILE = path.join(DATA_DIR, "quiz-scores.json");
 const FLASHCARDS_FILE = path.join(DATA_DIR, "flashcards.json");
+const SHARED_NOTES_FILE = path.join(DATA_DIR, "shared-notes.json");
+const PRESENCE_TTL_MS = Math.max(30_000, Number(process.env.PRESENCE_TTL_MS || 60_000));
+const presenceByClientId = new Map();
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -69,6 +72,40 @@ function authorizeRoles(...roles) {
     };
 }
 
+function normalizePresenceRole(role) {
+    const normalized = String(role || "").trim().toLowerCase();
+    return ["student", "teacher", "admin"].includes(normalized) ? normalized : "student";
+}
+
+function cleanupPresence(now = Date.now()) {
+    for (const [clientId, meta] of presenceByClientId.entries()) {
+        if (!meta || now - Number(meta.lastSeen || 0) > PRESENCE_TTL_MS) {
+            presenceByClientId.delete(clientId);
+        }
+    }
+}
+
+function getPresenceSnapshot() {
+    const now = Date.now();
+    cleanupPresence(now);
+    let onlineStudents = 0;
+    let onlineTotal = 0;
+
+    for (const meta of presenceByClientId.values()) {
+        if (!meta) continue;
+        onlineTotal += 1;
+        if (meta.role === "student") {
+            onlineStudents += 1;
+        }
+    }
+
+    return {
+        onlineStudents,
+        onlineTotal,
+        asOf: new Date(now).toISOString()
+    };
+}
+
 function ensureSeedAdmin() {
     const adminEmail = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD || "";
@@ -107,6 +144,36 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "smart-study-planner-backend" });
+});
+
+app.post("/api/presence/ping", (req, res) => {
+    const clientId = String(req.body?.clientId || "").trim().slice(0, 128);
+    if (!clientId) {
+        return res.status(400).json({ error: "clientId is required" });
+    }
+
+    const role = normalizePresenceRole(req.body?.role);
+    const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 256);
+
+    presenceByClientId.set(clientId, {
+        role,
+        email,
+        lastSeen: Date.now()
+    });
+
+    return res.json(getPresenceSnapshot());
+});
+
+app.get("/api/presence/online-students", (_req, res) => {
+    return res.json(getPresenceSnapshot());
+});
+
+app.post("/api/presence/logout", (req, res) => {
+    const clientId = String(req.body?.clientId || "").trim().slice(0, 128);
+    if (clientId) {
+        presenceByClientId.delete(clientId);
+    }
+    return res.json(getPresenceSnapshot());
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -160,6 +227,56 @@ app.get("/api/auth/me", authenticateJWT, (req, res) => {
 app.get("/api/teacher-updates", (_req, res) => {
     const updates = readJson(UPDATES_FILE, []);
     res.json(updates);
+});
+
+app.get("/api/shared-notes", (_req, res) => {
+    const notes = readJson(SHARED_NOTES_FILE, []);
+    res.json(Array.isArray(notes) ? notes : []);
+});
+
+app.post("/api/shared-notes", authenticateJWT, authorizeRoles("teacher", "admin"), (req, res) => {
+    const title = String(req.body?.title || "").trim();
+    const subject = String(req.body?.subject || "General").trim() || "General";
+    const level = String(req.body?.level || "General").trim() || "General";
+    const content = String(req.body?.content || "").trim();
+
+    if (!title || !content) {
+        return res.status(400).json({ error: "title and content are required" });
+    }
+
+    const notes = readJson(SHARED_NOTES_FILE, []);
+    const note = {
+        id: req.body?.id || `shared-note-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        subject,
+        level,
+        content,
+        createdAt: req.body?.createdAt || new Date().toISOString(),
+        by: req.user?.name || req.user?.email || "admin"
+    };
+
+    const next = Array.isArray(notes) ? notes : [];
+    next.unshift(note);
+    writeJson(SHARED_NOTES_FILE, next.slice(0, 2000));
+    return res.status(201).json(note);
+});
+
+app.delete("/api/shared-notes/:id", authenticateJWT, authorizeRoles("teacher", "admin"), (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ error: "id is required" });
+
+    const notes = readJson(SHARED_NOTES_FILE, []);
+    if (!Array.isArray(notes) || notes.length === 0) {
+        return res.status(404).json({ error: "Note not found" });
+    }
+
+    const next = notes.filter((note) => String(note?.id || "") !== id);
+    if (next.length === notes.length) {
+        return res.status(404).json({ error: "Note not found" });
+    }
+
+    writeJson(SHARED_NOTES_FILE, next);
+    return res.json({ ok: true, id });
 });
 
 app.post("/api/teacher-updates", authenticateJWT, authorizeRoles("teacher", "admin"), (req, res) => {
@@ -302,3 +419,7 @@ app.post("/api/reminders/send", authenticateJWT, authorizeRoles("teacher", "admi
 app.listen(PORT, () => {
     console.log(`Backend running on http://localhost:${PORT}`);
 });
+
+setInterval(() => {
+    cleanupPresence();
+}, Math.max(15_000, Math.floor(PRESENCE_TTL_MS / 2)));

@@ -76,7 +76,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Manrope', sans-serif;
     background: var(--bg-gradient);
     min-height: 100vh;
     color: var(--text-color);
@@ -472,6 +472,28 @@ body {
     color: var(--warning-color);
     font-weight: 600;
     margin-left: auto;
+}
+
+.due-flashcards ul {
+    list-style: none;
+    padding: 0;
+}
+
+.due-flashcards li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.due-flashcards li span {
+    color: var(--text-light);
+}
+
+.due-flashcards .action-btn {
+    margin-left: auto;
+    padding: 8px 14px;
 }
 
 /* Add Task Section */
@@ -904,6 +926,33 @@ body {
     border: none;
     border-radius: 8px;
     cursor: pointer;
+}
+
+.flashcard-review-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.flashcard-review-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.flashcard-review-btn.again { background: #ef4444; }
+.flashcard-review-btn.hard { background: #f97316; }
+.flashcard-review-btn.good { background: #16a34a; }
+.flashcard-review-btn.easy { background: #0ea5e9; }
+.flashcard-review-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .study-btn {

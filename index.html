@@ -8,7 +8,7 @@
     <title>Smart Study Planner</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -166,10 +166,6 @@
                 <h1 id="pageTitle">Dashboard</h1>
             </div>
             <div class="header-right">
-                <div class="study-streak" id="networkStatus" aria-live="polite">
-                    <i class="fas fa-wifi"></i>
-                    <span>Online</span>
-                </div>
                 <div class="study-streak" id="userBadge">
                     <i class="fas fa-user-circle"></i>
                     <span id="currentUserName">Guest</span>
@@ -177,10 +173,6 @@
                 <button class="print-btn" onclick="showPrintModal()">
                     <i class="fas fa-print"></i> Print
                 </button>
-                <div class="study-streak">
-                    <i class="fas fa-fire"></i>
-                    <span id="streakCount">0</span> Day Streak
-                </div>
                 <button class="export-import-btn" onclick="showExportImportModal()">
                     <i class="fas fa-download"></i> Backup
                 </button>
@@ -281,6 +273,13 @@
                 </ul>
             </div>
 
+            <div class="card due-flashcards">
+                <h3><i class="fas fa-layer-group"></i> Flashcards Due Today</h3>
+                <ul id="flashcardsDueTodayList">
+                    <li class="empty-state">No flashcards due today</li>
+                </ul>
+            </div>
+
             <div class="card recent-activity">
                 <h3><i class="fas fa-history"></i> Recent Activity</h3>
                 <ul id="recentActivityList">
@@ -332,6 +331,30 @@
                 </button>
                 <ul id="todayPlanList">
                     <li class="empty-state">No plan generated yet</li>
+                </ul>
+            </div>
+
+            <div class="card question-bank-dashboard">
+                <h3><i class="fas fa-book"></i> Question Bank</h3>
+                <p>Practice from mixed subjects and difficulty levels.</p>
+                <div class="task-options">
+                    <select id="dashboardQuestionSubject" onchange="refreshDashboardQuestionBank()">
+                        <option value="Any">Any Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <button class="action-btn" onclick="navigateTo('quiz')">
+                        <i class="fas fa-up-right-from-square"></i> Open Quiz Page
+                    </button>
+                    <button class="action-btn" onclick="refreshDashboardQuestionBank()">
+                        <i class="fas fa-rotate-right"></i> Refresh Questions
+                    </button>
+                </div>
+                <ul id="dashboardQuestionBankList">
+                    <li class="empty-state">No questions available</li>
                 </ul>
             </div>
 
@@ -443,8 +466,8 @@
                 <div class="calendar-day-header">Thu</div>
                 <div class="calendar-day-header">Fri</div>
                 <div class="calendar-day-header">Sat</div>
-                <div id="calendarDays"></div>
             </div>
+            <div class="calendar-grid" id="calendarDays"></div>
             <div class="calendar-legend">
                 <span><i class="fas fa-circle task-dot"></i> Task Due</span>
                 <span><i class="fas fa-circle assignment-dot"></i> Assignment Due</span>
@@ -489,6 +512,12 @@
                     <button onclick="prevFlashcard()"><i class="fas fa-chevron-left"></i></button>
                     <span id="flashcardCounter">0 / 0</span>
                     <button onclick="nextFlashcard()"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <div class="flashcard-review-actions" id="flashcardReviewActions">
+                    <button class="flashcard-review-btn again" onclick="reviewCurrentFlashcard('again')" disabled>Again</button>
+                    <button class="flashcard-review-btn hard" onclick="reviewCurrentFlashcard('hard')" disabled>Hard</button>
+                    <button class="flashcard-review-btn good" onclick="reviewCurrentFlashcard('good')" disabled>Good</button>
+                    <button class="flashcard-review-btn easy" onclick="reviewCurrentFlashcard('easy')" disabled>Easy</button>
                 </div>
                 <button class="study-btn" onclick="startStudy()">Start Study</button>
             </div>
@@ -611,6 +640,7 @@
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
+                        <option value="Geography">Geography</option>
                         <option value="Physics">Physics</option>
                         <option value="Chemistry">Chemistry</option>
                         <option value="Biology">Biology</option>
@@ -752,16 +782,13 @@
                     <select id="quizSubject">
                         <option value="Any">Any Subject</option>
                         <option value="Math">Math</option>
+                        <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="Programming">Programming</option>
                         <option value="History">History</option>
-                        <option value="Geography">Geography</option>
                     </select>
                     <select id="quizDifficulty">
-                        <option value="mixed">Mixed Difficulty</option>
-                        <option value="easy">Easy</option>
-                        <option value="medium">Medium</option>
-                        <option value="hard">Hard</option>
+                        <option value="mixed">Similar</option>
                     </select>
                     <input type="number" id="quizQuestionCount" min="5" max="25" value="5" placeholder="Questions">
                 </div>
@@ -952,6 +979,7 @@
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
+                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
@@ -981,6 +1009,7 @@
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
+                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
@@ -1004,20 +1033,21 @@
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
+                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
                     <input type="text" id="freeNoteLevelInput" placeholder="Class/Level (e.g., Class 10)">
                 </div>
                 <div class="input-group">
-                    <textarea id="freeNoteContentInput" rows="6" placeholder="Write note content. Students can download this for free."></textarea>
+                    <textarea id="freeNoteContentInput" rows="6" placeholder="Write note content for students to download."></textarea>
                 </div>
                 <button class="add-btn" onclick="addFreeNote()">
                     <i class="fas fa-plus"></i> Add Free Note
                 </button>
             </div>
             <div class="card exam-list">
-                <h3><i class="fas fa-download"></i> Free Download Notes</h3>
+                <h3><i class="fas fa-download"></i> Download Notes</h3>
                 <div class="task-options">
                     <input type="text" id="freeNotesSearchInput" placeholder="Search notes..." oninput="searchFreeNotes()">
                     <select id="freeNotesFilterSubject" onchange="filterFreeNotes()">
@@ -1026,12 +1056,13 @@
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
+                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
                 </div>
                 <ul id="freeNotesList">
-                    <li class="empty-state">No free notes available yet</li>
+                    <li class="empty-state">No notes available yet</li>
                 </ul>
             </div>
         </div>
@@ -1270,6 +1301,7 @@
             <option value="Science">Science</option>
             <option value="English">English</option>
             <option value="History">History</option>
+            <option value="Geography">Geography</option>
             <option value="Programming">Programming</option>
             <option value="General">General</option>
         </select>
@@ -1388,4 +1420,6 @@
 <script src="script.js"></script>
 </body>
 </html>
+
+
 

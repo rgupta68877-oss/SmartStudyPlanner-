@@ -19,10 +19,14 @@ const APP_STATE_VERSION = 1;
 const API_BASE_URL = (() => {
     const fromGlobal = (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) || "";
     const fromMeta = document.querySelector('meta[name="api-base-url"]')?.getAttribute("content") || "";
-    const fromEnv = fromGlobal || fromMeta || "http://localhost:4000";
+    const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    const fallbackBase = isLocalHost ? "http://localhost:4000" : window.location.origin;
+    const fromEnv = fromGlobal || fromMeta || fallbackBase;
     return String(fromEnv).replace(/\/+$/, "");
 })();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
+const PRESENCE_CLIENT_ID_KEY = "presenceClientId";
+const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
     {
         id: "mat-1",
@@ -114,7 +118,7 @@ const DEFAULT_FREE_NOTES_LIBRARY = [
         id: "note-pack-8",
         title: "Science Class 8 Full Revision",
         subject: "Science",
-        level: "Class 9",
+        level: "Class 8",
         content: "Chapter focus:\n- Crop production and microorganisms\n- Metals and non metals\n- Coal and petroleum\n- Combustion and flame\n- Cell structure and functions\n- Reproduction in animals\n\nQuick points:\n- Metals are generally malleable and conductive.\n- Non metals are brittle and poor conductors.\n- Conservation of fossil fuels is essential.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -197,8 +201,289 @@ const DEFAULT_FREE_NOTES_LIBRARY = [
         level: "Class 9",
         content: "Study framework:\n- Set monthly, weekly, daily targets\n- Use Pomodoro and active recall\n- Maintain formula and vocabulary notebook\n- Weekly self test and performance review\n\nBoard prep strategy:\n- Finish syllabus early\n- Revise with past papers\n- Solve timed mock tests",
         createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-19",
+        title: "Geography Class 7 Unit-Wise Notes",
+        subject: "Geography",
+        level: "Class 7",
+        content: "Unit 1: Environment\n- Natural and human-made environment\n- Ecosystem basics\nUnit 2: Inside Our Earth\n- Crust, mantle, core\n- Rocks and minerals\nUnit 3: Air and Water\n- Atmosphere layers\n- Water cycle\n\nUnit-wise Questions:\n1) Define ecosystem with one example.\n2) Name three layers of the Earth.\n3) Explain water cycle in 4 points.\n4) Differentiate weather and climate.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-20",
+        title: "Geography Class 8 Unit-Wise Notes",
+        subject: "Geography",
+        level: "Class 8",
+        content: "Unit 1: Resources\n- Natural, human, and man-made resources\n- Resource conservation\nUnit 2: Agriculture and Industries\n- Types of farming\n- Agro-based and mineral-based industries\nUnit 3: Human Resources\n- Population distribution\n\nUnit-wise Questions:\n1) Classify resources with examples.\n2) Explain two methods of soil conservation.\n3) Compare subsistence and commercial farming.\n4) Why is population considered an asset?",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-21",
+        title: "Geography Class 9 Unit-Wise Notes",
+        subject: "Geography",
+        level: "Class 9",
+        content: "Unit 1: India - Size and Location\n- Latitudes, longitudes, standard meridian\nUnit 2: Physical Features of India\n- Himalayas, plains, plateau, coastal plains\nUnit 3: Climate\n- Monsoon mechanism\nUnit 4: Drainage\n- Himalayan and Peninsular rivers\n\nUnit-wise Questions:\n1) Why is India's location strategic?\n2) Distinguish Western and Eastern Ghats.\n3) Explain factors affecting Indian climate.\n4) Compare Himalayan and Peninsular rivers.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-22",
+        title: "Math Class 10 Unit-Wise Notes",
+        subject: "Math",
+        level: "Class 10",
+        content: "Unit 1: Real Numbers\n- Euclid division algorithm, HCF and LCM\nUnit 2: Polynomials\n- Relationship between zeros and coefficients\nUnit 3: Pair of Linear Equations\n- Graphical and algebraic methods\nUnit 4: Trigonometry\n- Trigonometric ratios and identities\n\nUnit-wise Questions:\n1) Use Euclid algorithm for 867 and 255.\n2) Find zeros of x^2 - 5x + 6.\n3) Solve: 2x + y = 5 and x - y = 1.\n4) Prove: sin^2A + cos^2A = 1.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-23",
+        title: "Science Class 10 Unit-Wise Notes",
+        subject: "Science",
+        level: "Class 10",
+        content: "Unit 1: Chemical Reactions\n- Types of reactions, balancing equations\nUnit 2: Acids, Bases, Salts\n- pH and applications\nUnit 3: Life Processes\n- Nutrition, respiration, transport\nUnit 4: Electricity\n- Ohm's law, resistance, power\n\nUnit-wise Questions:\n1) Write one decomposition and one displacement reaction.\n2) Why is pH important in digestion?\n3) Explain double circulation in humans.\n4) Derive relation P = VI.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-24",
+        title: "English Class 10 Unit-Wise Notes",
+        subject: "English",
+        level: "Class 10",
+        content: "Unit 1: Reading Skills\n- Skimming, scanning, inference\nUnit 2: Grammar\n- Modals, reported speech, clauses\nUnit 3: Writing Skills\n- Formal letter, analytical paragraph\nUnit 4: Literature\n- Theme, character, tone, message\n\nUnit-wise Questions:\n1) Write a 120-word analytical paragraph from data.\n2) Change direct to indirect speech for 5 sentences.\n3) Draft a formal complaint letter.\n4) Explain theme of one prescribed chapter.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-25",
+        title: "History Class 10 Unit-Wise Notes",
+        subject: "History",
+        level: "Class 10",
+        content: "Unit 1: Rise of Nationalism in Europe\n- Nation-state, liberalism, unification\nUnit 2: Nationalism in India\n- Non-cooperation, civil disobedience\nUnit 3: Making of Global World\n- Trade routes, migration, colonialism\nUnit 4: Print Culture\n- Printing press and public opinion\n\nUnit-wise Questions:\n1) Explain role of Giuseppe Mazzini.\n2) Why did Non-Cooperation movement withdraw?\n3) How did print culture shape nationalism?\n4) Write short note on globalisation in 19th century.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-26",
+        title: "Geography Class 10 Unit-Wise Notes",
+        subject: "Geography",
+        level: "Class 10",
+        content: "Unit 1: Resources and Development\n- Types, planning, land resources\nUnit 2: Forest and Wildlife\n- Biodiversity, conservation methods\nUnit 3: Water Resources\n- Multipurpose projects, rainwater harvesting\nUnit 4: Agriculture and Minerals\n- Cropping patterns, mineral distribution\n\nUnit-wise Questions:\n1) Define sustainable development with examples.\n2) Compare renewable and non-renewable resources.\n3) Explain rainwater harvesting methods.\n4) Why is resource planning necessary in India?",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-27",
+        title: "Programming Class 10 Unit-Wise Notes",
+        subject: "Programming",
+        level: "Class 10",
+        content: "Unit 1: Data Types and Operators\n- Numeric, string, boolean, precedence\nUnit 2: Control Statements\n- if-else, switch, loops\nUnit 3: Functions and Arrays\n- Parameters, return values, indexing\nUnit 4: Problem Solving\n- Algorithm design and debugging\n\nUnit-wise Questions:\n1) Write algorithm for checking prime number.\n2) Program to find sum and average of array.\n3) Differentiate while and for loop.\n4) Trace output of a nested loop example.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-28",
+        title: "General Studies Class 10 Exam Pack",
+        subject: "General",
+        level: "Class 10",
+        content: "Unit 1: Study Planning\n- Weekly target sheets and revision cycle\nUnit 2: Exam Writing Skills\n- Keyword-focused answers, time allocation\nUnit 3: Memory Methods\n- Active recall, spaced repetition, flashcards\nUnit 4: Mock Analysis\n- Error log and improvement plan\n\nUnit-wise Questions:\n1) Make a 7-day revision timetable.\n2) How will you improve from mock test mistakes?\n3) List 5 high-retention study techniques.\n4) Write exam-day strategy in 8 points.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-29",
+        title: "Math Class 9 Unit-Wise Question Bank",
+        subject: "Math",
+        level: "Class 9",
+        content: "Unit 1: Number Systems\n- Irrational numbers, rationalization\nUnit 2: Polynomials\n- Zeroes and remainder theorem basics\nUnit 3: Coordinate Geometry\n- Plotting points in Cartesian plane\nUnit 4: Triangles\n- Congruence rules\n\nUnit-wise Questions:\n1) Rationalize 1/(sqrt(3)+1).\n2) Find remainder of p(x)=x^2+3x+2 when divided by x+1.\n3) Plot (2,3), (-1,4), (0,-2).\n4) Prove congruence using SAS rule.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-30",
+        title: "Science Class 9 Unit-Wise Question Bank",
+        subject: "Science",
+        level: "Class 9",
+        content: "Unit 1: Matter in Our Surroundings\n- States and interconversion\nUnit 2: Atoms and Molecules\n- Laws of chemical combination\nUnit 3: Motion\n- Distance-time and velocity-time graphs\nUnit 4: Force and Laws of Motion\n- Newton's laws\n\nUnit-wise Questions:\n1) Explain sublimation with one example.\n2) State law of conservation of mass.\n3) Differentiate speed and velocity.\n4) Explain inertia in daily life.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-31",
+        title: "CBSE Class 10 Math Board Pack",
+        subject: "Math",
+        level: "Class 10 (CBSE)",
+        content: "Board: CBSE\nUnit 1: Real Numbers\n- Euclid lemma, irrational numbers\nUnit 2: Polynomials and Pair of Linear Equations\n- Zeroes and graphical solution\nUnit 3: Trigonometry\n- Ratios, identities, heights and distances\nUnit 4: Coordinate Geometry and Statistics\n- Distance formula, mean/median/mode\n\nUnit-wise Questions:\n1) Prove irrationality of sqrt(2).\n2) Solve pair: x + y = 7 and x - y = 1.\n3) Prove sin^2A + cos^2A = 1.\n4) Find distance between (2,3) and (8,11).\n5) Find median for grouped data.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-32",
+        title: "CBSE Class 10 Science Board Pack",
+        subject: "Science",
+        level: "Class 10 (CBSE)",
+        content: "Board: CBSE\nUnit 1: Chemical Reactions and Acids-Bases-Salts\nUnit 2: Life Processes and Control & Coordination\nUnit 3: Electricity and Magnetic Effects\nUnit 4: Our Environment and Natural Resources\n\nUnit-wise Questions:\n1) Write balanced equation for rusting and classify it.\n2) Explain pH scale and one real life application.\n3) Describe transport of food in plants.\n4) State Ohm's law and derive V = IR.\n5) Explain food chain and 10% law.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-33",
+        title: "CBSE Class 10 Social Science (History+Geo) Pack",
+        subject: "History",
+        level: "Class 10 (CBSE)",
+        content: "Board: CBSE\nUnit 1: Nationalism in Europe and India\nUnit 2: Globalisation and Print Culture\nUnit 3: Resources and Development\nUnit 4: Agriculture and Minerals\n\nUnit-wise Questions:\n1) Explain role of nationalism in Europe.\n2) What were causes and outcomes of Non-Cooperation?\n3) Explain any three factors of globalisation.\n4) Why is resource planning important in India?\n5) Distinguish between kharif and rabi crops.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-34",
+        title: "ICSE Class 10 Math Board Pack",
+        subject: "Math",
+        level: "Class 10 (ICSE)",
+        content: "Board: ICSE\nUnit 1: Commercial Mathematics\n- GST, banking, shares/dividends\nUnit 2: Algebra\n- Quadratic equations, AP/GP\nUnit 3: Geometry and Mensuration\n- Similarity, circles, solids\nUnit 4: Coordinate Geometry and Probability\n\nUnit-wise Questions:\n1) Calculate GST amount for given marked price.\n2) Solve quadratic using factorization/completing square.\n3) Prove theorem based on tangents.\n4) Find curved surface area of a cone.\n5) Solve probability of drawing red card from deck.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-35",
+        title: "ICSE Class 10 Physics-Chemistry-Biology Pack",
+        subject: "Science",
+        level: "Class 10 (ICSE)",
+        content: "Board: ICSE\nPhysics: Force, work-energy-power, electricity\nChemistry: Periodic table, metallurgy, organic chemistry\nBiology: Cell cycle, genetics, human anatomy\n\nUnit-wise Questions:\n1) State and apply laws of motion with numericals.\n2) Explain electrolysis with labeled diagram.\n3) Differentiate ionic and covalent compounds.\n4) Explain Mendel's monohybrid ratio.\n5) Describe structure and function of nephron.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-36",
+        title: "ICSE Class 10 History-Civics-Geography Pack",
+        subject: "Geography",
+        level: "Class 10 (ICSE)",
+        content: "Board: ICSE\nHistory: World wars, freedom movement\nCivics: Constitution, parliament, judiciary\nGeography: Climate, soil, transport, map work\n\nUnit-wise Questions:\n1) Explain causes of First World War.\n2) Write structure and functions of Parliament.\n3) Distinguish writs with examples.\n4) Explain monsoon mechanism in India.\n5) Practice map marking: coal, iron, ports.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-37",
+        title: "State Board Class 10 Math Board Pack",
+        subject: "Math",
+        level: "Class 10 (State Board)",
+        content: "Board: State Board\nUnit 1: Arithmetic and Algebra Basics\nUnit 2: Trigonometry and Geometry\nUnit 3: Mensuration and Statistics\nUnit 4: Practical Problem Solving\n\nUnit-wise Questions:\n1) Simplify and solve linear equation set.\n2) Find trigonometric ratios for given triangle.\n3) Calculate area and volume of common solids.\n4) Find mean/median from frequency table.\n5) Solve one word problem from daily life data.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-38",
+        title: "State Board Class 10 Science Board Pack",
+        subject: "Science",
+        level: "Class 10 (State Board)",
+        content: "Board: State Board\nUnit 1: Matter and Chemical Changes\nUnit 2: Living World and Human Body\nUnit 3: Motion, Light and Electricity\nUnit 4: Environment and Sustainable Development\n\nUnit-wise Questions:\n1) Write two examples of exothermic reactions.\n2) Explain respiration and circulatory system.\n3) Draw ray diagram for image formation.\n4) Solve one numerical using electrical power.\n5) Explain three methods of waste management.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "note-pack-39",
+        title: "State Board Class 10 English + Social Pack",
+        subject: "English",
+        level: "Class 10 (State Board)",
+        content: "Board: State Board\nEnglish Units: Reading, grammar, writing, literature\nSocial Units: History events, civics basics, geography maps\n\nUnit-wise Questions:\n1) Write formal letter on school issue.\n2) Convert direct speech to reported speech (5 items).\n3) Explain one literary theme with example.\n4) Write short note on freedom movement event.\n5) Mark major rivers and states on blank map.",
+        createdAt: "2026-01-01T00:00:00.000Z"
     }
 ];
+
+const STANDARD_SUBJECTS = ["Math", "Science", "English", "History", "Geography", "Programming"];
+const STANDARD_CLASSES = [7, 8, 9, 10];
+const STANDARD_CLASS_FOCUS = {
+    7: "foundation and concept clarity",
+    8: "concept strengthening and application",
+    9: "analytical thinking and problem solving",
+    10: "board-oriented mastery and revision"
+};
+const STANDARD_UNIT_MAP = {
+    Math: ["Numbers and Algebra", "Geometry and Mensuration", "Data Handling", "Applied Problems"],
+    Science: ["Matter and Materials", "Life Processes", "Force and Energy", "Environment and Sustainability"],
+    English: ["Reading Skills", "Grammar", "Writing Skills", "Literature Response"],
+    History: ["Ancient/Medieval Context", "Modern World Events", "National Movements", "Historical Analysis"],
+    Geography: ["Physical Features", "Climate and Resources", "Human Geography", "Maps and Case Studies"],
+    Programming: ["Logic and Algorithms", "Syntax and Data Types", "Control Flow and Functions", "Debugging and Projects"]
+};
+
+function createStandardNoteContent(subject, classNo) {
+    const units = STANDARD_UNIT_MAP[subject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
+    const focus = STANDARD_CLASS_FOCUS[classNo] || "structured learning";
+    return [
+        `Page 1: Standard ${classNo} ${subject} Syllabus Overview`,
+        `- Learning focus: ${focus}`,
+        `- Unit 1: ${units[0]}`,
+        `- Unit 2: ${units[1]}`,
+        `- Unit 3: ${units[2]}`,
+        `- Unit 4: ${units[3]}`,
+        "",
+        `Page 2: Unit 1 Notes (${units[0]})`,
+        `- Core definitions and concept map for ${units[0]}.`,
+        `- Important rules/theorems/process steps with examples.`,
+        `- Common mistakes and correction strategy.`,
+        "",
+        `Page 3: Unit 2 Notes (${units[1]})`,
+        `- Key concepts and summary chart.`,
+        `- Solved examples for medium-level questions.`,
+        `- Short revision points for quick recall.`,
+        "",
+        `Page 4: Unit 3 Notes (${units[2]})`,
+        `- Diagram/table-based explanation where needed.`,
+        `- Standard textbook pattern questions and solutions.`,
+        `- Exam writing format for 2-mark and 3-mark answers.`,
+        "",
+        `Page 5: Unit 4 Notes (${units[3]})`,
+        `- Practical/case-based or application-based learning points.`,
+        `- High-frequency questions from previous assessments.`,
+        `- Last-minute revision checklist.`,
+        "",
+        `Page 6: Unit-wise Questions with Answers`,
+        `Q1 (${units[0]}): State one key concept and one application.`,
+        `A1: Define the concept in one line and link it to a real example from classwork.`,
+        `Q2 (${units[1]}): Solve/Explain one standard textbook-style problem.`,
+        `A2: Use step-by-step method: given data, approach, solution, and final statement.`,
+        `Q3 (${units[2]}): Write a short answer question response in exam format.`,
+        `A3: Start with keyword definition, then two valid points, then a one-line conclusion.`,
+        `Q4 (${units[3]}): Attempt one higher-order/application question.`,
+        `A4: Break the problem into parts, apply the correct concept, and justify final answer clearly.`,
+        "",
+        `Page 7: Practice Set with Answers`,
+        `Q5: List two important terms from each unit.`,
+        `A5: Any two correct unit terms with proper meaning will be accepted.`,
+        `Q6: Which unit needs more practice for you and why?`,
+        `A6: Mention one weak unit and one improvement action (daily practice/revision sheet).`,
+        `Q7: Write one 5-mark style answer from this standard.`,
+        `A7: Structure: introduction, 3-4 valid points, example/diagram, and conclusion.`,
+        `Q8: Prepare a one-page revision sheet for all units.`,
+        `A8: Include formulas/rules/keywords and 1 solved example per unit.`,
+        "",
+        `Page 8: Weekly Revision Plan`,
+        `Day 1-2: Unit 1 + Unit 2 recap`,
+        `Day 3-4: Unit 3 + Unit 4 recap`,
+        `Day 5: Mixed worksheet`,
+        `Day 6: Self-test + answer checking`,
+        `Day 7: Error log revision and quick oral recall`,
+        "",
+        `Page 9: Extra Question Bank with Answers`,
+        `Q9 (${units[0]}): Write one 3-mark and one 5-mark style answer.`,
+        `A9: 3-mark answer = definition + 2 points; 5-mark answer = intro + 4 points + conclusion.`,
+        `Q10 (${units[1]}): Solve one application-based problem.`,
+        `A10: Mention known values, approach, working steps, final answer with unit/context.`,
+        `Q11 (${units[2]}): Create one mind map from chapter headings.`,
+        `A11: Include keywords, subtopics, and one example for each branch.`,
+        `Q12 (${units[3]}): Attempt one previous-year style question.`,
+        `A12: Follow board format and underline keywords.`,
+        "",
+        `Page 10: Final Revision + Answer Writing Guide`,
+        `- Keep answers pointwise and cleanly structured.`,
+        `- For theory: intro, key points, conclusion.`,
+        `- For numericals: formula, substitution, calculation, final statement.`,
+        `- For long answers: use headings and subheadings.`,
+        `- Last 24-hour plan: quick formulas, key definitions, and one mock answer set.`
+    ].join("\n");
+}
+
+function buildStandardWiseNotesLibrary() {
+    return STANDARD_CLASSES.flatMap((classNo) => (
+        STANDARD_SUBJECTS.map((subject) => ({
+            id: `std-${subject.toLowerCase()}-${classNo}`,
+            title: `${subject} Standard ${classNo} Notes + Unit Q&A`,
+            subject,
+            level: `Class ${classNo}`,
+            content: createStandardNoteContent(subject, classNo),
+            createdAt: "2026-01-01T00:00:00.000Z"
+        }))
+    ));
+}
+
+for (const note of buildStandardWiseNotesLibrary()) {
+    if (!DEFAULT_FREE_NOTES_LIBRARY.some(existing => existing.id === note.id)) {
+        DEFAULT_FREE_NOTES_LIBRARY.push(note);
+    }
+}
 
 const DEFAULT_RESOURCES_LIBRARY = [
     {
@@ -292,6 +577,7 @@ const DEFAULT_STATE = {
         { name: "Science", color: "#4caf50" },
         { name: "English", color: "#9c27b0" },
         { name: "History", color: "#ff9800" },
+        { name: "Geography", color: "#8bc34a" },
         { name: "Programming", color: "#00bcd4" }
     ],
     gpaHistory: [],
@@ -384,6 +670,48 @@ function normalizeTasks(taskList) {
         .filter(task => task.text.length > 0);
 }
 
+function normalizeFlashcardCard(card) {
+    const normalized = card && typeof card === "object" ? card : {};
+    const front = String(normalized.front || "").trim();
+    const back = String(normalized.back || "").trim();
+    if (!front || !back) return null;
+
+    const intervalDays = Number(normalized.intervalDays);
+    const ease = Number(normalized.ease);
+    const reviewCount = Number(normalized.reviewCount);
+    const lapses = Number(normalized.lapses);
+    const createdAt = normalized.createdAt || new Date().toISOString();
+    const parsedNext = Date.parse(normalized.nextReviewAt || createdAt);
+
+    return {
+        ...normalized,
+        id: normalized.id || `fc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        front,
+        back,
+        createdAt,
+        lastReviewedAt: normalized.lastReviewedAt || "",
+        nextReviewAt: Number.isFinite(parsedNext) ? new Date(parsedNext).toISOString() : new Date().toISOString(),
+        intervalDays: Number.isFinite(intervalDays) ? Math.max(0, Math.round(intervalDays)) : 0,
+        ease: Number.isFinite(ease) ? Math.min(3.5, Math.max(1.3, Math.round(ease * 100) / 100)) : 2.5,
+        reviewCount: Number.isFinite(reviewCount) ? Math.max(0, Math.round(reviewCount)) : 0,
+        lapses: Number.isFinite(lapses) ? Math.max(0, Math.round(lapses)) : 0
+    };
+}
+
+function normalizeFlashcards(flashcardState) {
+    if (!flashcardState || typeof flashcardState !== "object") return {};
+    const normalizedDecks = {};
+    Object.entries(flashcardState).forEach(([deckName, cards]) => {
+        const safeDeckName = String(deckName || "").trim();
+        if (!safeDeckName) return;
+        const normalizedCards = (Array.isArray(cards) ? cards : [])
+            .map(normalizeFlashcardCard)
+            .filter(Boolean);
+        normalizedDecks[safeDeckName] = normalizedCards;
+    });
+    return normalizedDecks;
+}
+
 function migrateState(state, fromVersion) {
     const migrated = { ...state };
     if (!Number.isFinite(fromVersion) || fromVersion < 1) {
@@ -424,6 +752,7 @@ function loadState() {
         ...DEFAULT_STATE,
         ...loaded,
         tasks: normalizeTasks(loaded.tasks),
+        flashcards: normalizeFlashcards(loaded.flashcards),
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
         goals: { ...DEFAULT_STATE.goals, ...(loaded.goals || {}) },
         timetableEntries: Array.isArray(loaded.timetableEntries) ? loaded.timetableEntries : [],
@@ -517,6 +846,8 @@ let cloudSyncTimeoutId = null;
 let isHydratingFromCloud = false;
 let cloudStateLoadedForUid = "";
 let activeFirebaseUid = "";
+let presenceIntervalId = null;
+let presencePingInFlight = false;
 
 const CLOUD_SYNC_DEBOUNCE_MS = 800;
 const firebaseSdk = {
@@ -540,13 +871,28 @@ let currentYear = new Date().getFullYear();
 let currentDeck = "";
 let currentFlashcardIndex = 0;
 let isFlipped = false;
+let flashcardStudyQueue = [];
+let flashcardStudyMode = "due";
 let resourceSearchQuery = "";
 let resourceTypeFilter = "all";
 let studyMaterialSearchQuery = "";
 let studyMaterialFilterSubject = "all";
 let freeNotesSearchQuery = "";
 let freeNotesFilterSubject = "all";
+let sharedFreeNotes = [];
+let sharedFreeNotesLoaded = false;
+let sharedFreeNotesLoading = false;
+let dashboardQuestionBankSubject = "Any";
 let draggedTimetableId = null;
+let backendFetchSuspendedUntil = 0;
+
+function isBackendFetchAllowed() {
+    return Date.now() >= backendFetchSuspendedUntil;
+}
+
+function suspendBackendFetch(ms = 30000) {
+    backendFetchSuspendedUntil = Date.now() + Math.max(5000, Number(ms) || 30000);
+}
 
 // ==================== THEME ====================
 function toggleTheme() {
@@ -636,7 +982,15 @@ function navigateTo(page) {
 }
 
 document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => navigateTo(item.dataset.page));
+    item.addEventListener('click', (event) => {
+        event.preventDefault();
+        const page = item.dataset.page;
+        if (page === "admin" && !canAccessAdmin()) {
+            alert('Admin page requires teacher/admin account.');
+            return;
+        }
+        navigateTo(page);
+    });
 });
 
 // Mobile menu
@@ -923,7 +1277,7 @@ function applyCloudState(data) {
     try {
         if (Array.isArray(data.tasks)) tasks = normalizeTasks(data.tasks);
         if (Array.isArray(data.notes)) notes = data.notes;
-        if (data.flashcards && typeof data.flashcards === "object") flashcards = data.flashcards;
+        if (data.flashcards && typeof data.flashcards === "object") flashcards = normalizeFlashcards(data.flashcards);
         if (Array.isArray(data.assignments)) assignments = data.assignments;
         if (Array.isArray(data.exams)) exams = data.exams;
         if (Array.isArray(data.subjects)) subjects = data.subjects;
@@ -1147,7 +1501,7 @@ async function loadFlashcardsFromBackend() {
         if (!remoteFlashcards) return;
 
         if (hasAnyFlashcards(remoteFlashcards)) {
-            flashcards = remoteFlashcards;
+            flashcards = normalizeFlashcards(remoteFlashcards);
             saveState({ flashcards });
             renderFlashcards();
             renderDashboard();
@@ -1170,6 +1524,10 @@ function getCurrentUser() {
 function canAccessAdmin() {
     const user = getCurrentUser();
     return Boolean(user && (user.role === "admin" || user.role === "teacher"));
+}
+
+function canManageSharedNotes() {
+    return canAccessAdmin();
 }
 
 function getBackendAuthHeaders() {
@@ -1222,6 +1580,7 @@ function applyAuthState() {
     if (user) {
         if (authContainer) authContainer.style.display = "none";
         if (appContainer) appContainer.style.display = "flex";
+        updateOnlineStudentsVisibility();
         const currentUserName = document.getElementById("currentUserName");
         if (currentUserName) currentUserName.textContent = user.name || "User";
         const adminNavItem = document.querySelector('[data-page="admin"]');
@@ -1229,9 +1588,12 @@ function applyAuthState() {
             adminNavItem.style.display = canAccessAdmin() ? "list-item" : "none";
         }
         bootstrapAuthenticatedApp();
+        startPresenceTracking();
         renderProfile();
         navigateTo("dashboard");
     } else {
+        stopPresenceTracking();
+        updateOnlineStudentsVisibility();
         if (appContainer) appContainer.style.display = "none";
         if (authContainer) authContainer.style.display = "flex";
         showAuthView("login");
@@ -1395,6 +1757,7 @@ async function resetPassword() {
 }
 
 async function logoutUser() {
+    await notifyPresenceLogout();
     await ensureFirebaseServices();
     if (firebaseAuth && firebaseSdk.signOut && firebaseAuth.currentUser) {
         try {
@@ -1465,6 +1828,131 @@ function updateNetworkStatusUI() {
     if (!isOnline) {
     } else if (getCurrentUser()) {
     }
+}
+
+function getPresenceClientId() {
+    let clientId = localStorage.getItem(PRESENCE_CLIENT_ID_KEY) || "";
+    if (clientId) return clientId;
+
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        clientId = window.crypto.randomUUID();
+    } else {
+        clientId = `presence-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    localStorage.setItem(PRESENCE_CLIENT_ID_KEY, clientId);
+    return clientId;
+}
+
+function updateOnlineStudentsUI(count) {
+    const countEl = document.getElementById("onlineStudentsCount");
+    if (!countEl) return;
+    const safeCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+    countEl.textContent = String(safeCount);
+}
+
+function canViewOnlineStudentsWidget(user = getCurrentUser()) {
+    return !!user && (user.role === "teacher" || user.role === "admin");
+}
+
+function updateOnlineStudentsVisibility() {
+    const widget = document.getElementById("onlineStudentsStatus");
+    if (!widget) return;
+    widget.style.display = canViewOnlineStudentsWidget() ? "flex" : "none";
+}
+
+async function pingPresence() {
+    if (presencePingInFlight) return;
+    const user = getCurrentUser();
+    if (!user || !navigator.onLine || !isBackendFetchAllowed()) return;
+
+    presencePingInFlight = true;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/presence/ping`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                clientId: getPresenceClientId(),
+                role: user.role || "student",
+                email: user.email || ""
+            })
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        updateOnlineStudentsUI(data.onlineStudents);
+    } catch (_) {
+        suspendBackendFetch(30000);
+    } finally {
+        presencePingInFlight = false;
+    }
+}
+
+async function refreshOnlineStudentsCount() {
+    if (!isBackendFetchAllowed()) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/presence/online-students`);
+        if (!response.ok) return;
+        const data = await response.json();
+        updateOnlineStudentsUI(data.onlineStudents);
+    } catch (_) {
+        suspendBackendFetch(30000);
+    }
+}
+
+function startPresenceTracking() {
+    stopPresenceTracking();
+    if (canViewOnlineStudentsWidget()) {
+        refreshOnlineStudentsCount();
+    }
+    pingPresence();
+    presenceIntervalId = setInterval(() => {
+        if (document.visibilityState !== "hidden") {
+            pingPresence();
+            if (canViewOnlineStudentsWidget()) {
+                refreshOnlineStudentsCount();
+            }
+        }
+    }, PRESENCE_PING_INTERVAL_MS);
+}
+
+function stopPresenceTracking() {
+    if (presenceIntervalId) {
+        clearInterval(presenceIntervalId);
+        presenceIntervalId = null;
+    }
+    updateOnlineStudentsUI(0);
+}
+
+async function notifyPresenceLogout() {
+    const clientId = localStorage.getItem(PRESENCE_CLIENT_ID_KEY);
+    if (!clientId) return;
+    try {
+        await fetch(`${API_BASE_URL}/api/presence/logout`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ clientId }),
+            keepalive: true
+        });
+    } catch (_) {
+    }
+}
+
+function setupPresenceLifecycleListeners() {
+    window.addEventListener("beforeunload", () => {
+        const clientId = localStorage.getItem(PRESENCE_CLIENT_ID_KEY);
+        if (!clientId || !navigator.sendBeacon) return;
+        const payload = JSON.stringify({ clientId });
+        navigator.sendBeacon(`${API_BASE_URL}/api/presence/logout`, new Blob([payload], { type: "application/json" }));
+    });
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+            if (canViewOnlineStudentsWidget()) {
+                refreshOnlineStudentsCount();
+            }
+            pingPresence();
+        }
+    });
 }
 
 function setupNetworkStatusListeners() {
@@ -1675,8 +2163,11 @@ function renderDashboard() {
     Object.values(flashcards).forEach(deck => totalFlashcards += deck.length);
     document.getElementById('flashcardCount').textContent = totalFlashcards;
     
-    // Streak
-    document.getElementById('streakCount').textContent = studyStreak;
+    // Streak (optional header widget)
+    const streakCountEl = document.getElementById('streakCount');
+    if (streakCountEl) {
+        streakCountEl.textContent = studyStreak;
+    }
     
     // Weekly goals
     const taskGoal = Math.min((weeklyStats.tasksCompleted / goals.tasks) * 100, 100);
@@ -1696,7 +2187,103 @@ function renderDashboard() {
     // Upcoming deadlines
     renderUpcomingDeadlines();
     renderDoNext();
+    renderFlashcardsDueToday();
     renderTodayPlan();
+    renderDashboardQuestionBank();
+}
+
+function getFlashcardsDueTodayByDeck(now = new Date()) {
+    const byDeck = Object.entries(flashcards).map(([deckName, cards]) => {
+        const dueCount = getDueTodayFlashcardIndexes(deckName, now).length;
+        return { deckName, dueCount };
+    }).filter(item => item.dueCount > 0);
+
+    byDeck.sort((a, b) => b.dueCount - a.dueCount);
+    return byDeck;
+}
+
+function startFlashcardReviewFromDashboard(encodedDeckName) {
+    const deckName = decodeURIComponent(String(encodedDeckName || ""));
+    if (!deckName || !flashcards[deckName] || flashcards[deckName].length === 0) {
+        alert('Selected deck is unavailable.');
+        return;
+    }
+    const dueTodayIndexes = getDueTodayFlashcardIndexes(deckName);
+    if (dueTodayIndexes.length === 0) {
+        alert('No flashcards due today in this deck.');
+        return;
+    }
+
+    navigateTo('flashcards');
+    selectDeck(deckName);
+    flashcardStudyQueue = dueTodayIndexes;
+    flashcardStudyMode = "due-today";
+    currentFlashcardIndex = 0;
+    isFlipped = false;
+    setFlashcardReviewButtonsEnabled(true);
+    document.querySelector('.flashcard').classList.remove('flipped');
+    showFlashcard();
+}
+
+function renderFlashcardsDueToday() {
+    const list = document.getElementById('flashcardsDueTodayList');
+    if (!list) return;
+
+    const dueDecks = getFlashcardsDueTodayByDeck();
+    if (dueDecks.length === 0) {
+        list.innerHTML = '<li class="empty-state">No flashcards due today</li>';
+        return;
+    }
+
+    list.innerHTML = dueDecks.map(item => `
+        <li>
+            <strong>${item.deckName}</strong>
+            <span>${item.dueCount} due today</span>
+            <button class="action-btn" onclick="startFlashcardReviewFromDashboard('${encodeURIComponent(item.deckName)}')">
+                Review
+            </button>
+        </li>
+    `).join('');
+}
+
+function getDashboardQuestionBankSample(sampleSize = 8, subject = "Any") {
+    if (!Array.isArray(quizQuestionBank) || quizQuestionBank.length === 0) return [];
+    const pool = subject === "Any"
+        ? quizQuestionBank
+        : quizQuestionBank.filter(q => q.subject === subject);
+    if (pool.length === 0) return [];
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, Math.min(sampleSize, shuffled.length));
+}
+
+function renderDashboardQuestionBank() {
+    const list = document.getElementById('dashboardQuestionBankList');
+    const subjectSelect = document.getElementById('dashboardQuestionSubject');
+    if (!list) return;
+    if (subjectSelect) {
+        dashboardQuestionBankSubject = subjectSelect.value || dashboardQuestionBankSubject || "Any";
+    }
+
+    const sample = getDashboardQuestionBankSample(10, dashboardQuestionBankSubject);
+    if (sample.length === 0) {
+        list.innerHTML = '<li class="empty-state">No questions available for selected subject</li>';
+        return;
+    }
+
+    list.innerHTML = sample.map((q, idx) => `
+        <li>
+            <strong>Q${idx + 1}. ${q.question}</strong>
+            <span>${q.subject}</span>
+        </li>
+    `).join('');
+}
+
+function refreshDashboardQuestionBank() {
+    const subjectSelect = document.getElementById('dashboardQuestionSubject');
+    if (subjectSelect) {
+        dashboardQuestionBankSubject = subjectSelect.value || "Any";
+    }
+    renderDashboardQuestionBank();
 }
 
 function renderRecentActivity() {
@@ -2411,6 +2998,133 @@ function searchNotes() {
 }
 
 // ==================== FLASHCARDS ====================
+function getDueFlashcardIndexes(deckName, now = new Date()) {
+    const cards = flashcards[deckName] || [];
+    const nowMs = now.getTime();
+    const due = [];
+    cards.forEach((card, index) => {
+        const dueMs = Date.parse(card.nextReviewAt || 0);
+        if (!Number.isFinite(dueMs) || dueMs <= nowMs) due.push(index);
+    });
+    return due;
+}
+
+function getDueTodayFlashcardIndexes(deckName, now = new Date()) {
+    const cards = flashcards[deckName] || [];
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+    todayEnd.setMilliseconds(todayEnd.getMilliseconds() - 1);
+    const startMs = todayStart.getTime();
+    const endMs = todayEnd.getTime();
+    const dueToday = [];
+
+    cards.forEach((card, index) => {
+        const dueMs = Date.parse(card && card.nextReviewAt ? card.nextReviewAt : "");
+        if (Number.isFinite(dueMs) && dueMs >= startMs && dueMs <= endMs) {
+            dueToday.push(index);
+        }
+    });
+
+    return dueToday;
+}
+
+function buildStudyQueue(deckName) {
+    const cards = flashcards[deckName] || [];
+    const dueIndexes = getDueFlashcardIndexes(deckName);
+    if (dueIndexes.length > 0) {
+        flashcardStudyMode = "due";
+        return dueIndexes;
+    }
+
+    flashcardStudyMode = "all";
+    return cards.map((_, idx) => idx);
+}
+
+function getCurrentFlashcardRef() {
+    if (!currentDeck || !flashcards[currentDeck]) return null;
+    if (!Array.isArray(flashcardStudyQueue) || flashcardStudyQueue.length === 0) return null;
+    const cardIndex = flashcardStudyQueue[currentFlashcardIndex];
+    if (!Number.isFinite(cardIndex) || !flashcards[currentDeck][cardIndex]) return null;
+    return {
+        deck: currentDeck,
+        cardIndex,
+        card: flashcards[currentDeck][cardIndex]
+    };
+}
+
+function setFlashcardReviewButtonsEnabled(enabled) {
+    document.querySelectorAll('.flashcard-review-btn').forEach(btn => {
+        btn.disabled = !enabled;
+    });
+}
+
+function getNextIntervalFromRating(card, rating) {
+    const previousInterval = Math.max(0, Number(card.intervalDays) || 0);
+    const previousEase = Math.max(1.3, Number(card.ease) || 2.5);
+    let intervalDays = previousInterval;
+    let ease = previousEase;
+
+    if (rating === "again") {
+        intervalDays = 0;
+        ease = Math.max(1.3, previousEase - 0.2);
+    } else if (rating === "hard") {
+        intervalDays = previousInterval <= 1 ? 1 : Math.max(1, Math.round(previousInterval * 1.2));
+        ease = Math.max(1.3, previousEase - 0.15);
+    } else if (rating === "easy") {
+        intervalDays = previousInterval === 0 ? 4 : Math.max(2, Math.round(previousInterval * previousEase * 1.3));
+        ease = Math.min(3.5, previousEase + 0.15);
+    } else {
+        intervalDays = previousInterval === 0 ? 1 : Math.max(1, Math.round(previousInterval * previousEase));
+    }
+
+    return {
+        intervalDays,
+        ease: Math.round(ease * 100) / 100
+    };
+}
+
+function reviewCurrentFlashcard(rating) {
+    const ref = getCurrentFlashcardRef();
+    if (!ref) return;
+
+    const acceptedRatings = new Set(["again", "hard", "good", "easy"]);
+    const safeRating = acceptedRatings.has(rating) ? rating : "good";
+    const now = new Date();
+    const schedule = getNextIntervalFromRating(ref.card, safeRating);
+    const nextDate = new Date(now);
+    nextDate.setDate(nextDate.getDate() + schedule.intervalDays);
+
+    flashcards[ref.deck][ref.cardIndex] = {
+        ...ref.card,
+        intervalDays: schedule.intervalDays,
+        ease: schedule.ease,
+        reviewCount: (Number(ref.card.reviewCount) || 0) + 1,
+        lapses: (Number(ref.card.lapses) || 0) + (safeRating === "again" ? 1 : 0),
+        lastReviewedAt: now.toISOString(),
+        nextReviewAt: nextDate.toISOString()
+    };
+
+    weeklyStats.flashcardsReviewed++;
+    saveState({ flashcards, weeklyStats });
+    saveFlashcardsToBackend();
+
+    if (currentFlashcardIndex < flashcardStudyQueue.length - 1) {
+        currentFlashcardIndex++;
+        isFlipped = false;
+        document.querySelector('.flashcard').classList.remove('flipped');
+        showFlashcard();
+    } else {
+        flashcardStudyQueue = [];
+        currentFlashcardIndex = 0;
+        setFlashcardReviewButtonsEnabled(false);
+        renderFlashcards();
+        renderDashboard();
+        alert('Review session complete.');
+    }
+}
+
 function renderFlashcards() {
     const deckSelect = document.getElementById('flashcardDeck');
     const deckSelectModal = document.getElementById('flashcardDeckSelect');
@@ -2418,7 +3132,8 @@ function renderFlashcards() {
     
     let options = '<option value="">Select Deck</option>';
     decks.forEach(deck => {
-        options += `<option value="${deck}">${deck} (${flashcards[deck].length} cards)</option>`;
+        const dueCount = getDueFlashcardIndexes(deck).length;
+        options += `<option value="${deck}">${deck} (${flashcards[deck].length} cards, ${dueCount} due)</option>`;
     });
     
     deckSelect.innerHTML = options;
@@ -2432,11 +3147,14 @@ function renderFlashcards() {
             <div class="deck-card" onclick="selectDeck('${deck}')">
                 <i class="fas fa-layer-group"></i>
                 <h4>${deck}</h4>
-                <p>${flashcards[deck].length} cards</p>
+                <p>${flashcards[deck].length} cards • ${getDueFlashcardIndexes(deck).length} due</p>
             </div>
         `).join('');
     }
     
+    flashcardStudyQueue = [];
+    currentFlashcardIndex = 0;
+    setFlashcardReviewButtonsEnabled(false);
     document.getElementById('flashcardCounter').textContent = '0 / 0';
     document.getElementById('flashcardFront').innerHTML = '<p>Select a deck and click Study to start</p>';
     document.getElementById('flashcardBack').innerHTML = '<p></p>';
@@ -2445,7 +3163,9 @@ function renderFlashcards() {
 function selectDeck(deck) {
     currentDeck = deck;
     currentFlashcardIndex = 0;
+    flashcardStudyQueue = [];
     isFlipped = false;
+    setFlashcardReviewButtonsEnabled(false);
     document.getElementById('flashcardDeck').value = deck;
     document.querySelector('.flashcard').classList.remove('flipped');
 }
@@ -2466,7 +3186,7 @@ function saveFlashcard() {
     if (!deck || !front || !back) return;
     
     if (!flashcards[deck]) flashcards[deck] = [];
-    flashcards[deck].push({ front, back });
+    flashcards[deck].push(normalizeFlashcardCard({ front, back }));
     
     saveState({ flashcards });
     saveFlashcardsToBackend();
@@ -2496,17 +3216,27 @@ function startStudy() {
         return;
     }
     
+    flashcardStudyQueue = buildStudyQueue(currentDeck);
+    if (flashcardStudyQueue.length === 0) {
+        alert('No cards available in this deck.');
+        return;
+    }
     currentFlashcardIndex = 0;
     isFlipped = false;
+    setFlashcardReviewButtonsEnabled(true);
     document.querySelector('.flashcard').classList.remove('flipped');
     showFlashcard();
 }
 
 function showFlashcard() {
-    const card = flashcards[currentDeck][currentFlashcardIndex];
+    const ref = getCurrentFlashcardRef();
+    if (!ref) return;
+    const card = ref.card;
     document.getElementById('flashcardFront').innerHTML = `<p>${card.front}</p>`;
     document.getElementById('flashcardBack').innerHTML = `<p>${card.back}</p>`;
-    document.getElementById('flashcardCounter').textContent = `${currentFlashcardIndex + 1} / ${flashcards[currentDeck].length}`;
+    const dueCount = getDueFlashcardIndexes(currentDeck).length;
+    const modeLabel = flashcardStudyMode === "due" ? "Due Session" : "All Cards";
+    document.getElementById('flashcardCounter').textContent = `${currentFlashcardIndex + 1} / ${flashcardStudyQueue.length} • ${modeLabel} • ${dueCount} due`;
 }
 
 function flipFlashcard() {
@@ -2515,7 +3245,7 @@ function flipFlashcard() {
 }
 
 function prevFlashcard() {
-    if (currentFlashcardIndex > 0) {
+    if (flashcardStudyQueue.length > 0 && currentFlashcardIndex > 0) {
         currentFlashcardIndex--;
         isFlipped = false;
         document.querySelector('.flashcard').classList.remove('flipped');
@@ -2524,14 +3254,11 @@ function prevFlashcard() {
 }
 
 function nextFlashcard() {
-    if (currentDeck && flashcards[currentDeck] && currentFlashcardIndex < flashcards[currentDeck].length - 1) {
+    if (currentDeck && flashcards[currentDeck] && flashcardStudyQueue.length > 0 && currentFlashcardIndex < flashcardStudyQueue.length - 1) {
         currentFlashcardIndex++;
         isFlipped = false;
         document.querySelector('.flashcard').classList.remove('flipped');
         showFlashcard();
-        
-        weeklyStats.flashcardsReviewed++;
-        localStorage.setItem('weeklyStats', JSON.stringify(weeklyStats));
     }
 }
 
@@ -3547,16 +4274,59 @@ function deleteStudyMaterial(id) {
 }
 
 // ==================== FREE NOTES ====================
+function mergeFreeNotesForView() {
+    const merged = [];
+    const seen = new Set();
+
+    for (const note of sharedFreeNotes) {
+        if (!note || !note.id || seen.has(note.id)) continue;
+        seen.add(note.id);
+        merged.push({ ...note, isShared: true });
+    }
+
+    for (const note of freeNotesLibrary) {
+        if (!note || !note.id || seen.has(note.id)) continue;
+        seen.add(note.id);
+        merged.push({ ...note, isShared: false });
+    }
+
+    return merged;
+}
+
+async function fetchSharedFreeNotes(force = false) {
+    if (sharedFreeNotesLoading) return;
+    if (!force && sharedFreeNotesLoaded) return;
+    if (!isBackendFetchAllowed()) return;
+
+    sharedFreeNotesLoading = true;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/shared-notes`);
+        if (!response.ok) return;
+        const data = await response.json().catch(() => []);
+        sharedFreeNotes = Array.isArray(data) ? data : [];
+        sharedFreeNotesLoaded = true;
+        renderFreeNotes();
+    } catch (_) {
+        suspendBackendFetch(30000);
+    } finally {
+        sharedFreeNotesLoading = false;
+    }
+}
+
 function renderFreeNotes() {
     const list = document.getElementById('freeNotesList');
     const searchInput = document.getElementById('freeNotesSearchInput');
     const filterSelect = document.getElementById('freeNotesFilterSubject');
     if (!list) return;
+    if (!sharedFreeNotesLoaded) {
+        fetchSharedFreeNotes();
+    }
     if (searchInput) searchInput.value = freeNotesSearchQuery;
     if (filterSelect) filterSelect.value = freeNotesFilterSubject;
 
+    const notesForView = mergeFreeNotesForView();
     const query = freeNotesSearchQuery.trim().toLowerCase();
-    const filtered = freeNotesLibrary.filter(note => {
+    const filtered = notesForView.filter(note => {
         const subjectMatch = freeNotesFilterSubject === 'all' || note.subject === freeNotesFilterSubject;
         const queryMatch = !query
             || String(note.title || '').toLowerCase().includes(query)
@@ -3567,9 +4337,9 @@ function renderFreeNotes() {
     });
 
     if (filtered.length === 0) {
-        list.innerHTML = freeNotesLibrary.length === 0
-            ? '<li class="empty-state">No free notes available yet</li>'
-            : '<li class="empty-state">No free notes match your search</li>';
+        list.innerHTML = notesForView.length === 0
+            ? '<li class="empty-state">No notes available yet</li>'
+            : '<li class="empty-state">No notes match your search</li>';
         return;
     }
 
@@ -3581,14 +4351,12 @@ function renderFreeNotes() {
             </div>
             <div class="task-meta">
                 <span class="task-subject">${note.subject || 'General'}</span>
+                ${note.isShared ? '<span class="task-subject">Shared</span>' : ''}
             </div>
             <p class="assignment-desc">${String(note.content || '').slice(0, 220)}${String(note.content || '').length > 220 ? '...' : ''}</p>
             <div class="task-options">
-                <button class="action-btn" type="button" onclick="downloadFreeNote('${note.id}')">
-                    <i class="fas fa-download"></i> Download Free
-                </button>
-                <button class="action-btn" type="button" onclick="downloadFreeNotePDF('${note.id}')">
-                    <i class="fas fa-file-pdf"></i> Download PDF
+                <button class="action-btn" type="button" onclick="downloadNoteDoc('${note.id}')">
+                    <i class="fas fa-file-arrow-down"></i> Download DOC
                 </button>
                 <button class="delete-btn" onclick="deleteFreeNote('${note.id}')"><i class="fas fa-trash"></i></button>
             </div>
@@ -3608,7 +4376,7 @@ function filterFreeNotes() {
     renderFreeNotes();
 }
 
-function addFreeNote() {
+async function addFreeNote() {
     const title = document.getElementById('freeNoteTitleInput')?.value.trim();
     const subject = document.getElementById('freeNoteSubjectInput')?.value || 'General';
     const level = document.getElementById('freeNoteLevelInput')?.value.trim() || 'General';
@@ -3619,38 +4387,54 @@ function addFreeNote() {
         return;
     }
 
-    freeNotesLibrary.unshift({
+    const newNote = {
         id: `note-pack-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title,
         subject,
         level,
         content,
         createdAt: new Date().toISOString()
-    });
-    saveState({ freeNotesLibrary });
+    };
+
+    if (canManageSharedNotes()) {
+        let published = false;
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/shared-notes`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getBackendAuthHeaders()
+                },
+                body: JSON.stringify(newNote)
+            });
+            if (response.ok) {
+                const saved = await response.json().catch(() => null);
+                if (saved && saved.id) {
+                    sharedFreeNotes.unshift(saved);
+                    sharedFreeNotesLoaded = true;
+                    published = true;
+                    addActivity('file-circle-plus', 'Shared Note Published', title);
+                }
+            }
+        } catch (_) {}
+
+        if (!published) {
+            freeNotesLibrary.unshift(newNote);
+            saveState({ freeNotesLibrary });
+            addActivity('file-circle-plus', 'Note Added (Local)', title);
+            alert('Shared publish failed. Note saved only on this device/account.');
+        }
+    } else {
+        freeNotesLibrary.unshift(newNote);
+        saveState({ freeNotesLibrary });
+        addActivity('file-circle-plus', 'Note Added', title);
+    }
+
     renderFreeNotes();
-    addActivity('file-circle-plus', 'Free Note Added', title);
 
     document.getElementById('freeNoteTitleInput').value = '';
     document.getElementById('freeNoteLevelInput').value = '';
     document.getElementById('freeNoteContentInput').value = '';
-}
-
-function downloadFreeNote(noteId) {
-    const note = freeNotesLibrary.find(item => item.id === noteId);
-    if (!note) return;
-
-    const safeTitle = String(note.title || 'free-note').replace(/[^\w\-]+/g, '_').toLowerCase();
-    const content = `${note.title}\nSubject: ${note.subject}\nLevel: ${note.level}\n\n${note.content}`;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${safeTitle}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    addActivity('file-arrow-down', 'Free Note Downloaded', note.title);
 }
 
 function escapeHtml(text) {
@@ -3662,51 +4446,68 @@ function escapeHtml(text) {
         .replace(/'/g, "&#39;");
 }
 
-function downloadFreeNotePDF(noteId) {
-    const note = freeNotesLibrary.find(item => item.id === noteId);
+function downloadNoteDoc(noteId) {
+    const note = mergeFreeNotesForView().find(item => item.id === noteId);
     if (!note) return;
 
-    const printableTitle = escapeHtml(note.title || "Free Note");
-    const printableSubject = escapeHtml(note.subject || "General");
-    const printableLevel = escapeHtml(note.level || "General");
-    const printableContent = escapeHtml(note.content || "").replace(/\n/g, "<br>");
+    const safeTitle = String(note.title || 'note').replace(/[^\w\-]+/g, '_').toLowerCase();
+    const htmlDoc = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(note.title || "Note")}</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 32px; color: #1f2937; }
+    h1 { margin-bottom: 8px; color: #0f766e; }
+    .meta { margin-bottom: 16px; color: #475569; }
+    .content { line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(note.title || "Note")}</h1>
+  <div class="meta"><strong>Subject:</strong> ${escapeHtml(note.subject || "General")} | <strong>Level:</strong> ${escapeHtml(note.level || "General")}</div>
+  <div class="content">${escapeHtml(note.content || "").replace(/\n/g, "<br>")}</div>
+</body>
+</html>`;
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-        alert("Popup blocked. Please allow popups to export PDF.");
+    const blob = new Blob([htmlDoc], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safeTitle}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    addActivity('file-arrow-down', 'Note Document Downloaded', note.title);
+}
+
+async function deleteFreeNote(id) {
+    const target = mergeFreeNotesForView().find(note => note.id === id);
+    if (!target) return;
+
+    if (target.isShared) {
+        if (!canManageSharedNotes()) {
+            alert('Only teacher/admin can delete shared notes.');
+            return;
+        }
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/shared-notes/${encodeURIComponent(id)}`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getBackendAuthHeaders()
+                }
+            });
+            if (response.ok) {
+                sharedFreeNotes = sharedFreeNotes.filter(note => note.id !== id);
+                renderFreeNotes();
+                return;
+            }
+        } catch (_) {}
+        alert('Failed to delete shared note.');
         return;
     }
 
-    printWindow.document.write(`
-        <html>
-        <head>
-            <title>${printableTitle}</title>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 32px; color: #1f2937; }
-                h1 { margin-bottom: 8px; color: #0f766e; }
-                .meta { margin-bottom: 16px; color: #475569; }
-                .content { line-height: 1.6; white-space: normal; }
-            </style>
-        </head>
-        <body>
-            <h1>${printableTitle}</h1>
-            <div class="meta"><strong>Subject:</strong> ${printableSubject} | <strong>Level:</strong> ${printableLevel}</div>
-            <div class="content">${printableContent}</div>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-
-    setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-    }, 300);
-
-    addActivity('file-pdf', 'Free Note PDF Exported', note.title);
-}
-
-function deleteFreeNote(id) {
     freeNotesLibrary = freeNotesLibrary.filter(note => note.id !== id);
     saveState({ freeNotesLibrary });
     renderFreeNotes();
@@ -3759,11 +4560,6 @@ const quizQuestionBank = [
     { subject: "Programming", difficulty: "easy", question: "What does CSS stand for?", options: ["Computer Style Sheets", "Colorful Style Sheets", "Cascading Style Sheets", "Creative Style System"], answerIndex: 2 },
     { subject: "Programming", difficulty: "easy", question: "Which language runs in the browser?", options: ["Python", "Java", "JavaScript", "C++"], answerIndex: 2 },
     { subject: "Programming", difficulty: "easy", question: "Which symbol is used to assign a value in JS?", options: ["==", "=", "===", ":"], answerIndex: 1 },
-    { subject: "History", difficulty: "easy", question: "Who was the first President of the United States?", options: ["Abraham Lincoln", "John Adams", "George Washington", "Thomas Jefferson"], answerIndex: 2 },
-    { subject: "History", difficulty: "easy", question: "In which year did World War II end?", options: ["1944", "1945", "1946", "1947"], answerIndex: 1 },
-    { subject: "History", difficulty: "easy", question: "Who discovered America in 1492?", options: ["Marco Polo", "Christopher Columbus", "Vasco da Gama", "Ferdinand Magellan"], answerIndex: 1 },
-    { subject: "History", difficulty: "easy", question: "The Great Wall is in which country?", options: ["India", "Japan", "China", "Korea"], answerIndex: 2 },
-    { subject: "History", difficulty: "easy", question: "Which city was the capital of the Roman Empire?", options: ["Athens", "Rome", "Alexandria", "Sparta"], answerIndex: 1 },
     { subject: "Geography", difficulty: "easy", question: "What is the capital city of France?", options: ["Berlin", "Madrid", "Paris", "Rome"], answerIndex: 2 },
     { subject: "Geography", difficulty: "easy", question: "Which is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Arctic", "Pacific"], answerIndex: 3 },
     { subject: "Geography", difficulty: "easy", question: "Which continent is Brazil in?", options: ["Africa", "Europe", "South America", "Asia"], answerIndex: 2 },
@@ -3785,11 +4581,6 @@ const quizQuestionBank = [
     { subject: "Programming", difficulty: "medium", question: "Which loop is best for arrays in JS?", options: ["do...until", "for...of", "repeat", "goto"], answerIndex: 1 },
     { subject: "Programming", difficulty: "medium", question: "What does DOM stand for?", options: ["Data Object Model", "Document Object Model", "Digital Ordinance Model", "Document Oriented Module"], answerIndex: 1 },
     { subject: "Programming", difficulty: "medium", question: "Which array method adds item to end?", options: ["pop()", "shift()", "push()", "slice()"], answerIndex: 2 },
-    { subject: "History", difficulty: "medium", question: "Which civilization built pyramids of Giza?", options: ["Romans", "Greeks", "Egyptians", "Mayans"], answerIndex: 2 },
-    { subject: "History", difficulty: "medium", question: "The Renaissance began in which country?", options: ["France", "Italy", "Germany", "Spain"], answerIndex: 1 },
-    { subject: "History", difficulty: "medium", question: "Magna Carta was signed in which year?", options: ["1066", "1215", "1492", "1776"], answerIndex: 1 },
-    { subject: "History", difficulty: "medium", question: "Industrial Revolution first began in?", options: ["France", "Germany", "Britain", "USA"], answerIndex: 2 },
-    { subject: "History", difficulty: "medium", question: "Main rivals in Cold War were?", options: ["USA and USSR", "UK and France", "China and Japan", "India and Pakistan"], answerIndex: 0 },
     { subject: "Geography", difficulty: "medium", question: "Mount Everest is on Nepal border with?", options: ["Bhutan", "Tibet", "India", "Pakistan"], answerIndex: 1 },
     { subject: "Geography", difficulty: "medium", question: "Sahara Desert is in which continent?", options: ["Asia", "Africa", "Australia", "South America"], answerIndex: 1 },
     { subject: "Geography", difficulty: "medium", question: "Prime Meridian passes through which place?", options: ["Greenwich", "Paris", "Rome", "New York"], answerIndex: 0 },
@@ -3811,11 +4602,6 @@ const quizQuestionBank = [
     { subject: "Programming", difficulty: "hard", question: "Which method is immutable for arrays?", options: ["splice()", "push()", "slice()", "pop()"], answerIndex: 2 },
     { subject: "Programming", difficulty: "hard", question: "Which complexity is binary search?", options: ["O(n)", "O(log n)", "O(n^2)", "O(1)"], answerIndex: 1 },
     { subject: "Programming", difficulty: "hard", question: "In async JS, which waits for Promise result?", options: ["yield", "await", "defer", "pause"], answerIndex: 1 },
-    { subject: "History", difficulty: "hard", question: "Which treaty ended World War I?", options: ["Treaty of Paris", "Treaty of Versailles", "Treaty of Rome", "Treaty of Vienna"], answerIndex: 1 },
-    { subject: "History", difficulty: "hard", question: "Fall of Constantinople happened in?", options: ["1204", "1453", "1498", "1526"], answerIndex: 1 },
-    { subject: "History", difficulty: "hard", question: "French Revolution began in?", options: ["1688", "1776", "1789", "1815"], answerIndex: 2 },
-    { subject: "History", difficulty: "hard", question: "Who wrote 'The Prince'?", options: ["Plato", "Aristotle", "Machiavelli", "Socrates"], answerIndex: 2 },
-    { subject: "History", difficulty: "hard", question: "Which empire was ruled by Suleiman the Magnificent?", options: ["Roman", "Ottoman", "Mughal", "Byzantine"], answerIndex: 1 },
     { subject: "Geography", difficulty: "hard", question: "Which line roughly follows 180 deg longitude?", options: ["Prime Meridian", "Equator", "International Date Line", "Tropic of Capricorn"], answerIndex: 2 },
     { subject: "Geography", difficulty: "hard", question: "Which country has no natural rivers?", options: ["Egypt", "Saudi Arabia", "India", "Brazil"], answerIndex: 1 },
     { subject: "Geography", difficulty: "hard", question: "Which current causes mild climate in Western Europe?", options: ["Labrador Current", "Gulf Stream", "Canary Current", "Benguela Current"], answerIndex: 1 },
@@ -3823,16 +4609,22 @@ const quizQuestionBank = [
     { subject: "Geography", difficulty: "hard", question: "Which country is both in Europe and Asia?", options: ["Spain", "Turkey", "Portugal", "Norway"], answerIndex: 1 }
 ];
 
-const QUIZ_SUBJECTS = ["Math", "English", "Programming", "History", "Geography"];
+for (let i = quizQuestionBank.length - 1; i >= 0; i--) {
+    if (quizQuestionBank[i].subject === "Geography") {
+        quizQuestionBank.splice(i, 1);
+    }
+}
+
+const QUIZ_SUBJECTS = ["Math", "Science", "English", "Programming", "History"];
 const QUIZ_DIFFICULTIES = ["easy", "medium", "hard"];
 const QUIZ_MIN_PER_SUBJECT_DIFFICULTY = 25;
 
 const autoQuestionTopics = {
     Math: ["fractions", "percentages", "algebra", "geometry", "ratio", "number patterns", "equations", "integers", "probability", "measurement"],
+    Science: ["matter", "atoms", "force", "energy", "cells", "ecosystem", "electricity", "acids and bases", "motion", "reactions"],
     English: ["grammar", "vocabulary", "tenses", "punctuation", "synonyms", "antonyms", "reading comprehension", "sentence structure", "parts of speech", "spelling"],
     Programming: ["variables", "loops", "functions", "arrays", "objects", "debugging", "algorithms", "conditionals", "syntax", "data types"],
-    History: ["ancient civilizations", "world wars", "revolutions", "empires", "treaties", "important leaders", "timelines", "historical sources", "industrial era", "cold war"],
-    Geography: ["continents", "oceans", "landforms", "climate", "countries", "capitals", "maps", "coordinates", "rivers", "resources"]
+    History: ["ancient civilizations", "medieval period", "freedom movements", "world wars", "constitutions", "timelines", "sources", "reforms", "leaders", "historical interpretation"]
 };
 
 function createAutoQuizQuestion(subject, difficulty, idx) {
@@ -3842,14 +4634,7 @@ function createAutoQuizQuestion(subject, difficulty, idx) {
     const alt2 = topics[(idx + 2) % topics.length];
     const alt3 = topics[(idx + 3) % topics.length];
 
-    let stem = "";
-    if (difficulty === "easy") {
-        stem = `[${subject} Easy ${idx}] Which option is most related to "${mainTopic}"?`;
-    } else if (difficulty === "medium") {
-        stem = `[${subject} Medium ${idx}] In ${subject}, choose the best concept linked with "${mainTopic}".`;
-    } else {
-        stem = `[${subject} Hard ${idx}] Select the most accurate advanced concept for "${mainTopic}" in ${subject}.`;
-    }
+    const stem = `Which option is most related to "${mainTopic}"? (#${idx})`;
 
     return {
         subject,
@@ -3892,7 +4677,7 @@ let currentQuizSession = [];
 
 function generateQuizSession() {
     const subject = document.getElementById('quizSubject')?.value || 'Any';
-    const difficulty = document.getElementById('quizDifficulty')?.value || 'medium';
+    const difficulty = document.getElementById('quizDifficulty')?.value || 'mixed';
     const requestedCount = Math.max(5, Math.min(25, Number(document.getElementById('quizQuestionCount')?.value || 5)));
 
     const matchesDifficulty = (q) => difficulty === 'mixed' || q.difficulty === difficulty;
@@ -4404,7 +5189,7 @@ function importData(event) {
             const data = JSON.parse(e.target.result);
             if (data.tasks) tasks = normalizeTasks(data.tasks);
             if (data.notes) notes = data.notes;
-            if (data.flashcards) flashcards = data.flashcards;
+            if (data.flashcards) flashcards = normalizeFlashcards(data.flashcards);
             if (data.assignments) assignments = data.assignments;
             if (data.exams) exams = data.exams;
             if (data.subjects) subjects = data.subjects;
@@ -4577,6 +5362,7 @@ function bootstrapAuthenticatedApp() {
 
     loadTheme();
     setupNetworkStatusListeners();
+    setupPresenceLifecycleListeners();
     setupPWAInstall();
     registerServiceWorker();
     autoReplanMissedTasksOnNewDay();
@@ -4631,4 +5417,5 @@ document.addEventListener('DOMContentLoaded', () => {
     setupFirebaseAuthObserver();
     applyAuthState();
 });
+
 
