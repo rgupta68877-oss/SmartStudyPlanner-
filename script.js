@@ -544,6 +544,8 @@ const STORAGE_KEYS = {
     goals: "goals",
     goalRoadmap: "goalRoadmap",
     weakTopicStats: "weakTopicStats",
+    chapterTracker: "chapterTracker",
+    reflectionEntries: "reflectionEntries",
     timetableEntries: "timetableEntries",
     resources: "resources",
     studyMaterials: "studyMaterials",
@@ -593,6 +595,8 @@ const DEFAULT_STATE = {
         flashcardsReviewed: 0
     },
     weakTopicStats: {},
+    chapterTracker: [],
+    reflectionEntries: [],
     goals: {
         tasks: 20,
         studyHours: 10,
@@ -749,6 +753,43 @@ function normalizeWeakTopicStats(value) {
     return normalized;
 }
 
+function normalizeChapterTracker(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const status = String(normalized.status || "not-started");
+            const score = Number(normalized.testScore);
+            return {
+                id: normalized.id || `chapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                subject: String(normalized.subject || "General").trim() || "General",
+                chapter: String(normalized.chapter || "").trim(),
+                status: ["not-started", "in-progress", "done"].includes(status) ? status : "not-started",
+                testScore: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
+                createdAt: normalized.createdAt || new Date().toISOString()
+            };
+        })
+        .filter(item => item.chapter.length > 0);
+}
+
+function normalizeReflectionEntries(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const minutes = Number(normalized.minutes);
+            return {
+                id: normalized.id || `reflection-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                subject: String(normalized.subject || "General").trim() || "General",
+                learned: String(normalized.learned || "").trim(),
+                confusing: String(normalized.confusing || "").trim(),
+                minutes: Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0,
+                createdAt: normalized.createdAt || new Date().toISOString()
+            };
+        })
+        .filter(item => item.learned || item.confusing);
+}
+
 function normalizeFlashcardCard(card) {
     const normalized = card && typeof card === "object" ? card : {};
     const front = String(normalized.front || "").trim();
@@ -812,6 +853,8 @@ function loadState() {
         activityLog: parseStoredJSON(STORAGE_KEYS.activityLog, DEFAULT_STATE.activityLog),
         weeklyStats: parseStoredJSON(STORAGE_KEYS.weeklyStats, DEFAULT_STATE.weeklyStats),
         weakTopicStats: parseStoredJSON(STORAGE_KEYS.weakTopicStats, DEFAULT_STATE.weakTopicStats),
+        chapterTracker: parseStoredJSON(STORAGE_KEYS.chapterTracker, DEFAULT_STATE.chapterTracker),
+        reflectionEntries: parseStoredJSON(STORAGE_KEYS.reflectionEntries, DEFAULT_STATE.reflectionEntries),
         goals: parseStoredJSON(STORAGE_KEYS.goals, DEFAULT_STATE.goals),
         goalRoadmap: parseStoredJSON(STORAGE_KEYS.goalRoadmap, DEFAULT_STATE.goalRoadmap),
         timetableEntries: parseStoredJSON(STORAGE_KEYS.timetableEntries, DEFAULT_STATE.timetableEntries),
@@ -837,6 +880,8 @@ function loadState() {
         pomodoroSessions: normalizePomodoroSessions(loaded.pomodoroSessions),
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
         weakTopicStats: normalizeWeakTopicStats(loaded.weakTopicStats),
+        chapterTracker: normalizeChapterTracker(loaded.chapterTracker),
+        reflectionEntries: normalizeReflectionEntries(loaded.reflectionEntries),
         goals: { ...DEFAULT_STATE.goals, ...(loaded.goals || {}) },
         goalRoadmap: normalizeGoalRoadmap(loaded.goalRoadmap),
         timetableEntries: Array.isArray(loaded.timetableEntries) ? loaded.timetableEntries : [],
@@ -897,6 +942,8 @@ let studyStreak = initialState.studyStreak;
 let bestStreak = initialState.bestStreak;
 let weeklyStats = initialState.weeklyStats;
 let weakTopicStats = initialState.weakTopicStats;
+let chapterTracker = initialState.chapterTracker;
+let reflectionEntries = initialState.reflectionEntries;
 let goals = initialState.goals;
 let goalRoadmap = initialState.goalRoadmap;
 let timetableEntries = initialState.timetableEntries;
@@ -1372,6 +1419,8 @@ function getCloudStatePayload() {
         activityLog,
         weeklyStats,
         weakTopicStats,
+        chapterTracker,
+        reflectionEntries,
         studyStreak,
         bestStreak,
         goals,
@@ -1404,6 +1453,8 @@ function resetUserScopedStateToDefaults() {
     activityLog = Array.isArray(DEFAULT_STATE.activityLog) ? [...DEFAULT_STATE.activityLog] : [];
     weeklyStats = { ...DEFAULT_STATE.weeklyStats };
     weakTopicStats = { ...DEFAULT_STATE.weakTopicStats };
+    chapterTracker = Array.isArray(DEFAULT_STATE.chapterTracker) ? [...DEFAULT_STATE.chapterTracker] : [];
+    reflectionEntries = Array.isArray(DEFAULT_STATE.reflectionEntries) ? [...DEFAULT_STATE.reflectionEntries] : [];
     goals = { ...DEFAULT_STATE.goals };
     goalRoadmap = { ...DEFAULT_STATE.goalRoadmap };
     timetableEntries = Array.isArray(DEFAULT_STATE.timetableEntries) ? [...DEFAULT_STATE.timetableEntries] : [];
@@ -1429,6 +1480,8 @@ function resetUserScopedStateToDefaults() {
         activityLog,
         weeklyStats,
         weakTopicStats,
+        chapterTracker,
+        reflectionEntries,
         studyStreak,
         bestStreak,
         goals,
@@ -1459,6 +1512,8 @@ function applyCloudState(data) {
         if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
         if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
         if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
+        if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
+        if (Array.isArray(data.reflectionEntries)) reflectionEntries = normalizeReflectionEntries(data.reflectionEntries);
         if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
         if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
         if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
@@ -1484,6 +1539,8 @@ function applyCloudState(data) {
             activityLog,
             weeklyStats,
             weakTopicStats,
+            chapterTracker,
+            reflectionEntries,
             studyStreak,
             bestStreak,
             goals,
@@ -2815,7 +2872,7 @@ function renderTodayPlan() {
     list.innerHTML = dailyPlan.items.map(item => `
         <li>
             <strong>${item.text}</strong>
-            <span>${item.subject} • ${item.allocatedMinutes} min • Score ${item.score}</span>
+            <span>${item.subject} | ${item.allocatedMinutes} min | Score ${item.score}</span>
         </li>
     `).join('');
 }
@@ -2832,6 +2889,52 @@ function generateTodayPlan() {
     saveState({ dailyPlan });
     renderTodayPlan();
     addActivity('calendar-day', 'Daily Plan Generated', `${dailyPlan.items.length} study blocks created`);
+}
+
+function generateTodayOnlyMode() {
+    const input = document.getElementById('planHoursToday');
+    const availableHours = Number(input && input.value ? input.value : 2);
+    const availableMinutes = Math.max(60, Math.round(availableHours * 60));
+    const ranked = rankTasks(tasks.filter(task => !task.done), {
+        now: new Date(),
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
+    }).slice(0, 3);
+
+    if (ranked.length === 0) {
+        alert('No pending tasks to plan today.');
+        return;
+    }
+
+    const perTaskMinutes = Math.max(20, Math.round(availableMinutes / ranked.length));
+    const items = ranked.map(task => ({
+        taskId: task.id,
+        text: task.text,
+        subject: task.subject || 'General',
+        allocatedMinutes: perTaskMinutes,
+        score: scoreTask(task, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams })
+    }));
+
+    const weakest = getWeakTopics(1)[0];
+    if (weakest) {
+        items.push({
+            taskId: '',
+            text: `Weak-topic practice: ${weakest.topic}`,
+            subject: weakest.subject || 'General',
+            allocatedMinutes: 20,
+            score: 99
+        });
+    }
+
+    dailyPlan = {
+        date: new Date().toISOString().split('T')[0],
+        items,
+        availableHours,
+        mode: 'today-only'
+    };
+    saveState({ dailyPlan });
+    renderTodayPlan();
+    addActivity('list-check', 'Today Only Mode', `${Math.min(3, ranked.length)} task(s) + focused revision`);
 }
 
 function getUnfinishedPlannedTaskIds(plan) {
@@ -3699,7 +3802,7 @@ function renderFlashcards() {
             <div class="deck-card" onclick="selectDeck('${deck}')">
                 <i class="fas fa-layer-group"></i>
                 <h4>${deck}</h4>
-                <p>${flashcards[deck].length} cards • ${getDueFlashcardIndexes(deck).length} due</p>
+                <p>${flashcards[deck].length} cards | ${getDueFlashcardIndexes(deck).length} due</p>
             </div>
         `).join('');
     }
@@ -4570,6 +4673,86 @@ function renderAnalytics() {
     document.getElementById('scoreFill').style.width = score + '%';
 
     renderAnalyticsCharts(completed, pending);
+    renderParentReportSummary();
+}
+
+function buildParentReportData(daysBack = 7) {
+    const since = new Date();
+    since.setDate(since.getDate() - Math.max(1, Number(daysBack) || 7));
+    since.setHours(0, 0, 0, 0);
+
+    const completedTasks = tasks.filter(task => task.done && new Date(task.createdAt || 0) >= since).length;
+    const focusMinutes = pomodoroSessions
+        .filter(session => session.type === 'Focus')
+        .filter(session => new Date(session.date) >= since)
+        .reduce((sum, session) => sum + (Number(session.minutes) || 0), 0);
+    const weakTopics = getWeakTopics(3);
+
+    return {
+        from: since,
+        to: new Date(),
+        completedTasks,
+        studyHours: Math.round((focusMinutes / 60) * 10) / 10,
+        weakTopics
+    };
+}
+
+function getParentReportText() {
+    const data = buildParentReportData(7);
+    const dateRange = `${data.from.toLocaleDateString()} - ${data.to.toLocaleDateString()}`;
+    const weakLine = data.weakTopics.length === 0
+        ? 'No major weak topics identified this week.'
+        : `Needs attention: ${data.weakTopics.map(item => `${item.subject} - ${item.topic}`).join(', ')}`;
+    return [
+        `Weekly Parent Report (${dateRange})`,
+        `Tasks completed: ${data.completedTasks}`,
+        `Focused study time: ${data.studyHours} hours`,
+        weakLine
+    ].join('\n');
+}
+
+function renderParentReportSummary() {
+    const el = document.getElementById('parentReportSummary');
+    if (!el) return;
+    const data = buildParentReportData(7);
+    const weakLine = data.weakTopics.length === 0
+        ? 'No major weak topics identified.'
+        : `Weak topics: ${data.weakTopics.map(item => `${item.subject} - ${item.topic}`).join(', ')}`;
+    el.textContent = `Last 7 days: ${data.completedTasks} tasks done, ${data.studyHours} focused hours. ${weakLine}`;
+}
+
+function generateParentReport() {
+    renderParentReportSummary();
+    addActivity('users', 'Parent Report Generated', 'Weekly summary prepared');
+    alert('Weekly parent report generated.');
+}
+
+function printParentReport() {
+    const text = getParentReportText()
+        .split('\n')
+        .map(line => `<p>${line}</p>`)
+        .join('');
+    openPrintWindow(`<h1>Parent Report</h1>${text}`);
+}
+
+async function copyParentReport() {
+    const text = getParentReportText();
+    try {
+        await navigator.clipboard.writeText(text);
+        alert('Parent report copied.');
+    } catch (_) {
+        alert('Copy failed. Please allow clipboard access.');
+    }
+}
+
+function shareParentReportWhatsApp() {
+    const text = getParentReportText();
+    const encoded = encodeURIComponent(text);
+    const url = `https://wa.me/?text=${encoded}`;
+    const opened = window.open(url, '_blank');
+    if (!opened) {
+        alert('Popup blocked. Please allow popups to share via WhatsApp.');
+    }
 }
 
 // ==================== SUBJECTS ====================
@@ -5734,6 +5917,8 @@ function renderPomodoroHistory() {
             <span>${(Math.round((item.minutes / 60) * 10) / 10)}h | ${item.sessions} sessions</span>
         </li>
     `).join('');
+
+    renderReflectionHistory();
 }
 
 // ==================== GOALS ====================
@@ -5960,6 +6145,248 @@ function createTasksFromGoalRoadmap() {
     alert(`${created} roadmap task(s) created.`);
 }
 
+function renderChapterTracker() {
+    const list = document.getElementById('chapterTrackerList');
+    const progressList = document.getElementById('chapterTrackerProgressList');
+    if (!list) return;
+
+    if (!Array.isArray(chapterTracker) || chapterTracker.length === 0) {
+        if (progressList) {
+            progressList.innerHTML = '<li class="empty-state">Subject progress will appear after adding chapters.</li>';
+        }
+        list.innerHTML = '<li class="empty-state">No chapters added yet</li>';
+        return;
+    }
+
+    const statusLabel = {
+        'not-started': 'Not Started',
+        'in-progress': 'In Progress',
+        'done': 'Done'
+    };
+
+    if (progressList) {
+        const bySubject = new Map();
+        chapterTracker.forEach(item => {
+            const subject = item.subject || 'General';
+            const current = bySubject.get(subject) || { subject, total: 0, done: 0, scoreSum: 0, scoreCount: 0 };
+            current.total += 1;
+            if (item.status === 'done') current.done += 1;
+            if (Number.isFinite(item.testScore)) {
+                current.scoreSum += item.testScore;
+                current.scoreCount += 1;
+            }
+            bySubject.set(subject, current);
+        });
+
+        const subjectRows = [...bySubject.values()]
+            .sort((a, b) => a.subject.localeCompare(b.subject))
+            .map(item => {
+                const completion = item.total > 0 ? Math.round((item.done / item.total) * 100) : 0;
+                const avgScore = item.scoreCount > 0 ? Math.round(item.scoreSum / item.scoreCount) : null;
+                return `
+                    <li class="chapter-progress-item">
+                        <div class="chapter-progress-head">
+                            <strong>${item.subject}</strong>
+                            <span>${item.done}/${item.total} done${avgScore !== null ? ` | Avg score ${avgScore}%` : ''}</span>
+                        </div>
+                        <div class="goal-bar-large">
+                            <div class="goal-fill-large" style="width:${completion}%"></div>
+                        </div>
+                    </li>
+                `;
+            });
+        progressList.innerHTML = subjectRows.join('');
+    }
+
+    list.innerHTML = chapterTracker.map(item => `
+        <li>
+            <strong>${item.subject}: ${item.chapter}</strong>
+            <span>${statusLabel[item.status] || 'Not Started'} | Test score: ${Number.isFinite(item.testScore) ? `${item.testScore}%` : 'N/A'}</span>
+            <div class="task-options">
+                <select onchange="updateChapterStatus('${item.id}', this.value)">
+                    <option value="not-started" ${item.status === 'not-started' ? 'selected' : ''}>Not Started</option>
+                    <option value="in-progress" ${item.status === 'in-progress' ? 'selected' : ''}>In Progress</option>
+                    <option value="done" ${item.status === 'done' ? 'selected' : ''}>Done</option>
+                </select>
+                <input type="number" min="0" max="100" value="${Number.isFinite(item.testScore) ? item.testScore : ''}" placeholder="Score %" onchange="updateChapterScore('${item.id}', this.value)">
+                <button class="delete-btn" onclick="deleteChapterTrackerEntry('${item.id}')"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('');
+}
+
+function addChapterTrackerEntry() {
+    const subjectInput = document.getElementById('chapterSubjectInput');
+    const chapterInput = document.getElementById('chapterNameInput');
+    const statusInput = document.getElementById('chapterStatusInput');
+    const scoreInput = document.getElementById('chapterScoreInput');
+
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
+    const chapter = String(chapterInput && chapterInput.value ? chapterInput.value : '').trim();
+    const status = String(statusInput && statusInput.value ? statusInput.value : 'not-started');
+    const score = Number(scoreInput && scoreInput.value ? scoreInput.value : NaN);
+
+    if (!chapter) {
+        alert('Please enter a chapter name.');
+        return;
+    }
+
+    chapterTracker.unshift({
+        id: `chapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        subject,
+        chapter,
+        status: ['not-started', 'in-progress', 'done'].includes(status) ? status : 'not-started',
+        testScore: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
+        createdAt: new Date().toISOString()
+    });
+    saveState({ chapterTracker });
+    renderChapterTracker();
+    if (chapterInput) chapterInput.value = '';
+    if (scoreInput) scoreInput.value = '';
+}
+
+function updateChapterStatus(id, status) {
+    const idx = chapterTracker.findIndex(item => item.id === id);
+    if (idx < 0) return;
+    chapterTracker[idx].status = ['not-started', 'in-progress', 'done'].includes(status) ? status : 'not-started';
+    saveState({ chapterTracker });
+    renderChapterTracker();
+}
+
+function updateChapterScore(id, scoreValue) {
+    const idx = chapterTracker.findIndex(item => item.id === id);
+    if (idx < 0) return;
+    const score = Number(scoreValue);
+    chapterTracker[idx].testScore = Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null;
+    saveState({ chapterTracker });
+    renderChapterTracker();
+}
+
+function deleteChapterTrackerEntry(id) {
+    chapterTracker = chapterTracker.filter(item => item.id !== id);
+    saveState({ chapterTracker });
+    renderChapterTracker();
+}
+
+function createRevisionTemplatePlan() {
+    const gradeInput = document.getElementById('revisionTemplateGrade');
+    const subjectInput = document.getElementById('revisionTemplateSubject');
+    const previewList = document.getElementById('revisionTemplatePreviewList');
+
+    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : '10');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const topicsBySubject = {
+        Math: ['Core concepts', 'Worked examples', 'Timed practice', 'Mock test and error revision'],
+        Science: ['Concept revision', 'Diagrams + definitions', 'Numerical/application practice', 'Mock test and recap'],
+        English: ['Reading + grammar', 'Writing formats', 'Literature revision', 'Sample paper practice'],
+        History: ['Timeline revision', 'Key events and causes', 'Long-answer structure', 'Mock test and recap']
+    };
+    const topics = topicsBySubject[subject] || topicsBySubject.Math;
+
+    const createdTasks = [];
+    for (let week = 1; week <= 4; week++) {
+        const text = `Grade ${grade} ${subject} Revision Week ${week}: ${topics[week - 1]}`;
+        const exists = tasks.some(task => String(task.text || '').trim() === text);
+        if (exists) continue;
+        const due = new Date();
+        due.setDate(due.getDate() + (week * 7) - 1);
+        const task = {
+            id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            subject,
+            priority: week >= 3 ? 'high' : 'medium',
+            difficulty: week >= 3 ? 'hard' : 'medium',
+            examWeight: 4,
+            estimatedHours: 1.5,
+            dueDate: due.toISOString().split('T')[0],
+            done: false,
+            createdAt: new Date().toISOString()
+        };
+        tasks.push(normalizeTask(task));
+        createdTasks.push(task);
+    }
+
+    if (createdTasks.length === 0) {
+        if (previewList) previewList.innerHTML = '<li class="empty-state">Revision tasks already exist for this selection.</li>';
+        alert('Revision tasks already exist for this grade and subject.');
+        return;
+    }
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('calendar-check', 'Revision Template Created', `${createdTasks.length} tasks for Grade ${grade} ${subject}`);
+
+    if (previewList) {
+        previewList.innerHTML = createdTasks.map(task => `
+            <li>
+                <strong>${task.text}</strong>
+                <span>Due: ${task.dueDate}</span>
+            </li>
+        `).join('');
+    }
+}
+
+function renderReflectionHistory() {
+    const list = document.getElementById('reflectionHistoryList');
+    if (!list) return;
+    if (!Array.isArray(reflectionEntries) || reflectionEntries.length === 0) {
+        list.innerHTML = '<li class="empty-state">No reflections yet</li>';
+        return;
+    }
+    list.innerHTML = reflectionEntries.slice(0, 12).map(item => `
+        <li>
+            <strong>${item.subject} | ${item.minutes} min</strong>
+            <span>Learned: ${item.learned || '-'} | Confusing: ${item.confusing || '-'}</span>
+        </li>
+    `).join('');
+}
+
+function openReflectionCheckin(context = {}) {
+    const modal = document.getElementById('reflectionModal');
+    if (!modal) return;
+    const subjectInput = document.getElementById('reflectionSubjectInput');
+    const minutesInput = document.getElementById('reflectionSessionMinutesInput');
+    const learnedInput = document.getElementById('reflectionLearnedInput');
+    const confusingInput = document.getElementById('reflectionConfusingInput');
+    if (subjectInput) subjectInput.value = String(context.subject || 'General');
+    if (minutesInput) minutesInput.value = String(Number(context.minutes) || 0);
+    if (learnedInput) learnedInput.value = '';
+    if (confusingInput) confusingInput.value = '';
+    modal.classList.add('active');
+}
+
+function closeReflectionCheckin() {
+    const modal = document.getElementById('reflectionModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+}
+
+function saveReflectionCheckin() {
+    const subject = String(document.getElementById('reflectionSubjectInput')?.value || 'General').trim() || 'General';
+    const minutes = Number(document.getElementById('reflectionSessionMinutesInput')?.value || 0);
+    const learned = String(document.getElementById('reflectionLearnedInput')?.value || '').trim();
+    const confusing = String(document.getElementById('reflectionConfusingInput')?.value || '').trim();
+
+    if (!learned && !confusing) {
+        alert('Please add at least one reflection point.');
+        return;
+    }
+
+    reflectionEntries.unshift({
+        id: `reflection-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        subject,
+        minutes: Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0,
+        learned,
+        confusing,
+        createdAt: new Date().toISOString()
+    });
+    saveState({ reflectionEntries });
+    closeReflectionCheckin();
+    renderReflectionHistory();
+    addActivity('pen', 'Reflection Saved', `${subject} study reflection logged`);
+}
+
 function renderGoals() {
     document.getElementById('goalTasks').value = goals.tasks;
     document.getElementById('goalStudyHours').value = goals.studyHours;
@@ -5976,6 +6403,7 @@ function renderGoals() {
     document.getElementById('goalFlashcardsFill').style.width = flashcardPercent + '%';
     document.getElementById('goalFlashcardsProgress').textContent = `${weeklyStats.flashcardsReviewed} / ${goals.flashcards}`;
     renderGoalRoadmap();
+    renderChapterTracker();
 }
 
 function saveGoals() {
@@ -6048,8 +6476,12 @@ function startTimer() {
                 renderPomodoroHistory();
                 renderDashboard();
                 renderAnalytics();
-                
-                alert('Timer complete! Take a break!');
+
+                if (type === 'Focus') {
+                    openReflectionCheckin({ subject, minutes: sessionMinutes });
+                } else {
+                    alert('Timer complete! Take a break!');
+                }
                 document.getElementById('startBtn').disabled = false;
                 document.getElementById('pauseBtn').disabled = true;
                 return;
@@ -6167,6 +6599,8 @@ function exportData() {
         activityLog,
         weeklyStats,
         weakTopicStats,
+        chapterTracker,
+        reflectionEntries,
         studyStreak,
         bestStreak,
         goals,
@@ -6213,6 +6647,8 @@ function importData(event) {
             if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
             if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
             if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
+            if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
+            if (Array.isArray(data.reflectionEntries)) reflectionEntries = normalizeReflectionEntries(data.reflectionEntries);
             if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
             if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
             if (data.goals) goals = { ...DEFAULT_STATE.goals, ...data.goals };
@@ -6239,6 +6675,8 @@ function importData(event) {
                 activityLog,
                 weeklyStats,
                 weakTopicStats,
+                chapterTracker,
+                reflectionEntries,
                 studyStreak,
                 bestStreak,
                 goals,
@@ -6449,7 +6887,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    const reflectionModal = document.getElementById('reflectionModal');
+    if (reflectionModal) {
+        reflectionModal.addEventListener('click', (event) => {
+            if (event.target === reflectionModal) {
+                closeReflectionCheckin();
+            }
+        });
+    }
 });
+
+
 
 
 

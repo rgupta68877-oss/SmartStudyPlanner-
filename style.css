@@ -1356,6 +1356,23 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
+.chapter-progress-list {
+    margin: 12px 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+.chapter-progress-item {
+    margin-bottom: 10px;
+}
+
+.chapter-progress-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
 body.compact-mode .card {
     padding: 16px;
 }

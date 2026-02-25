@@ -327,6 +327,9 @@
                 <button class="action-btn" onclick="replanMissedTasks()">
                     <i class="fas fa-rotate-right"></i> Replan Missed Tasks
                 </button>
+                <button class="action-btn" onclick="generateTodayOnlyMode()">
+                    <i class="fas fa-list-check"></i> Today Only Mode
+                </button>
                 <ul id="todayPlanList">
                     <li class="empty-state">No plan generated yet</li>
                 </ul>
@@ -629,6 +632,23 @@
                 <p id="weeklyReportText">Weekly report will appear here.</p>
                 <p id="monthlyReportText">Monthly report will appear here.</p>
             </div>
+
+            <div class="card analytics-card">
+                <h3><i class="fas fa-users"></i> Parent Report Mode</h3>
+                <p id="parentReportSummary">Generate a weekly parent report with key study metrics.</p>
+                <button class="add-btn" onclick="generateParentReport()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Generate Weekly Parent Report
+                </button>
+                <button class="action-btn" onclick="printParentReport()">
+                    <i class="fas fa-print"></i> Print / Save as PDF
+                </button>
+                <button class="action-btn" onclick="copyParentReport()">
+                    <i class="fas fa-share-nodes"></i> Copy Share Text
+                </button>
+                <button class="action-btn" onclick="shareParentReportWhatsApp()">
+                    <i class="fab fa-whatsapp"></i> Share on WhatsApp
+                </button>
+            </div>
         </div>
 
         <!-- QUIZ PAGE -->
@@ -855,6 +875,16 @@
                     <li class="empty-state">No focus sessions by subject yet</li>
                 </ul>
             </div>
+
+            <div class="card pomodoro-history">
+                <h3><i class="fas fa-pen"></i> Reflection Check-ins</h3>
+                <button class="action-btn" onclick="openReflectionCheckin()">
+                    <i class="fas fa-plus"></i> Add Reflection
+                </button>
+                <ul id="reflectionHistoryList">
+                    <li class="empty-state">No reflections yet</li>
+                </ul>
+            </div>
         </div>
 
         <!-- GOALS PAGE -->
@@ -893,6 +923,55 @@
                 <p id="goalRoadmapSummary">No roadmap generated yet.</p>
                 <ul id="goalRoadmapList">
                     <li class="empty-state">Add a goal statement to generate your roadmap</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-book-open"></i> Chapter / Syllabus Tracker</h3>
+                <div class="task-options">
+                    <input type="text" id="chapterSubjectInput" placeholder="Subject (e.g., Math)">
+                    <input type="text" id="chapterNameInput" placeholder="Chapter / Topic name">
+                </div>
+                <div class="task-options">
+                    <select id="chapterStatusInput">
+                        <option value="not-started">Not Started</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="done">Done</option>
+                    </select>
+                    <input type="number" id="chapterScoreInput" min="0" max="100" placeholder="Test score % (optional)">
+                </div>
+                <button class="add-btn" onclick="addChapterTrackerEntry()">
+                    <i class="fas fa-plus"></i> Add Chapter
+                </button>
+                <ul id="chapterTrackerProgressList" class="chapter-progress-list">
+                    <li class="empty-state">Subject progress will appear after adding chapters.</li>
+                </ul>
+                <ul id="chapterTrackerList">
+                    <li class="empty-state">No chapters added yet</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-calendar-check"></i> Exam Revision Templates</h3>
+                <div class="task-options">
+                    <select id="revisionTemplateGrade">
+                        <option value="7">Grade 7</option>
+                        <option value="8">Grade 8</option>
+                        <option value="9">Grade 9</option>
+                        <option value="10">Grade 10</option>
+                    </select>
+                    <select id="revisionTemplateSubject">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                    </select>
+                </div>
+                <button class="add-btn" onclick="createRevisionTemplatePlan()">
+                    <i class="fas fa-list-check"></i> Create 4-Week Revision Plan Tasks
+                </button>
+                <ul id="revisionTemplatePreviewList">
+                    <li class="empty-state">Select grade and subject to generate weekly revision tasks.</li>
                 </ul>
             </div>
 
@@ -1045,6 +1124,29 @@
             </div>
         </div>
     </main>
+</div>
+
+<!-- Reflection Check-in Modal -->
+<div class="modal" id="reflectionModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Reflection Check-in</h3>
+            <button class="modal-close" onclick="closeReflectionCheckin()">&times;</button>
+        </div>
+        <input type="hidden" id="reflectionSubjectInput" value="General">
+        <input type="hidden" id="reflectionSessionMinutesInput" value="0">
+        <div class="goal-setting">
+            <label for="reflectionLearnedInput">What did I learn?</label>
+            <textarea id="reflectionLearnedInput" rows="3" placeholder="Write 1-2 points"></textarea>
+        </div>
+        <div class="goal-setting">
+            <label for="reflectionConfusingInput">What is still confusing?</label>
+            <textarea id="reflectionConfusingInput" rows="3" placeholder="Write 1 point to revisit"></textarea>
+        </div>
+        <button class="add-btn" onclick="saveReflectionCheckin()">
+            <i class="fas fa-save"></i> Save Reflection
+        </button>
+    </div>
 </div>
 
 <!-- Flashcard Editor Modal -->
