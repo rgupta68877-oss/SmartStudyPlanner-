@@ -668,14 +668,18 @@ function normalizeTask(task) {
     const parsedEstimatedHours = Number(normalized.estimatedHours);
     const parsedExamWeight = Number(normalized.examWeight);
     const difficulty = normalized.difficulty || "medium";
+    const done = Boolean(normalized.done);
+    const createdAt = normalized.createdAt || new Date().toISOString();
+    const doneAtRaw = normalized.doneAt || "";
     return {
         id: normalized.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         text: String(normalized.text || normalized.title || "").trim(),
         subject: normalized.subject || "",
         priority: ["low", "medium", "high"].includes(normalized.priority) ? normalized.priority : "medium",
         dueDate: normalized.dueDate || "",
-        done: Boolean(normalized.done),
-        createdAt: normalized.createdAt || new Date().toISOString(),
+        done,
+        createdAt,
+        doneAt: done ? (doneAtRaw || createdAt) : "",
         estimatedHours: Number.isFinite(parsedEstimatedHours) && parsedEstimatedHours > 0 ? parsedEstimatedHours : 1,
         difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "medium",
         examWeight: Number.isFinite(parsedExamWeight) ? Math.min(5, Math.max(1, Math.round(parsedExamWeight))) : 3
@@ -963,6 +967,8 @@ let timerMinutes = 25;
 let timerSeconds = 0;
 let isTimerRunning = false;
 let timerModeMinutes = 25;
+let pendingReflectionRequired = false;
+let pendingReflectionContext = { subject: "General", minutes: 0 };
 let pomodoroSubjectFilter = "all";
 let reminderIntervalId = null;
 let deferredInstallPrompt = null;
@@ -2856,6 +2862,7 @@ function renderWeakTopicDetection() {
 function renderTodayPlan() {
     const list = document.getElementById('todayPlanList');
     const hoursInput = document.getElementById('planHoursToday');
+    const todayOnlyActions = document.getElementById('todayOnlyTimerActions');
     if (!list) return;
 
     if (hoursInput) {
@@ -2866,6 +2873,7 @@ function renderTodayPlan() {
     const today = new Date().toISOString().split('T')[0];
     if (!dailyPlan.items || dailyPlan.items.length === 0 || dailyPlan.date !== today) {
         list.innerHTML = '<li class="empty-state">No plan generated yet</li>';
+        if (todayOnlyActions) todayOnlyActions.innerHTML = '';
         return;
     }
 
@@ -2875,6 +2883,19 @@ function renderTodayPlan() {
             <span>${item.subject} | ${item.allocatedMinutes} min | Score ${item.score}</span>
         </li>
     `).join('');
+
+    if (todayOnlyActions) {
+        if (dailyPlan.mode === 'today-only') {
+            const subject = String(dailyPlan.focusSubject || 'General');
+            todayOnlyActions.innerHTML = `
+                <button class="action-btn" onclick="startTodayOnlyFocusTimer()">
+                    <i class="fas fa-play"></i> Start 25-min Focus Timer (${subject})
+                </button>
+            `;
+        } else {
+            todayOnlyActions.innerHTML = '';
+        }
+    }
 }
 
 function generateTodayPlan() {
@@ -2899,15 +2920,21 @@ function generateTodayOnlyMode() {
         now: new Date(),
         weakSubjects: smartSettings.weakSubjects || [],
         exams
-    }).slice(0, 3);
+    });
+    const weakest = getWeakTopics(1)[0];
 
-    if (ranked.length === 0) {
+    const maxItems = 3;
+    const reservedForWeak = weakest ? 1 : 0;
+    const maxTaskItems = Math.max(1, maxItems - reservedForWeak);
+    const selectedTasks = ranked.slice(0, maxTaskItems);
+
+    if (selectedTasks.length === 0) {
         alert('No pending tasks to plan today.');
         return;
     }
 
-    const perTaskMinutes = Math.max(20, Math.round(availableMinutes / ranked.length));
-    const items = ranked.map(task => ({
+    const perTaskMinutes = Math.max(20, Math.round(availableMinutes / maxItems));
+    const items = selectedTasks.map(task => ({
         taskId: task.id,
         text: task.text,
         subject: task.subject || 'General',
@@ -2915,7 +2942,6 @@ function generateTodayOnlyMode() {
         score: scoreTask(task, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams })
     }));
 
-    const weakest = getWeakTopics(1)[0];
     if (weakest) {
         items.push({
             taskId: '',
@@ -2926,15 +2952,29 @@ function generateTodayOnlyMode() {
         });
     }
 
+    const focusSubject = (selectedTasks.find(item => String(item.subject || '').trim()) || selectedTasks[0] || {}).subject || 'General';
     dailyPlan = {
         date: new Date().toISOString().split('T')[0],
         items,
         availableHours,
-        mode: 'today-only'
+        mode: 'today-only',
+        focusSubject
     };
     saveState({ dailyPlan });
     renderTodayPlan();
-    addActivity('list-check', 'Today Only Mode', `${Math.min(3, ranked.length)} task(s) + focused revision`);
+    addActivity('list-check', 'Today Only Mode', `${items.length} blocks prepared (max 3)`);
+}
+
+function startTodayOnlyFocusTimer() {
+    const subject = String((dailyPlan && dailyPlan.focusSubject) || 'General');
+    const subjectSelect = document.getElementById('timerSubjectSelect');
+    if (subjectSelect) {
+        const optionValues = Array.from(subjectSelect.options).map(opt => opt.value);
+        subjectSelect.value = optionValues.includes(subject) ? subject : 'General';
+    }
+    setTimerMode(25);
+    navigateTo('dashboard');
+    if (!isTimerRunning) startTimer();
 }
 
 function getUnfinishedPlannedTaskIds(plan) {
@@ -3254,6 +3294,7 @@ function addTask() {
         estimatedHours: Math.max(0.5, Number(estimatedHoursInput && estimatedHoursInput.value ? estimatedHoursInput.value : 1)),
         dueDate: dueDate.value,
         done: false,
+        doneAt: "",
         createdAt: new Date().toISOString()
     });
     
@@ -3275,6 +3316,7 @@ function addTask() {
 function toggleTask(index) {
     const wasDone = tasks[index].done;
     tasks[index].done = !tasks[index].done;
+    tasks[index].doneAt = tasks[index].done ? new Date().toISOString() : "";
     if (tasks[index].done) selectedTaskIds.delete(tasks[index].id);
     saveTasks();
     renderTasks();
@@ -3372,7 +3414,7 @@ function completeSelectedTasks() {
     tasks = tasks.map(task => {
         if (selectedIds.has(task.id) && !task.done) {
             completedCount++;
-            return { ...task, done: true };
+            return { ...task, done: true, doneAt: new Date().toISOString() };
         }
         return task;
     });
@@ -4681,7 +4723,11 @@ function buildParentReportData(daysBack = 7) {
     since.setDate(since.getDate() - Math.max(1, Number(daysBack) || 7));
     since.setHours(0, 0, 0, 0);
 
-    const completedTasks = tasks.filter(task => task.done && new Date(task.createdAt || 0) >= since).length;
+    const completedTasks = tasks.filter(task => {
+        if (!task.done) return false;
+        const doneTime = new Date(task.doneAt || task.createdAt || 0);
+        return doneTime >= since;
+    }).length;
     const focusMinutes = pomodoroSessions
         .filter(session => session.type === 'Focus')
         .filter(session => new Date(session.date) >= since)
@@ -5552,6 +5598,9 @@ function ensureMinimumQuizQuestionsPerSubjectDifficulty(minCount) {
 
 ensureMinimumQuizQuestionsPerSubjectDifficulty(QUIZ_MIN_PER_SUBJECT_DIFFICULTY);
 let currentQuizSession = [];
+let chapterSearchQuery = "";
+let chapterFilterSubject = "all";
+let chapterIncompleteOnly = false;
 
 function generateQuizSession() {
     const subject = document.getElementById('quizSubject')?.value || 'Any';
@@ -6148,7 +6197,13 @@ function createTasksFromGoalRoadmap() {
 function renderChapterTracker() {
     const list = document.getElementById('chapterTrackerList');
     const progressList = document.getElementById('chapterTrackerProgressList');
+    const searchInput = document.getElementById('chapterSearchInput');
+    const incompleteCheck = document.getElementById('chapterIncompleteOnlyCheck');
     if (!list) return;
+    if (searchInput && searchInput.value !== chapterSearchQuery) searchInput.value = chapterSearchQuery;
+    if (incompleteCheck) incompleteCheck.checked = Boolean(chapterIncompleteOnly);
+
+    renderChapterFilterSubjects();
 
     if (!Array.isArray(chapterTracker) || chapterTracker.length === 0) {
         if (progressList) {
@@ -6198,7 +6253,26 @@ function renderChapterTracker() {
         progressList.innerHTML = subjectRows.join('');
     }
 
-    list.innerHTML = chapterTracker.map(item => `
+    const visibleItems = chapterTracker.filter(item => {
+        if (chapterFilterSubject !== 'all' && !subjectMatches(item.subject || '', chapterFilterSubject)) {
+            return false;
+        }
+        if (chapterIncompleteOnly && item.status === 'done') {
+            return false;
+        }
+        if (chapterSearchQuery) {
+            const hay = `${item.subject} ${item.chapter}`.toLowerCase();
+            if (!hay.includes(chapterSearchQuery.toLowerCase())) return false;
+        }
+        return true;
+    });
+
+    if (visibleItems.length === 0) {
+        list.innerHTML = '<li class="empty-state">No chapters match current filters.</li>';
+        return;
+    }
+
+    list.innerHTML = visibleItems.map(item => `
         <li>
             <strong>${item.subject}: ${item.chapter}</strong>
             <span>${statusLabel[item.status] || 'Not Started'} | Test score: ${Number.isFinite(item.testScore) ? `${item.testScore}%` : 'N/A'}</span>
@@ -6213,6 +6287,36 @@ function renderChapterTracker() {
             </div>
         </li>
     `).join('');
+}
+
+function getChapterFilterSubjects() {
+    const defaults = ['Math', 'Science', 'English', 'History', 'Geography', 'Programming', 'General'];
+    const fromTracker = chapterTracker.map(item => String(item.subject || '').trim()).filter(Boolean);
+    return [...new Set([...defaults, ...fromTracker])];
+}
+
+function renderChapterFilterSubjects() {
+    const select = document.getElementById('chapterFilterSubject');
+    if (!select) return;
+    const options = getChapterFilterSubjects();
+    select.innerHTML = ['<option value="all">All Subjects</option>', ...options.map(name => `<option value="${name}">${name}</option>`)].join('');
+    select.value = options.includes(chapterFilterSubject) ? chapterFilterSubject : 'all';
+    chapterFilterSubject = select.value;
+}
+
+function setChapterSearchQuery(value) {
+    chapterSearchQuery = String(value || '').trim();
+    renderChapterTracker();
+}
+
+function setChapterFilterSubject(value) {
+    chapterFilterSubject = String(value || 'all');
+    renderChapterTracker();
+}
+
+function toggleChapterIncompleteOnly(checked) {
+    chapterIncompleteOnly = Boolean(checked);
+    renderChapterTracker();
 }
 
 function addChapterTrackerEntry() {
@@ -6268,6 +6372,136 @@ function deleteChapterTrackerEntry(id) {
     renderChapterTracker();
 }
 
+function getRevisionTemplatePreset(grade, subject) {
+    const presets = {
+        "7": {
+            Math: [
+                "Integers and fractions fundamentals",
+                "Algebra basics and simple equations",
+                "Geometry fundamentals and constructions",
+                "Weekly mixed worksheet and chapter test"
+            ],
+            Science: [
+                "Nutrition in plants and animals",
+                "Heat and temperature concepts",
+                "Acids, bases and salts basics",
+                "Weekly practical-based revision and test"
+            ],
+            English: [
+                "Reading comprehension and vocabulary",
+                "Grammar practice (tenses, modals, prepositions)",
+                "Writing skills (paragraph, letter, story)",
+                "Weekly literature recap and test"
+            ],
+            History: [
+                "Early medieval world overview",
+                "Regional kingdoms and culture",
+                "Social change and trade",
+                "Weekly map-work and chapter test"
+            ]
+        },
+        "8": {
+            Math: [
+                "Rational numbers and linear equations",
+                "Understanding quadrilaterals and mensuration",
+                "Data handling and probability basics",
+                "Weekly mixed practice and chapter test"
+            ],
+            Science: [
+                "Crop production and microorganisms",
+                "Force, friction and pressure",
+                "Metals and non-metals",
+                "Weekly concept recap and test"
+            ],
+            English: [
+                "Comprehension and inference practice",
+                "Grammar consolidation (voice, reported speech)",
+                "Writing tasks (article, notice, email)",
+                "Weekly literature revision and test"
+            ],
+            History: [
+                "Colonial period foundations",
+                "Social and political changes",
+                "National movement key events",
+                "Weekly timeline revision and test"
+            ]
+        },
+        "9": {
+            Math: [
+                "Number systems and polynomials",
+                "Linear equations and coordinate geometry",
+                "Triangles and circles basics",
+                "Weekly mixed NCERT exercise and test"
+            ],
+            Science: [
+                "Matter, atoms and cells",
+                "Motion and force laws",
+                "Tissues and life processes basics",
+                "Weekly numericals + diagram test"
+            ],
+            English: [
+                "Reading passages and question strategy",
+                "Grammar and editing practice",
+                "Writing section formats",
+                "Weekly literature chapter test"
+            ],
+            History: [
+                "French Revolution and Nazism overview",
+                "Indian history themes and sources",
+                "Democracy and institutions recap",
+                "Weekly long-answer practice and test"
+            ]
+        },
+        "10": {
+            Math: [
+                "Real numbers, polynomials and pair of equations",
+                "Quadratic equations, AP and coordinate geometry",
+                "Triangles, circles and trigonometry",
+                "Weekly full syllabus mixed mock test"
+            ],
+            Science: [
+                "Chemical reactions, acids-bases-salts",
+                "Life processes and heredity",
+                "Electricity and magnetic effects",
+                "Weekly board-style mixed test and error log"
+            ],
+            English: [
+                "Reading and unseen passage strategy",
+                "Grammar and editing with timed practice",
+                "Writing section board patterns",
+                "Weekly literature + full section test"
+            ],
+            History: [
+                "Nationalism in Europe and India",
+                "Global world and print culture",
+                "Democratic politics and economy themes",
+                "Weekly board-style source-based test"
+            ]
+        }
+    };
+
+    const byGrade = presets[String(grade)] || presets["10"];
+    return byGrade[String(subject)] || byGrade.Math;
+}
+
+function renderRevisionTemplatePreview() {
+    const gradeInput = document.getElementById('revisionTemplateGrade');
+    const subjectInput = document.getElementById('revisionTemplateSubject');
+    const previewList = document.getElementById('revisionTemplatePreviewList');
+    if (!previewList) return;
+
+    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : '10');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const topics = getRevisionTemplatePreset(grade, subject);
+
+    previewList.innerHTML = topics.map((topic, idx) => `
+        <li>
+            <strong>Week ${idx + 1}: ${topic}</strong>
+            <span>Grade ${grade} ${subject}</span>
+        </li>
+    `).join('');
+}
+
 function createRevisionTemplatePlan() {
     const gradeInput = document.getElementById('revisionTemplateGrade');
     const subjectInput = document.getElementById('revisionTemplateSubject');
@@ -6275,13 +6509,7 @@ function createRevisionTemplatePlan() {
 
     const grade = String(gradeInput && gradeInput.value ? gradeInput.value : '10');
     const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
-    const topicsBySubject = {
-        Math: ['Core concepts', 'Worked examples', 'Timed practice', 'Mock test and error revision'],
-        Science: ['Concept revision', 'Diagrams + definitions', 'Numerical/application practice', 'Mock test and recap'],
-        English: ['Reading + grammar', 'Writing formats', 'Literature revision', 'Sample paper practice'],
-        History: ['Timeline revision', 'Key events and causes', 'Long-answer structure', 'Mock test and recap']
-    };
-    const topics = topicsBySubject[subject] || topicsBySubject.Math;
+    const topics = getRevisionTemplatePreset(grade, subject);
 
     const createdTasks = [];
     for (let week = 1; week <= 4; week++) {
@@ -6307,7 +6535,7 @@ function createRevisionTemplatePlan() {
     }
 
     if (createdTasks.length === 0) {
-        if (previewList) previewList.innerHTML = '<li class="empty-state">Revision tasks already exist for this selection.</li>';
+        renderRevisionTemplatePreview();
         alert('Revision tasks already exist for this grade and subject.');
         return;
     }
@@ -6319,11 +6547,11 @@ function createRevisionTemplatePlan() {
 
     if (previewList) {
         previewList.innerHTML = createdTasks.map(task => `
-            <li>
-                <strong>${task.text}</strong>
-                <span>Due: ${task.dueDate}</span>
-            </li>
-        `).join('');
+        <li>
+            <strong>${task.text}</strong>
+            <span>Due: ${task.dueDate}</span>
+        </li>
+    `).join('');
     }
 }
 
@@ -6345,12 +6573,16 @@ function renderReflectionHistory() {
 function openReflectionCheckin(context = {}) {
     const modal = document.getElementById('reflectionModal');
     if (!modal) return;
+    pendingReflectionContext = {
+        subject: String(context.subject || pendingReflectionContext.subject || 'General'),
+        minutes: Number(context.minutes) || pendingReflectionContext.minutes || 0
+    };
     const subjectInput = document.getElementById('reflectionSubjectInput');
     const minutesInput = document.getElementById('reflectionSessionMinutesInput');
     const learnedInput = document.getElementById('reflectionLearnedInput');
     const confusingInput = document.getElementById('reflectionConfusingInput');
-    if (subjectInput) subjectInput.value = String(context.subject || 'General');
-    if (minutesInput) minutesInput.value = String(Number(context.minutes) || 0);
+    if (subjectInput) subjectInput.value = String(pendingReflectionContext.subject || 'General');
+    if (minutesInput) minutesInput.value = String(Number(pendingReflectionContext.minutes) || 0);
     if (learnedInput) learnedInput.value = '';
     if (confusingInput) confusingInput.value = '';
     modal.classList.add('active');
@@ -6382,6 +6614,8 @@ function saveReflectionCheckin() {
         createdAt: new Date().toISOString()
     });
     saveState({ reflectionEntries });
+    pendingReflectionRequired = false;
+    pendingReflectionContext = { subject: "General", minutes: 0 };
     closeReflectionCheckin();
     renderReflectionHistory();
     addActivity('pen', 'Reflection Saved', `${subject} study reflection logged`);
@@ -6404,6 +6638,7 @@ function renderGoals() {
     document.getElementById('goalFlashcardsProgress').textContent = `${weeklyStats.flashcardsReviewed} / ${goals.flashcards}`;
     renderGoalRoadmap();
     renderChapterTracker();
+    renderRevisionTemplatePreview();
 }
 
 function saveGoals() {
@@ -6448,6 +6683,12 @@ function updateTimerDisplay() {
 
 function startTimer() {
     if (isTimerRunning) return;
+    const modeLabel = getTimerModeLabel(timerModeMinutes);
+    if (modeLabel === 'Focus' && pendingReflectionRequired) {
+        alert('Please complete your previous reflection check-in before starting the next focus session.');
+        openReflectionCheckin(pendingReflectionContext);
+        return;
+    }
     isTimerRunning = true;
     document.getElementById('startBtn').disabled = true;
     document.getElementById('pauseBtn').disabled = false;
@@ -6478,6 +6719,8 @@ function startTimer() {
                 renderAnalytics();
 
                 if (type === 'Focus') {
+                    pendingReflectionRequired = true;
+                    pendingReflectionContext = { subject, minutes: sessionMinutes };
                     openReflectionCheckin({ subject, minutes: sessionMinutes });
                 } else {
                     alert('Timer complete! Take a break!');
@@ -6869,6 +7112,33 @@ function bootstrapAuthenticatedApp() {
     }
 }
 
+function ensureVisibleShellState() {
+    const authContainer = document.getElementById('authContainer');
+    const appContainer = document.getElementById('appContainer');
+    const activePage = document.querySelector('.page-content.active');
+    const dashboardPage = document.getElementById('page-dashboard');
+
+    // If both shells are hidden, recover to auth view.
+    const authDisplay = authContainer ? authContainer.style.display : '';
+    const appDisplay = appContainer ? appContainer.style.display : '';
+    if ((authDisplay === 'none' || !authDisplay) && appDisplay === 'none') {
+        if (authContainer) authContainer.style.display = 'flex';
+        if (appContainer) appContainer.style.display = 'none';
+    }
+
+    // If app shell is visible but no active page exists, force dashboard visible.
+    if (appContainer && appContainer.style.display !== 'none' && !activePage && dashboardPage) {
+        dashboardPage.classList.add('active');
+        const dashboardNav = document.querySelector('.nav-item[data-page="dashboard"]');
+        if (dashboardNav) {
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            dashboardNav.classList.add('active');
+        }
+        const pageTitle = document.getElementById('pageTitle');
+        if (pageTitle) pageTitle.textContent = 'Dashboard';
+    }
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     // Skip full app bootstrapping when script.js is loaded by lightweight test pages.
@@ -6876,25 +7146,35 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    setupFirebaseAuthObserver();
-    applyAuthState();
+    try {
+        ensureVisibleShellState();
+        setupFirebaseAuthObserver();
+        applyAuthState();
+        ensureVisibleShellState();
 
-    const taskScoreModal = document.getElementById('taskScoreModal');
-    if (taskScoreModal) {
-        taskScoreModal.addEventListener('click', (event) => {
-            if (event.target === taskScoreModal) {
-                closeTaskScoreModal();
-            }
-        });
-    }
+        const taskScoreModal = document.getElementById('taskScoreModal');
+        if (taskScoreModal) {
+            taskScoreModal.addEventListener('click', (event) => {
+                if (event.target === taskScoreModal) {
+                    closeTaskScoreModal();
+                }
+            });
+        }
 
-    const reflectionModal = document.getElementById('reflectionModal');
-    if (reflectionModal) {
-        reflectionModal.addEventListener('click', (event) => {
-            if (event.target === reflectionModal) {
-                closeReflectionCheckin();
-            }
-        });
+        const reflectionModal = document.getElementById('reflectionModal');
+        if (reflectionModal) {
+            reflectionModal.addEventListener('click', (event) => {
+                if (event.target === reflectionModal) {
+                    closeReflectionCheckin();
+                }
+            });
+        }
+    } catch (err) {
+        const authContainer = document.getElementById('authContainer');
+        const appContainer = document.getElementById('appContainer');
+        if (authContainer) authContainer.style.display = 'flex';
+        if (appContainer) appContainer.style.display = 'none';
+        console.error('Startup error:', err);
     }
 });
 

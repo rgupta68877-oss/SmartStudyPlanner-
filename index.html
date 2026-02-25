@@ -59,7 +59,7 @@
             </div>
         </div>
 
-        <div id="authForgotView" style="display:none;">,
+        <div id="authForgotView" style="display:none;">
             <div class="input-group">
                 <input type="email" id="forgotEmail" placeholder="Registered email">
             </div>
@@ -333,6 +333,7 @@
                 <ul id="todayPlanList">
                     <li class="empty-state">No plan generated yet</li>
                 </ul>
+                <div id="todayOnlyTimerActions"></div>
             </div>
 
             <div class="card question-bank-dashboard">
@@ -929,6 +930,18 @@
             <div class="card goal-settings">
                 <h3><i class="fas fa-book-open"></i> Chapter / Syllabus Tracker</h3>
                 <div class="task-options">
+                    <input type="text" id="chapterSearchInput" placeholder="Search chapter..." oninput="setChapterSearchQuery(this.value)">
+                    <select id="chapterFilterSubject" onchange="setChapterFilterSubject(this.value)">
+                        <option value="all">All Subjects</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="chapterIncompleteOnlyCheck" onchange="toggleChapterIncompleteOnly(this.checked)">
+                        Show only incomplete chapters
+                    </label>
+                </div>
+                <div class="task-options">
                     <input type="text" id="chapterSubjectInput" placeholder="Subject (e.g., Math)">
                     <input type="text" id="chapterNameInput" placeholder="Chapter / Topic name">
                 </div>
@@ -954,13 +967,13 @@
             <div class="card goal-settings">
                 <h3><i class="fas fa-calendar-check"></i> Exam Revision Templates</h3>
                 <div class="task-options">
-                    <select id="revisionTemplateGrade">
+                    <select id="revisionTemplateGrade" onchange="renderRevisionTemplatePreview()">
                         <option value="7">Grade 7</option>
                         <option value="8">Grade 8</option>
                         <option value="9">Grade 9</option>
                         <option value="10">Grade 10</option>
                     </select>
-                    <select id="revisionTemplateSubject">
+                    <select id="revisionTemplateSubject" onchange="renderRevisionTemplatePreview()">
                         <option value="Math">Math</option>
                         <option value="Science">Science</option>
                         <option value="English">English</option>
