@@ -481,6 +481,21 @@ body {
     color: var(--text-light);
 }
 
+#consistencyChallengeList {
+    margin-top: 6px;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 10px;
+}
+
+.challenge-item.done {
+    color: #166534;
+    font-weight: 600;
+}
+
+.challenge-item.pending {
+    color: var(--text-light);
+}
+
 /* Upcoming Deadlines */
 .upcoming-deadlines li {
     display: flex;

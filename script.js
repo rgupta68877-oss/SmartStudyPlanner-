@@ -2661,6 +2661,21 @@ function getConsecutiveDayStreak(dayKeySet, now = new Date()) {
     return streak;
 }
 
+function getConsecutiveFocusDayStreak(focusMinutesByDay, minMinutes, maxMinutes = Infinity, now = new Date()) {
+    let streak = 0;
+    const cursor = new Date(now);
+    cursor.setHours(0, 0, 0, 0);
+
+    while (true) {
+        const key = getDateKeyUTC(cursor);
+        const minutes = Number(focusMinutesByDay[key] || 0);
+        if (minutes < minMinutes || minutes > maxMinutes) break;
+        streak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+}
+
 function getConsistencyRewardData(now = new Date()) {
     const windowDays = 14;
     const windowStart = new Date(now);
@@ -2701,12 +2716,57 @@ function getConsistencyRewardData(now = new Date()) {
     const streakPoints = Math.min(24, consistencyStreak * 4);
     const sustainablePoints = Math.min(20, sustainableDayCount * 2);
     const overloadPenalty = Math.min(20, overloadDayCount * 5);
+    const focusStreak = getConsecutiveFocusDayStreak(focusMinutesByDay, 20, Infinity, now);
+    const balancedFocusStreak = getConsecutiveFocusDayStreak(focusMinutesByDay, 20, 120, now);
+    const recent7Keys = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() - i);
+        return getDateKeyUTC(d);
+    });
+    const recent7OverloadDays = recent7Keys.filter(key => Number(focusMinutesByDay[key] || 0) > 180).length;
+    const recent7ActiveFocusDays = recent7Keys.filter(key => Number(focusMinutesByDay[key] || 0) >= 20).length;
 
-    const rawScore = activeDaysPoints + streakPoints + sustainablePoints - overloadPenalty;
-    const points = Math.max(0, Math.min(100, Math.round(rawScore)));
+    const challenges = [
+        {
+            id: "focus-3",
+            name: "3-Day Focus Streak",
+            achieved: focusStreak >= 3,
+            progress: `${Math.min(focusStreak, 3)}/3 days`,
+            bonus: 8
+        },
+        {
+            id: "focus-5",
+            name: "5-Day Focus Streak",
+            achieved: focusStreak >= 5,
+            progress: `${Math.min(focusStreak, 5)}/5 days`,
+            bonus: 12
+        },
+        {
+            id: "balanced-7",
+            name: "7-Day Balanced Streak (20-120 min)",
+            achieved: balancedFocusStreak >= 7,
+            progress: `${Math.min(balancedFocusStreak, 7)}/7 days`,
+            bonus: 20
+        },
+        {
+            id: "no-overload-7",
+            name: "No Overload Week",
+            achieved: recent7OverloadDays === 0 && recent7ActiveFocusDays >= 4,
+            progress: `${recent7ActiveFocusDays}/4 active | overload days ${recent7OverloadDays}`,
+            bonus: 10
+        }
+    ];
+    const challengeBonus = challenges
+        .filter(item => item.achieved)
+        .reduce((sum, item) => sum + item.bonus, 0);
+
+    const rawScore = activeDaysPoints + streakPoints + sustainablePoints - overloadPenalty + challengeBonus;
+    const points = Math.max(0, Math.min(140, Math.round(rawScore)));
 
     let level = "Starter";
-    if (points >= 80) level = "Consistency Champion";
+    if (points >= 110) level = "Streak Legend";
+    else if (points >= 85) level = "Consistency Champion";
     else if (points >= 60) level = "Rhythm Builder";
     else if (points >= 40) level = "Habit Maker";
 
@@ -2720,7 +2780,9 @@ function getConsistencyRewardData(now = new Date()) {
         activeDaysPoints,
         streakPoints,
         sustainablePoints,
-        overloadPenalty
+        overloadPenalty,
+        challengeBonus,
+        challenges
     };
 }
 
@@ -2728,7 +2790,8 @@ function renderConsistencyRewards() {
     const pointsEl = document.getElementById('consistencyPoints');
     const levelEl = document.getElementById('consistencyLevel');
     const breakdownEl = document.getElementById('consistencyBreakdownList');
-    if (!pointsEl || !levelEl || !breakdownEl) return;
+    const challengeListEl = document.getElementById('consistencyChallengeList');
+    if (!pointsEl || !levelEl || !breakdownEl || !challengeListEl) return;
 
     const data = getConsistencyRewardData();
     pointsEl.textContent = data.points;
@@ -2739,7 +2802,15 @@ function renderConsistencyRewards() {
         <li>Current consistency streak: ${data.consistencyStreak} day${data.consistencyStreak === 1 ? '' : 's'} (+${data.streakPoints})</li>
         <li>Balanced focus days (20-120 min): ${data.sustainableDayCount} (+${data.sustainablePoints})</li>
         <li>Overload days (&gt;180 min): ${data.overloadDayCount} (-${data.overloadPenalty})</li>
+        <li>Challenge bonus: +${data.challengeBonus}</li>
     `;
+
+    challengeListEl.innerHTML = data.challenges.map(challenge => `
+        <li class="challenge-item ${challenge.achieved ? 'done' : 'pending'}">
+            ${challenge.achieved ? 'Completed' : 'In progress'}: ${challenge.name}
+            <span>(${challenge.progress}${challenge.achieved ? ` | +${challenge.bonus}` : ''})</span>
+        </li>
+    `).join('');
 }
 
 function getFlashcardsDueTodayByDeck(now = new Date()) {
@@ -3282,6 +3353,13 @@ function renderTodayPlan() {
                     <i class="fas fa-play"></i> Start 25-min Focus Timer (${subject})
                 </button>
             `;
+        } else if (dailyPlan.mode === 'low-motivation') {
+            const subject = String(dailyPlan.focusSubject || 'General');
+            todayOnlyActions.innerHTML = `
+                <button class="action-btn" onclick="startLowMotivationFocusSprint()">
+                    <i class="fas fa-bolt"></i> Start Gentle Focus Sprint (${subject})
+                </button>
+            `;
         } else {
             todayOnlyActions.innerHTML = '';
         }
@@ -3355,7 +3433,76 @@ function generateTodayOnlyMode() {
     addActivity('list-check', 'Today Only Mode', `${items.length} blocks prepared (max 3)`);
 }
 
+function generateLowMotivationMode() {
+    const ranked = rankTasks(tasks.filter(task => !task.done), {
+        now: new Date(),
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
+    });
+    const weakest = getWeakTopics(1)[0];
+
+    if (ranked.length === 0 && !weakest) {
+        alert('No pending tasks available for low-motivation mode.');
+        return;
+    }
+
+    const microTaskCount = ranked.length >= 2 ? 2 : 1;
+    const selectedTasks = ranked.slice(0, microTaskCount);
+    const items = selectedTasks.map(task => ({
+        taskId: task.id,
+        text: `Quick win: ${task.text}`,
+        subject: task.subject || 'General',
+        allocatedMinutes: 15,
+        score: scoreTask(task, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams })
+    }));
+
+    if (weakest) {
+        items.push({
+            taskId: '',
+            text: `Quick weak-topic fix: ${weakest.topic}`,
+            subject: weakest.subject || 'General',
+            allocatedMinutes: 10,
+            score: 98
+        });
+    } else {
+        items.push({
+            taskId: '',
+            text: '2-minute desk reset + open one chapter summary',
+            subject: selectedTasks[0] ? (selectedTasks[0].subject || 'General') : 'General',
+            allocatedMinutes: 10,
+            score: 95
+        });
+    }
+
+    const focusSubject = (selectedTasks.find(item => String(item.subject || '').trim()) || selectedTasks[0] || {}).subject
+        || (weakest ? weakest.subject : 'General')
+        || 'General';
+
+    dailyPlan = {
+        date: new Date().toISOString().split('T')[0],
+        items: items.slice(0, 3),
+        availableHours: 1,
+        mode: 'low-motivation',
+        focusSubject
+    };
+    saveState({ dailyPlan });
+    renderTodayPlan();
+    addActivity('seedling', 'Low-Motivation Mode', `${dailyPlan.items.length} micro wins prepared`);
+}
+
 function startTodayOnlyFocusTimer() {
+    const subject = String((dailyPlan && dailyPlan.focusSubject) || 'General');
+    const subjectSelect = document.getElementById('timerSubjectSelect');
+    if (subjectSelect) {
+        const optionValues = Array.from(subjectSelect.options).map(opt => opt.value);
+        subjectSelect.value = optionValues.includes(subject) ? subject : 'General';
+    }
+    setTimerMode(25);
+    navigateTo('dashboard');
+    if (!isTimerRunning) startTimer();
+}
+
+function startLowMotivationFocusSprint() {
     const subject = String((dailyPlan && dailyPlan.focusSubject) || 'General');
     const subjectSelect = document.getElementById('timerSubjectSelect');
     if (subjectSelect) {
