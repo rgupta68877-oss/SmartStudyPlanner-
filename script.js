@@ -545,6 +545,7 @@ const STORAGE_KEYS = {
     goalRoadmap: "goalRoadmap",
     weakTopicStats: "weakTopicStats",
     chapterTracker: "chapterTracker",
+    doubtTracker: "doubtTracker",
     reflectionEntries: "reflectionEntries",
     timetableEntries: "timetableEntries",
     resources: "resources",
@@ -596,6 +597,7 @@ const DEFAULT_STATE = {
     },
     weakTopicStats: {},
     chapterTracker: [],
+    doubtTracker: [],
     reflectionEntries: [],
     goals: {
         tasks: 20,
@@ -776,6 +778,25 @@ function normalizeChapterTracker(value) {
         .filter(item => item.chapter.length > 0);
 }
 
+function normalizeDoubtTracker(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const status = String(normalized.status || "unresolved");
+            return {
+                id: normalized.id || `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                subject: String(normalized.subject || "General").trim() || "General",
+                chapter: String(normalized.chapter || "General").trim() || "General",
+                text: String(normalized.text || "").trim(),
+                status: status === "resolved" ? "resolved" : "unresolved",
+                createdAt: normalized.createdAt || new Date().toISOString(),
+                resolvedAt: status === "resolved" ? (normalized.resolvedAt || new Date().toISOString()) : ""
+            };
+        })
+        .filter(item => item.text.length > 0);
+}
+
 function normalizeReflectionEntries(value) {
     if (!Array.isArray(value)) return [];
     return value
@@ -858,6 +879,7 @@ function loadState() {
         weeklyStats: parseStoredJSON(STORAGE_KEYS.weeklyStats, DEFAULT_STATE.weeklyStats),
         weakTopicStats: parseStoredJSON(STORAGE_KEYS.weakTopicStats, DEFAULT_STATE.weakTopicStats),
         chapterTracker: parseStoredJSON(STORAGE_KEYS.chapterTracker, DEFAULT_STATE.chapterTracker),
+        doubtTracker: parseStoredJSON(STORAGE_KEYS.doubtTracker, DEFAULT_STATE.doubtTracker),
         reflectionEntries: parseStoredJSON(STORAGE_KEYS.reflectionEntries, DEFAULT_STATE.reflectionEntries),
         goals: parseStoredJSON(STORAGE_KEYS.goals, DEFAULT_STATE.goals),
         goalRoadmap: parseStoredJSON(STORAGE_KEYS.goalRoadmap, DEFAULT_STATE.goalRoadmap),
@@ -885,6 +907,7 @@ function loadState() {
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
         weakTopicStats: normalizeWeakTopicStats(loaded.weakTopicStats),
         chapterTracker: normalizeChapterTracker(loaded.chapterTracker),
+        doubtTracker: normalizeDoubtTracker(loaded.doubtTracker),
         reflectionEntries: normalizeReflectionEntries(loaded.reflectionEntries),
         goals: { ...DEFAULT_STATE.goals, ...(loaded.goals || {}) },
         goalRoadmap: normalizeGoalRoadmap(loaded.goalRoadmap),
@@ -947,6 +970,7 @@ let bestStreak = initialState.bestStreak;
 let weeklyStats = initialState.weeklyStats;
 let weakTopicStats = initialState.weakTopicStats;
 let chapterTracker = initialState.chapterTracker;
+let doubtTracker = initialState.doubtTracker;
 let reflectionEntries = initialState.reflectionEntries;
 let goals = initialState.goals;
 let goalRoadmap = initialState.goalRoadmap;
@@ -1426,6 +1450,7 @@ function getCloudStatePayload() {
         weeklyStats,
         weakTopicStats,
         chapterTracker,
+        doubtTracker,
         reflectionEntries,
         studyStreak,
         bestStreak,
@@ -1460,6 +1485,7 @@ function resetUserScopedStateToDefaults() {
     weeklyStats = { ...DEFAULT_STATE.weeklyStats };
     weakTopicStats = { ...DEFAULT_STATE.weakTopicStats };
     chapterTracker = Array.isArray(DEFAULT_STATE.chapterTracker) ? [...DEFAULT_STATE.chapterTracker] : [];
+    doubtTracker = Array.isArray(DEFAULT_STATE.doubtTracker) ? [...DEFAULT_STATE.doubtTracker] : [];
     reflectionEntries = Array.isArray(DEFAULT_STATE.reflectionEntries) ? [...DEFAULT_STATE.reflectionEntries] : [];
     goals = { ...DEFAULT_STATE.goals };
     goalRoadmap = { ...DEFAULT_STATE.goalRoadmap };
@@ -1487,6 +1513,7 @@ function resetUserScopedStateToDefaults() {
         weeklyStats,
         weakTopicStats,
         chapterTracker,
+        doubtTracker,
         reflectionEntries,
         studyStreak,
         bestStreak,
@@ -1519,6 +1546,7 @@ function applyCloudState(data) {
         if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
         if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
         if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
+        if (Array.isArray(data.doubtTracker)) doubtTracker = normalizeDoubtTracker(data.doubtTracker);
         if (Array.isArray(data.reflectionEntries)) reflectionEntries = normalizeReflectionEntries(data.reflectionEntries);
         if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
         if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
@@ -1546,6 +1574,7 @@ function applyCloudState(data) {
             weeklyStats,
             weakTopicStats,
             chapterTracker,
+            doubtTracker,
             reflectionEntries,
             studyStreak,
             bestStreak,
@@ -4715,90 +4744,6 @@ function renderAnalytics() {
     document.getElementById('scoreFill').style.width = score + '%';
 
     renderAnalyticsCharts(completed, pending);
-    renderParentReportSummary();
-}
-
-function buildParentReportData(daysBack = 7) {
-    const since = new Date();
-    since.setDate(since.getDate() - Math.max(1, Number(daysBack) || 7));
-    since.setHours(0, 0, 0, 0);
-
-    const completedTasks = tasks.filter(task => {
-        if (!task.done) return false;
-        const doneTime = new Date(task.doneAt || task.createdAt || 0);
-        return doneTime >= since;
-    }).length;
-    const focusMinutes = pomodoroSessions
-        .filter(session => session.type === 'Focus')
-        .filter(session => new Date(session.date) >= since)
-        .reduce((sum, session) => sum + (Number(session.minutes) || 0), 0);
-    const weakTopics = getWeakTopics(3);
-
-    return {
-        from: since,
-        to: new Date(),
-        completedTasks,
-        studyHours: Math.round((focusMinutes / 60) * 10) / 10,
-        weakTopics
-    };
-}
-
-function getParentReportText() {
-    const data = buildParentReportData(7);
-    const dateRange = `${data.from.toLocaleDateString()} - ${data.to.toLocaleDateString()}`;
-    const weakLine = data.weakTopics.length === 0
-        ? 'No major weak topics identified this week.'
-        : `Needs attention: ${data.weakTopics.map(item => `${item.subject} - ${item.topic}`).join(', ')}`;
-    return [
-        `Weekly Parent Report (${dateRange})`,
-        `Tasks completed: ${data.completedTasks}`,
-        `Focused study time: ${data.studyHours} hours`,
-        weakLine
-    ].join('\n');
-}
-
-function renderParentReportSummary() {
-    const el = document.getElementById('parentReportSummary');
-    if (!el) return;
-    const data = buildParentReportData(7);
-    const weakLine = data.weakTopics.length === 0
-        ? 'No major weak topics identified.'
-        : `Weak topics: ${data.weakTopics.map(item => `${item.subject} - ${item.topic}`).join(', ')}`;
-    el.textContent = `Last 7 days: ${data.completedTasks} tasks done, ${data.studyHours} focused hours. ${weakLine}`;
-}
-
-function generateParentReport() {
-    renderParentReportSummary();
-    addActivity('users', 'Parent Report Generated', 'Weekly summary prepared');
-    alert('Weekly parent report generated.');
-}
-
-function printParentReport() {
-    const text = getParentReportText()
-        .split('\n')
-        .map(line => `<p>${line}</p>`)
-        .join('');
-    openPrintWindow(`<h1>Parent Report</h1>${text}`);
-}
-
-async function copyParentReport() {
-    const text = getParentReportText();
-    try {
-        await navigator.clipboard.writeText(text);
-        alert('Parent report copied.');
-    } catch (_) {
-        alert('Copy failed. Please allow clipboard access.');
-    }
-}
-
-function shareParentReportWhatsApp() {
-    const text = getParentReportText();
-    const encoded = encodeURIComponent(text);
-    const url = `https://wa.me/?text=${encoded}`;
-    const opened = window.open(url, '_blank');
-    if (!opened) {
-        alert('Popup blocked. Please allow popups to share via WhatsApp.');
-    }
 }
 
 // ==================== SUBJECTS ====================
@@ -6197,6 +6142,7 @@ function createTasksFromGoalRoadmap() {
 function renderChapterTracker() {
     const list = document.getElementById('chapterTrackerList');
     const progressList = document.getElementById('chapterTrackerProgressList');
+    const completionText = document.getElementById('chapterChecklistCompletionText');
     const searchInput = document.getElementById('chapterSearchInput');
     const incompleteCheck = document.getElementById('chapterIncompleteOnlyCheck');
     if (!list) return;
@@ -6206,6 +6152,7 @@ function renderChapterTracker() {
     renderChapterFilterSubjects();
 
     if (!Array.isArray(chapterTracker) || chapterTracker.length === 0) {
+        if (completionText) completionText.textContent = 'Completion: 0% (0/0 chapters)';
         if (progressList) {
             progressList.innerHTML = '<li class="empty-state">Subject progress will appear after adding chapters.</li>';
         }
@@ -6253,6 +6200,13 @@ function renderChapterTracker() {
         progressList.innerHTML = subjectRows.join('');
     }
 
+    if (completionText) {
+        const total = chapterTracker.length;
+        const done = chapterTracker.filter(item => item.status === 'done').length;
+        const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+        completionText.textContent = `Completion: ${percent}% (${done}/${total} chapters)`;
+    }
+
     const visibleItems = chapterTracker.filter(item => {
         if (chapterFilterSubject !== 'all' && !subjectMatches(item.subject || '', chapterFilterSubject)) {
             return false;
@@ -6277,6 +6231,10 @@ function renderChapterTracker() {
             <strong>${item.subject}: ${item.chapter}</strong>
             <span>${statusLabel[item.status] || 'Not Started'} | Test score: ${Number.isFinite(item.testScore) ? `${item.testScore}%` : 'N/A'}</span>
             <div class="task-options">
+                <label>
+                    <input type="checkbox" ${item.status === 'done' ? 'checked' : ''} onchange="toggleChapterChecklistDone('${item.id}', this.checked)">
+                    Done
+                </label>
                 <select onchange="updateChapterStatus('${item.id}', this.value)">
                     <option value="not-started" ${item.status === 'not-started' ? 'selected' : ''}>Not Started</option>
                     <option value="in-progress" ${item.status === 'in-progress' ? 'selected' : ''}>In Progress</option>
@@ -6287,6 +6245,14 @@ function renderChapterTracker() {
             </div>
         </li>
     `).join('');
+}
+
+function toggleChapterChecklistDone(id, checked) {
+    const idx = chapterTracker.findIndex(item => item.id === id);
+    if (idx < 0) return;
+    chapterTracker[idx].status = checked ? 'done' : 'in-progress';
+    saveState({ chapterTracker });
+    renderChapterTracker();
 }
 
 function getChapterFilterSubjects() {
@@ -6555,6 +6521,83 @@ function createRevisionTemplatePlan() {
     }
 }
 
+function renderDoubtTracker() {
+    const list = document.getElementById('doubtTrackerList');
+    if (!list) return;
+    if (!Array.isArray(doubtTracker) || doubtTracker.length === 0) {
+        list.innerHTML = '<li class="empty-state">No doubts added yet</li>';
+        return;
+    }
+
+    const ordered = [...doubtTracker].sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'unresolved' ? -1 : 1;
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+
+    list.innerHTML = ordered.map(item => `
+        <li>
+            <strong>${item.subject} | ${item.chapter}</strong>
+            <span>${item.text}</span>
+            <div class="task-options">
+                <span class="assignment-type">${item.status === 'resolved' ? 'Resolved' : 'Unresolved'}</span>
+                <button class="action-btn" onclick="toggleDoubtResolved('${item.id}')">
+                    <i class="fas ${item.status === 'resolved' ? 'fa-rotate-left' : 'fa-check'}"></i>
+                    ${item.status === 'resolved' ? 'Mark Unresolved' : 'Mark Resolved'}
+                </button>
+                <button class="delete-btn" onclick="deleteDoubtTrackerEntry('${item.id}')"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('');
+}
+
+function addDoubtTrackerEntry() {
+    const subjectInput = document.getElementById('doubtSubjectInput');
+    const chapterInput = document.getElementById('doubtChapterInput');
+    const textInput = document.getElementById('doubtTextInput');
+
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
+    const chapter = String(chapterInput && chapterInput.value ? chapterInput.value : 'General').trim() || 'General';
+    const text = String(textInput && textInput.value ? textInput.value : '').trim();
+    if (!text) {
+        alert('Please write your doubt.');
+        return;
+    }
+
+    doubtTracker.unshift({
+        id: `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        subject,
+        chapter,
+        text,
+        status: 'unresolved',
+        createdAt: new Date().toISOString(),
+        resolvedAt: ''
+    });
+    saveState({ doubtTracker });
+    renderDoubtTracker();
+    addActivity('circle-question', 'Doubt Added', `${subject} | ${chapter}`);
+    if (textInput) textInput.value = '';
+}
+
+function toggleDoubtResolved(id) {
+    const idx = doubtTracker.findIndex(item => item.id === id);
+    if (idx < 0) return;
+    const current = doubtTracker[idx];
+    const resolved = current.status !== 'resolved';
+    doubtTracker[idx] = {
+        ...current,
+        status: resolved ? 'resolved' : 'unresolved',
+        resolvedAt: resolved ? new Date().toISOString() : ''
+    };
+    saveState({ doubtTracker });
+    renderDoubtTracker();
+}
+
+function deleteDoubtTrackerEntry(id) {
+    doubtTracker = doubtTracker.filter(item => item.id !== id);
+    saveState({ doubtTracker });
+    renderDoubtTracker();
+}
+
 function renderReflectionHistory() {
     const list = document.getElementById('reflectionHistoryList');
     if (!list) return;
@@ -6639,6 +6682,7 @@ function renderGoals() {
     renderGoalRoadmap();
     renderChapterTracker();
     renderRevisionTemplatePreview();
+    renderDoubtTracker();
 }
 
 function saveGoals() {
@@ -6843,6 +6887,7 @@ function exportData() {
         weeklyStats,
         weakTopicStats,
         chapterTracker,
+        doubtTracker,
         reflectionEntries,
         studyStreak,
         bestStreak,
@@ -6891,6 +6936,7 @@ function importData(event) {
             if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
             if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
             if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
+            if (Array.isArray(data.doubtTracker)) doubtTracker = normalizeDoubtTracker(data.doubtTracker);
             if (Array.isArray(data.reflectionEntries)) reflectionEntries = normalizeReflectionEntries(data.reflectionEntries);
             if (Number.isFinite(data.studyStreak)) studyStreak = data.studyStreak;
             if (Number.isFinite(data.bestStreak)) bestStreak = data.bestStreak;
@@ -6919,6 +6965,7 @@ function importData(event) {
                 weeklyStats,
                 weakTopicStats,
                 chapterTracker,
+                doubtTracker,
                 reflectionEntries,
                 studyStreak,
                 bestStreak,

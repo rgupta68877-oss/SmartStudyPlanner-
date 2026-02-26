@@ -634,22 +634,6 @@
                 <p id="monthlyReportText">Monthly report will appear here.</p>
             </div>
 
-            <div class="card analytics-card">
-                <h3><i class="fas fa-users"></i> Parent Report Mode</h3>
-                <p id="parentReportSummary">Generate a weekly parent report with key study metrics.</p>
-                <button class="add-btn" onclick="generateParentReport()">
-                    <i class="fas fa-wand-magic-sparkles"></i> Generate Weekly Parent Report
-                </button>
-                <button class="action-btn" onclick="printParentReport()">
-                    <i class="fas fa-print"></i> Print / Save as PDF
-                </button>
-                <button class="action-btn" onclick="copyParentReport()">
-                    <i class="fas fa-share-nodes"></i> Copy Share Text
-                </button>
-                <button class="action-btn" onclick="shareParentReportWhatsApp()">
-                    <i class="fab fa-whatsapp"></i> Share on WhatsApp
-                </button>
-            </div>
         </div>
 
         <!-- QUIZ PAGE -->
@@ -928,7 +912,8 @@
             </div>
 
             <div class="card goal-settings">
-                <h3><i class="fas fa-book-open"></i> Chapter / Syllabus Tracker</h3>
+                <h3><i class="fas fa-book-open"></i> NCERT / Chapter Checklist</h3>
+                <p id="chapterChecklistCompletionText">Completion: 0% (0/0 chapters)</p>
                 <div class="task-options">
                     <input type="text" id="chapterSearchInput" placeholder="Search chapter..." oninput="setChapterSearchQuery(this.value)">
                     <select id="chapterFilterSubject" onchange="setChapterFilterSubject(this.value)">
@@ -985,6 +970,23 @@
                 </button>
                 <ul id="revisionTemplatePreviewList">
                     <li class="empty-state">Select grade and subject to generate weekly revision tasks.</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-circle-question"></i> Smart Doubt Tracker</h3>
+                <div class="task-options">
+                    <input type="text" id="doubtSubjectInput" placeholder="Subject (e.g., Math)">
+                    <input type="text" id="doubtChapterInput" placeholder="Chapter (e.g., Trigonometry)">
+                </div>
+                <div class="input-group">
+                    <textarea id="doubtTextInput" rows="3" placeholder="Write your doubt..."></textarea>
+                </div>
+                <button class="add-btn" onclick="addDoubtTrackerEntry()">
+                    <i class="fas fa-plus"></i> Add Doubt
+                </button>
+                <ul id="doubtTrackerList">
+                    <li class="empty-state">No doubts added yet</li>
                 </ul>
             </div>
 
