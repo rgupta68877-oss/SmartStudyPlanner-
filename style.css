@@ -451,6 +451,36 @@ body {
     color: white;
 }
 
+.past-paper-timer {
+    font-size: 2.2em;
+    font-weight: 700;
+    text-align: center;
+    color: var(--primary-color);
+    margin: 10px 0 14px;
+    font-family: 'Courier New', monospace;
+}
+
+.burnout-guard-hint {
+    margin-top: 12px;
+    text-align: center;
+    color: var(--text-light);
+    font-size: 0.9em;
+}
+
+.consistency-rewards p {
+    margin-bottom: 6px;
+}
+
+.consistency-rewards ul {
+    margin-top: 10px;
+    padding-left: 18px;
+}
+
+.consistency-rewards li {
+    margin-bottom: 6px;
+    color: var(--text-light);
+}
+
 /* Upcoming Deadlines */
 .upcoming-deadlines li {
     display: flex;
@@ -516,6 +546,71 @@ body {
 .weak-topics .action-btn {
     margin-left: auto;
     padding: 8px 12px;
+}
+
+.memory-booster .task-options input[type="number"] {
+    flex: 0 0 90px;
+    min-width: 90px;
+    padding: 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 10px;
+    font-family: inherit;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.memory-booster-result {
+    margin-bottom: 10px;
+}
+
+.memory-booster-container {
+    display: grid;
+    gap: 10px;
+}
+
+.memory-question {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--bg-color);
+}
+
+.memory-question h4 {
+    margin-bottom: 8px;
+}
+
+.memory-question-meta {
+    color: var(--text-light);
+    font-size: 0.85em;
+    margin-bottom: 8px;
+}
+
+.memory-question label {
+    display: block;
+    margin: 6px 0;
+}
+
+.memory-review-list {
+    margin-top: 8px;
+    padding-left: 18px;
+}
+
+.voice-note-tools {
+    align-items: center;
+}
+
+.voice-note-status {
+    font-size: 0.9em;
+    color: var(--text-light);
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+}
+
+.voice-note-status.recording {
+    color: #b91c1c;
+    border-color: #fecaca;
+    background: #fef2f2;
 }
 
 /* Add Task Section */
@@ -968,6 +1063,20 @@ body {
     font-family: inherit;
     background: var(--bg-color);
     color: var(--text-color);
+}
+
+.drill-cards-status {
+    margin: 0 0 10px;
+    color: var(--text-light);
+    font-size: 0.9em;
+}
+
+.drill-cards-status.success {
+    color: #166534;
+}
+
+.drill-cards-status.warning {
+    color: #b45309;
 }
 
 .flashcard-study {

@@ -227,6 +227,15 @@
                 </div>
             </div>
 
+            <div class="card consistency-rewards">
+                <h3><i class="fas fa-award"></i> Consistency Rewards</h3>
+                <p><strong id="consistencyPoints">0</strong> points this cycle</p>
+                <p id="consistencyLevel">Level: Starter</p>
+                <ul id="consistencyBreakdownList">
+                    <li class="empty-state">Complete focus sessions and daily tasks to earn consistency points.</li>
+                </ul>
+            </div>
+
             <div class="card quick-actions">
                 <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 <div class="action-buttons">
@@ -246,7 +255,15 @@
             </div>
 
             <div class="card do-next">
-                <h3><i class="fas fa-list-check"></i> Do Next</h3>
+                <h3><i class="fas fa-star"></i> Daily Top 3 (Adaptive)</h3>
+                <div class="task-options">
+                    <button class="action-btn" onclick="renderDailyTop3AdaptiveTasks()">
+                        <i class="fas fa-rotate-right"></i> Refresh Top 3
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('tasks')">
+                        <i class="fas fa-up-right-from-square"></i> Open Tasks
+                    </button>
+                </div>
                 <ul id="doNextList">
                     <li class="empty-state">No active tasks to prioritize</li>
                 </ul>
@@ -306,6 +323,7 @@
                     <button class="mode-btn" onclick="setTimerMode(5)" data-minutes="5">Short Break</button>
                     <button class="mode-btn" onclick="setTimerMode(15)" data-minutes="15">Long Break</button>
                 </div>
+                <p id="burnoutGuardHint" class="burnout-guard-hint">Burnout Guard: Ready</p>
             </div>
 
             <div class="card upcoming-deadlines">
@@ -358,6 +376,33 @@
                 <ul id="dashboardQuestionBankList">
                     <li class="empty-state">No questions available</li>
                 </ul>
+            </div>
+
+            <div class="card memory-booster">
+                <h3><i class="fas fa-brain"></i> Memory Booster</h3>
+                <p>Quick recall tests generated from your own notes, flashcards, chapters, and doubts.</p>
+                <div class="task-options">
+                    <select id="memoryBoosterSubject">
+                        <option value="Any">Any Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <input type="number" id="memoryBoosterCount" min="3" max="12" value="5">
+                    <button class="action-btn" onclick="generateMemoryBoosterSession()">
+                        <i class="fas fa-bolt"></i> Generate Recall Test
+                    </button>
+                    <button class="action-btn" id="memoryBoosterSubmitBtn" onclick="submitMemoryBoosterSession()" disabled>
+                        <i class="fas fa-check"></i> Submit
+                    </button>
+                </div>
+                <div id="memoryBoosterResult" class="memory-booster-result"></div>
+                <div id="memoryBoosterContainer" class="memory-booster-container">
+                    <div class="empty-state">Generate a recall test to begin.</div>
+                </div>
             </div>
 
         </div>
@@ -502,6 +547,30 @@
                     <i class="fas fa-folder-plus"></i> New Deck
                 </button>
             </div>
+            <div class="flashcard-controls">
+                <select id="drillSubjectSelect">
+                    <option value="Math">Math</option>
+                    <option value="Science">Science</option>
+                    <option value="English">English</option>
+                    <option value="History">History</option>
+                    <option value="Geography">Geography</option>
+                    <option value="Programming">Programming</option>
+                </select>
+                <select id="drillTypeSelect">
+                    <option value="formula">Formula Drill</option>
+                    <option value="definition">Definition Drill</option>
+                    <option value="mixed">Mixed Drill</option>
+                </select>
+                <select id="drillCountSelect">
+                    <option value="6">6 Cards</option>
+                    <option value="10" selected>10 Cards</option>
+                    <option value="15">15 Cards</option>
+                </select>
+                <button class="add-btn" onclick="generateSubjectDrillCards()">
+                    <i class="fas fa-bolt"></i> Generate Drill Cards
+                </button>
+            </div>
+            <p id="drillCardsStatus" class="drill-cards-status">Create formula/definition drills by subject.</p>
             <div class="flashcard-summary" id="flashcardSummary">
                 <span id="flashcardDueNowCount">Due now: 0</span>
                 <span id="flashcardDueTodayCount">Due today: 0</span>
@@ -673,6 +742,45 @@
                     <li class="empty-state">No quiz attempts yet</li>
                 </ul>
             </div>
+            <div class="card exam-add">
+                <h3><i class="fas fa-stopwatch"></i> Past Paper Practice</h3>
+                <div class="task-options">
+                    <select id="pastPaperSubjectSelect">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <input type="number" id="pastPaperDurationInput" min="15" max="180" step="5" value="60" placeholder="Minutes">
+                    <button class="action-btn" onclick="startPastPaperPracticeTimer()">
+                        <i class="fas fa-play"></i> Start Timer
+                    </button>
+                    <button class="action-btn" onclick="resetPastPaperPracticeTimer()">
+                        <i class="fas fa-rotate-right"></i> Reset
+                    </button>
+                </div>
+                <p class="past-paper-timer" id="pastPaperTimerDisplay">60:00</p>
+                <div class="task-options">
+                    <input type="number" id="pastPaperObtainedInput" min="0" placeholder="Score">
+                    <input type="number" id="pastPaperTotalInput" min="1" value="100" placeholder="Out of">
+                    <button class="add-btn" type="button" onclick="submitPastPaperScore()">
+                        <i class="fas fa-check-circle"></i> Save Attempt
+                    </button>
+                </div>
+                <div class="task-options">
+                    <select id="pastPaperTrendSubject" onchange="renderPastPaperTrend()">
+                        <option value="All">All Subjects</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                </div>
+                <p id="pastPaperTrendSummary">No past paper attempts yet.</p>
+                <canvas id="pastPaperTrendChart" height="120"></canvas>
+            </div>
         </div>
 
         <!-- ADMIN PAGE -->
@@ -791,6 +899,15 @@
                 </div>
                 <div class="input-group">
                     <textarea id="freeNoteContentInput" rows="6" placeholder="Write note content for students to download."></textarea>
+                </div>
+                <div class="task-options voice-note-tools">
+                    <button class="action-btn" type="button" id="voiceNoteStartBtn" onclick="startVoiceNoteCapture()">
+                        <i class="fas fa-microphone"></i> Start Voice Capture
+                    </button>
+                    <button class="action-btn" type="button" id="voiceNoteStopBtn" onclick="stopVoiceNoteCapture()" disabled>
+                        <i class="fas fa-microphone-slash"></i> Stop
+                    </button>
+                    <span id="voiceNoteStatus" class="voice-note-status">Ready</span>
                 </div>
                 <button class="add-btn" onclick="addFreeNote()">
                     <i class="fas fa-plus"></i> Add Free Note
@@ -970,6 +1087,29 @@
                 </button>
                 <ul id="revisionTemplatePreviewList">
                     <li class="empty-state">Select grade and subject to generate weekly revision tasks.</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-bolt"></i> Sprint Revision Mode</h3>
+                <div class="task-options">
+                    <select id="sprintRevisionDays" onchange="renderSprintRevisionPreview()">
+                        <option value="7">7-Day Sprint</option>
+                        <option value="14">14-Day Sprint</option>
+                        <option value="30">30-Day Sprint</option>
+                    </select>
+                    <select id="sprintRevisionSubject" onchange="renderSprintRevisionPreview()">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                    </select>
+                </div>
+                <button class="add-btn" onclick="createSprintRevisionTasks()">
+                    <i class="fas fa-list-check"></i> Create Sprint Plan Tasks
+                </button>
+                <ul id="sprintRevisionPreviewList">
+                    <li class="empty-state">Select sprint duration and subject to generate revision plan.</li>
                 </ul>
             </div>
 

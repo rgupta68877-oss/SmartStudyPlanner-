@@ -552,6 +552,7 @@ const STORAGE_KEYS = {
     studyMaterials: "studyMaterials",
     freeNotesLibrary: "freeNotesLibrary",
     quizScores: "quizScores",
+    pastPaperAttempts: "pastPaperAttempts",
     teacherUpdates: "teacherUpdates",
     smartSettings: "smartSettings",
     dailyPlan: "dailyPlan",
@@ -619,6 +620,7 @@ const DEFAULT_STATE = {
     studyMaterials: DEFAULT_STUDY_MATERIALS,
     freeNotesLibrary: DEFAULT_FREE_NOTES_LIBRARY,
     quizScores: [],
+    pastPaperAttempts: [],
     teacherUpdates: [],
     smartSettings: DEFAULT_SMART_SETTINGS,
     dailyPlan: {
@@ -815,6 +817,33 @@ function normalizeReflectionEntries(value) {
         .filter(item => item.learned || item.confusing);
 }
 
+function normalizePastPaperAttempts(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const obtained = Number(normalized.obtained);
+            const total = Number(normalized.total);
+            const percent = Number(normalized.percent);
+            const durationMinutes = Number(normalized.durationMinutes);
+            const subject = String(normalized.subject || "General").trim() || "General";
+            if (!Number.isFinite(obtained) || !Number.isFinite(total) || total <= 0) return null;
+            return {
+                id: normalized.id || `paper-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                subject,
+                obtained: Math.max(0, Math.round(obtained * 100) / 100),
+                total: Math.max(1, Math.round(total * 100) / 100),
+                percent: Number.isFinite(percent)
+                    ? Math.max(0, Math.min(100, Math.round(percent)))
+                    : Math.max(0, Math.min(100, Math.round((obtained / total) * 100))),
+                durationMinutes: Number.isFinite(durationMinutes) ? Math.max(1, Math.round(durationMinutes)) : 60,
+                createdAt: normalized.createdAt || new Date().toISOString()
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
 function normalizeFlashcardCard(card) {
     const normalized = card && typeof card === "object" ? card : {};
     const front = String(normalized.front || "").trim();
@@ -888,6 +917,7 @@ function loadState() {
         studyMaterials: parseStoredJSON(STORAGE_KEYS.studyMaterials, DEFAULT_STATE.studyMaterials),
         freeNotesLibrary: parseStoredJSON(STORAGE_KEYS.freeNotesLibrary, DEFAULT_STATE.freeNotesLibrary),
         quizScores: parseStoredJSON(STORAGE_KEYS.quizScores, DEFAULT_STATE.quizScores),
+        pastPaperAttempts: parseStoredJSON(STORAGE_KEYS.pastPaperAttempts, DEFAULT_STATE.pastPaperAttempts),
         teacherUpdates: parseStoredJSON(STORAGE_KEYS.teacherUpdates, DEFAULT_STATE.teacherUpdates),
         smartSettings: parseStoredJSON(STORAGE_KEYS.smartSettings, DEFAULT_STATE.smartSettings),
         dailyPlan: parseStoredJSON(STORAGE_KEYS.dailyPlan, DEFAULT_STATE.dailyPlan),
@@ -929,6 +959,7 @@ function loadState() {
             return [...savedNotes, ...missingDefaults];
         })(),
         quizScores: Array.isArray(loaded.quizScores) ? loaded.quizScores : [],
+        pastPaperAttempts: normalizePastPaperAttempts(loaded.pastPaperAttempts),
         teacherUpdates: Array.isArray(loaded.teacherUpdates) ? loaded.teacherUpdates : [],
         smartSettings: normalizeSmartSettings(loaded.smartSettings),
         dailyPlan: { ...DEFAULT_STATE.dailyPlan, ...(loaded.dailyPlan || {}) },
@@ -979,6 +1010,7 @@ let resources = initialState.resources;
 let studyMaterials = initialState.studyMaterials;
 let freeNotesLibrary = initialState.freeNotesLibrary;
 let quizScores = initialState.quizScores;
+let pastPaperAttempts = initialState.pastPaperAttempts;
 let teacherUpdates = initialState.teacherUpdates;
 let smartSettings = initialState.smartSettings;
 let dailyPlan = initialState.dailyPlan;
@@ -991,6 +1023,8 @@ let timerMinutes = 25;
 let timerSeconds = 0;
 let isTimerRunning = false;
 let timerModeMinutes = 25;
+const BURNOUT_GUARD_MINUTES = 90;
+const BURNOUT_GUARD_FOCUS_SESSIONS = 3;
 let pendingReflectionRequired = false;
 let pendingReflectionContext = { subject: "General", minutes: 0 };
 let pomodoroSubjectFilter = "all";
@@ -1002,6 +1036,10 @@ let progressTrendChartInstance = null;
 let completionSplitChartInstance = null;
 let subjectFocusChartInstance = null;
 let subjectTrendChartInstance = null;
+let pastPaperTrendChartInstance = null;
+let pastPaperTimerInterval = null;
+let pastPaperSecondsRemaining = 3600;
+let pastPaperTimerRunning = false;
 let analyticsTrendSubject = "all";
 let lastAISuggestionPlan = null;
 let pendingAICreationPreview = null;
@@ -1051,6 +1089,9 @@ let sharedFreeNotes = [];
 let sharedFreeNotesLoaded = false;
 let sharedFreeNotesLoading = false;
 let dashboardQuestionBankSubject = "Any";
+let memoryBoosterSession = [];
+let voiceNoteRecognition = null;
+let voiceNoteListening = false;
 let draggedTimetableId = null;
 let backendFetchSuspendedUntil = 0;
 
@@ -1461,6 +1502,7 @@ function getCloudStatePayload() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        pastPaperAttempts,
         teacherUpdates,
         smartSettings,
         dailyPlan,
@@ -1494,6 +1536,7 @@ function resetUserScopedStateToDefaults() {
     studyMaterials = DEFAULT_STUDY_MATERIALS.map(item => ({ ...item }));
     freeNotesLibrary = DEFAULT_FREE_NOTES_LIBRARY.map(item => ({ ...item }));
     quizScores = Array.isArray(DEFAULT_STATE.quizScores) ? [...DEFAULT_STATE.quizScores] : [];
+    pastPaperAttempts = Array.isArray(DEFAULT_STATE.pastPaperAttempts) ? [...DEFAULT_STATE.pastPaperAttempts] : [];
     teacherUpdates = Array.isArray(DEFAULT_STATE.teacherUpdates) ? [...DEFAULT_STATE.teacherUpdates] : [];
     smartSettings = normalizeSmartSettings(DEFAULT_STATE.smartSettings);
     dailyPlan = { ...DEFAULT_STATE.dailyPlan };
@@ -1524,6 +1567,7 @@ function resetUserScopedStateToDefaults() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        pastPaperAttempts,
         teacherUpdates,
         smartSettings,
         dailyPlan
@@ -1557,6 +1601,7 @@ function applyCloudState(data) {
         if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
         if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
         if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
+        if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
         if (Array.isArray(data.teacherUpdates)) teacherUpdates = data.teacherUpdates;
         if (data.smartSettings) smartSettings = normalizeSmartSettings(data.smartSettings);
         if (data.dailyPlan) dailyPlan = { ...DEFAULT_STATE.dailyPlan, ...data.dailyPlan };
@@ -1585,6 +1630,7 @@ function applyCloudState(data) {
             studyMaterials,
             freeNotesLibrary,
             quizScores,
+            pastPaperAttempts,
             teacherUpdates,
             smartSettings,
             dailyPlan
@@ -2550,6 +2596,7 @@ function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
 // ==================== DASHBOARD ====================
 function renderDashboard() {
     renderTimerSubjectOptions();
+    renderBurnoutGuardHint();
     const completed = tasks.filter(t => t.done).length;
     document.getElementById('totalTasks').textContent = tasks.length;
     document.getElementById('completedTasks').textContent = completed;
@@ -2579,17 +2626,120 @@ function renderDashboard() {
     document.getElementById('goalStudyText').textContent = `${Math.round(weeklyStats.studyHours)}/${goals.studyHours} hrs`;
     document.getElementById('goalFlashcardFill').style.width = flashcardGoal + '%';
     document.getElementById('goalFlashcardText').textContent = `${weeklyStats.flashcardsReviewed}/${goals.flashcards}`;
+    renderConsistencyRewards();
     
     // Recent activity
     renderRecentActivity();
     
     // Upcoming deadlines
     renderUpcomingDeadlines();
-    renderDoNext();
+    renderDailyTop3AdaptiveTasks();
     renderWeakTopicDetection();
     renderFlashcardsDueToday();
     renderTodayPlan();
     renderDashboardQuestionBank();
+    renderMemoryBoosterSession();
+}
+
+function getDateKeyUTC(value) {
+    const date = value instanceof Date ? new Date(value) : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+}
+
+function getConsecutiveDayStreak(dayKeySet, now = new Date()) {
+    let streak = 0;
+    const cursor = new Date(now);
+    cursor.setHours(0, 0, 0, 0);
+
+    while (true) {
+        const key = getDateKeyUTC(cursor);
+        if (!dayKeySet.has(key)) break;
+        streak += 1;
+        cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+}
+
+function getConsistencyRewardData(now = new Date()) {
+    const windowDays = 14;
+    const windowStart = new Date(now);
+    windowStart.setHours(0, 0, 0, 0);
+    windowStart.setDate(windowStart.getDate() - (windowDays - 1));
+    const windowStartKey = getDateKeyUTC(windowStart);
+
+    const activeDays = new Set();
+    const focusMinutesByDay = {};
+
+    (pomodoroSessions || [])
+        .filter(session => String((session && session.type) || "") === "Focus")
+        .forEach((session) => {
+            const key = getDateKeyUTC(session.date);
+            if (!key || key < windowStartKey) return;
+            activeDays.add(key);
+            focusMinutesByDay[key] = (focusMinutesByDay[key] || 0) + (Number(session.minutes) || 0);
+        });
+
+    (tasks || [])
+        .filter(task => task && task.done && task.doneAt)
+        .forEach((task) => {
+            const key = getDateKeyUTC(task.doneAt);
+            if (!key || key < windowStartKey) return;
+            activeDays.add(key);
+        });
+
+    const activeDayCount = activeDays.size;
+    const consistencyStreak = getConsecutiveDayStreak(activeDays, now);
+    const sustainableDayCount = Object.values(focusMinutesByDay)
+        .filter(minutes => minutes >= 20 && minutes <= 120)
+        .length;
+    const overloadDayCount = Object.values(focusMinutesByDay)
+        .filter(minutes => minutes > 180)
+        .length;
+
+    const activeDaysPoints = Math.min(56, activeDayCount * 4);
+    const streakPoints = Math.min(24, consistencyStreak * 4);
+    const sustainablePoints = Math.min(20, sustainableDayCount * 2);
+    const overloadPenalty = Math.min(20, overloadDayCount * 5);
+
+    const rawScore = activeDaysPoints + streakPoints + sustainablePoints - overloadPenalty;
+    const points = Math.max(0, Math.min(100, Math.round(rawScore)));
+
+    let level = "Starter";
+    if (points >= 80) level = "Consistency Champion";
+    else if (points >= 60) level = "Rhythm Builder";
+    else if (points >= 40) level = "Habit Maker";
+
+    return {
+        points,
+        level,
+        activeDayCount,
+        consistencyStreak,
+        sustainableDayCount,
+        overloadDayCount,
+        activeDaysPoints,
+        streakPoints,
+        sustainablePoints,
+        overloadPenalty
+    };
+}
+
+function renderConsistencyRewards() {
+    const pointsEl = document.getElementById('consistencyPoints');
+    const levelEl = document.getElementById('consistencyLevel');
+    const breakdownEl = document.getElementById('consistencyBreakdownList');
+    if (!pointsEl || !levelEl || !breakdownEl) return;
+
+    const data = getConsistencyRewardData();
+    pointsEl.textContent = data.points;
+    levelEl.textContent = `Level: ${data.level}`;
+
+    breakdownEl.innerHTML = `
+        <li>Active days (last 14): ${data.activeDayCount} (+${data.activeDaysPoints})</li>
+        <li>Current consistency streak: ${data.consistencyStreak} day${data.consistencyStreak === 1 ? '' : 's'} (+${data.streakPoints})</li>
+        <li>Balanced focus days (20-120 min): ${data.sustainableDayCount} (+${data.sustainablePoints})</li>
+        <li>Overload days (&gt;180 min): ${data.overloadDayCount} (-${data.overloadPenalty})</li>
+    `;
 }
 
 function getFlashcardsDueTodayByDeck(now = new Date()) {
@@ -2680,6 +2830,204 @@ function refreshDashboardQuestionBank() {
     renderDashboardQuestionBank();
 }
 
+function shuffleArray(list) {
+    return [...list].sort(() => Math.random() - 0.5);
+}
+
+function normalizeMemoryBoosterSubject(value) {
+    return String(value || "").trim() || "General";
+}
+
+function getMemoryBoosterPool() {
+    const pool = [];
+
+    if (Array.isArray(notes)) {
+        notes.forEach((note) => {
+            const subject = normalizeMemoryBoosterSubject(note.subject);
+            const title = String(note.title || "").trim() || `${subject} Note`;
+            const rawContent = String(note.content || "").trim();
+            if (!rawContent) return;
+            const snippets = rawContent
+                .split(/\r?\n|[.?!]\s+/)
+                .map(line => line.replace(/^[-*]\s*/, "").trim())
+                .filter(line => line.length >= 10 && line.length <= 140)
+                .slice(0, 4);
+            snippets.forEach((snippet) => {
+                pool.push({
+                    subject,
+                    prompt: `From your note "${title}", which point is included?`,
+                    answer: snippet
+                });
+            });
+        });
+    }
+
+    Object.entries(flashcards || {}).forEach(([deckName, cards]) => {
+        (cards || []).forEach((card) => {
+            const front = String(card && card.front ? card.front : "").trim();
+            const back = String(card && card.back ? card.back : "").trim();
+            if (!front || !back) return;
+            pool.push({
+                subject: normalizeMemoryBoosterSubject(deckName),
+                prompt: `In your "${deckName}" flashcards, what is the best answer for: "${front}"?`,
+                answer: back
+            });
+        });
+    });
+
+    (chapterTracker || []).forEach((item) => {
+        const chapter = String(item.chapter || "").trim();
+        if (!chapter) return;
+        const status = String(item.status || "not-started").trim();
+        const statusLabel = status === "done" ? "Done" : status === "in-progress" ? "In progress" : "Not started";
+        const subject = normalizeMemoryBoosterSubject(item.subject);
+        pool.push({
+            subject,
+            prompt: `What is the current status of chapter "${chapter}" in ${subject}?`,
+            answer: statusLabel
+        });
+    });
+
+    (doubtTracker || []).forEach((item) => {
+        if (item.resolved) return;
+        const text = String(item.text || "").trim();
+        if (!text) return;
+        const subject = normalizeMemoryBoosterSubject(item.subject);
+        const chapter = String(item.chapter || "General").trim() || "General";
+        pool.push({
+            subject,
+            prompt: `Which unresolved doubt belongs to ${subject} (${chapter})?`,
+            answer: text.length > 140 ? `${text.slice(0, 137)}...` : text
+        });
+    });
+
+    return pool.filter(item => item.prompt && item.answer);
+}
+
+function generateMemoryBoosterSession() {
+    const subject = document.getElementById('memoryBoosterSubject')?.value || "Any";
+    const countRaw = Number(document.getElementById('memoryBoosterCount')?.value || 5);
+    const count = Math.max(3, Math.min(12, Number.isFinite(countRaw) ? Math.round(countRaw) : 5));
+
+    const pool = getMemoryBoosterPool();
+    const filteredPool = subject === "Any"
+        ? pool
+        : pool.filter(item => subjectMatches(item.subject || "", subject));
+
+    if (filteredPool.length < 3) {
+        memoryBoosterSession = [];
+        renderMemoryBoosterSession();
+        const result = document.getElementById('memoryBoosterResult');
+        if (result) {
+            result.innerHTML = '<p class="empty-state">Not enough personal content yet. Add notes/flashcards/chapters first.</p>';
+        }
+        return;
+    }
+
+    const selected = shuffleArray(filteredPool).slice(0, Math.min(count, filteredPool.length));
+    const answerBank = [...new Set(filteredPool.map(item => item.answer).filter(Boolean))];
+
+    memoryBoosterSession = selected.map((item) => {
+        const distractors = shuffleArray(
+            answerBank.filter(answer => answer !== item.answer)
+        ).slice(0, 3);
+
+        const fallbackOptions = ['Need to revise this', 'Not in my notes', 'I am not sure']
+            .filter(text => text !== item.answer);
+        const combined = [...distractors];
+        for (const fallback of fallbackOptions) {
+            if (combined.length >= 3) break;
+            if (!combined.includes(fallback)) combined.push(fallback);
+        }
+        const options = shuffleArray([item.answer, ...combined.slice(0, 3)]);
+        return {
+            subject: item.subject,
+            prompt: item.prompt,
+            answer: item.answer,
+            options,
+            correctIndex: options.findIndex(opt => opt === item.answer)
+        };
+    });
+
+    const result = document.getElementById('memoryBoosterResult');
+    if (result) result.innerHTML = '';
+    renderMemoryBoosterSession();
+}
+
+function renderMemoryBoosterSession() {
+    const container = document.getElementById('memoryBoosterContainer');
+    const submitBtn = document.getElementById('memoryBoosterSubmitBtn');
+    if (!container) return;
+
+    if (!Array.isArray(memoryBoosterSession) || memoryBoosterSession.length === 0) {
+        container.innerHTML = '<div class="empty-state">Generate a recall test to begin.</div>';
+        if (submitBtn) submitBtn.disabled = true;
+        return;
+    }
+
+    if (submitBtn) submitBtn.disabled = false;
+    container.innerHTML = memoryBoosterSession.map((item, idx) => `
+        <div class="memory-question">
+            <h4>Q${idx + 1}. ${escapeHtml(item.prompt)}</h4>
+            <p class="memory-question-meta">${escapeHtml(item.subject)}</p>
+            ${item.options.map((option, optionIdx) => `
+                <label>
+                    <input type="radio" name="memory-q-${idx}" value="${optionIdx}">
+                    ${escapeHtml(option)}
+                </label>
+            `).join("")}
+        </div>
+    `).join("");
+}
+
+function submitMemoryBoosterSession() {
+    if (!Array.isArray(memoryBoosterSession) || memoryBoosterSession.length === 0) {
+        alert('Generate a recall test first.');
+        return;
+    }
+
+    let score = 0;
+    let answered = 0;
+    const incorrect = [];
+
+    memoryBoosterSession.forEach((item, idx) => {
+        const selected = document.querySelector(`input[name="memory-q-${idx}"]:checked`);
+        if (!selected) return;
+        answered++;
+        const selectedIndex = Number(selected.value);
+        const correct = selectedIndex === item.correctIndex;
+        if (correct) {
+            score++;
+        } else {
+            incorrect.push(item);
+        }
+        trackWeakTopicAttempt({ subject: item.subject, question: item.prompt }, correct);
+    });
+
+    saveState({ weakTopicStats });
+    const total = memoryBoosterSession.length;
+    const percent = Math.round((score / total) * 100);
+    const result = document.getElementById('memoryBoosterResult');
+    if (!result) return;
+
+    if (answered === 0) {
+        result.innerHTML = '<p class="empty-state">Select at least one answer before submitting.</p>';
+        return;
+    }
+
+    const review = incorrect.slice(0, 3).map(item => `
+        <li><strong>${escapeHtml(item.subject)}:</strong> ${escapeHtml(item.answer)}</li>
+    `).join("");
+
+    result.innerHTML = `
+        <p><strong>Score:</strong> ${score}/${total} (${percent}%) | <strong>Answered:</strong> ${answered}/${total}</p>
+        ${review ? `<ul class="memory-review-list">${review}</ul>` : '<p>Excellent recall. Keep this streak going.</p>'}
+    `;
+
+    addActivity('brain', 'Memory Booster', `Score ${percent}%`);
+    renderWeakTopicDetection();
+}
+
 function renderRecentActivity() {
     const list = document.getElementById('recentActivityList');
     if (activityLog.length === 0) {
@@ -2740,30 +3088,43 @@ function renderUpcomingDeadlines() {
     `).join('');
 }
 
-function renderDoNext() {
+function getAdaptiveWeakSubjects(limit = 4) {
+    const fromSettings = Array.isArray(smartSettings.weakSubjects) ? smartSettings.weakSubjects : [];
+    const fromWeakTopics = getWeakTopics(6).map(item => String(item.subject || '').trim()).filter(Boolean);
+    return [...new Set([...fromSettings, ...fromWeakTopics])].slice(0, Math.max(1, limit));
+}
+
+function renderDailyTop3AdaptiveTasks() {
     const list = document.getElementById('doNextList');
     if (!list) return;
 
-    const ranked = rankTasks(tasks, {
+    const weakSubjects = getAdaptiveWeakSubjects(4);
+    const ranked = rankTasks(tasks.filter(task => !task.done), {
         now: new Date(),
-        weakSubjects: smartSettings.weakSubjects || [],
+        weakSubjects,
         exams
-    }).slice(0, 5);
+    }).slice(0, 3);
     if (ranked.length === 0) {
         list.innerHTML = '<li class="empty-state">No active tasks to prioritize</li>';
         return;
     }
 
     list.innerHTML = ranked.map(task => {
-        const hint = getTaskScoreHint(task, { now: new Date(), weakSubjects: smartSettings.weakSubjects || [], exams }, 5);
+        const hint = getTaskScoreHint(task, { now: new Date(), weakSubjects, exams }, 5);
+        const subject = String(task.subject || 'General');
+        const weakTag = weakSubjects.some(name => subjectMatches(subject, name)) ? ' | Weak area boost' : '';
         return `
         <li>
             <strong>${task.text}</strong>
-            <span title="${escapeHtmlAttribute(hint)}">${task.subject || 'General'} | ${task.priority} | Score ${task._score}</span>
+            <span title="${escapeHtmlAttribute(hint)}">${subject} | ${task.priority} | Score ${task._score}${weakTag}</span>
             <button class="task-rank-hint" type="button" onclick="openTaskScoreModal('${encodeURIComponent(task.id)}')" title="${escapeHtmlAttribute(hint)}">Why ranked</button>
         </li>
     `;
     }).join('');
+}
+
+function renderDoNext() {
+    renderDailyTop3AdaptiveTasks();
 }
 
 function extractTopicFromQuestion(questionLike) {
@@ -3937,6 +4298,134 @@ function createNewDeck() {
         saveFlashcardsToBackend();
         renderFlashcards();
         addActivity('folder-plus', 'Deck Created', deckName);
+    }
+}
+
+const DRILL_CARDS_BY_SUBJECT = {
+    Math: [
+        { type: "formula", front: "Area of triangle", back: "A = 1/2 x base x height" },
+        { type: "formula", front: "Area of circle", back: "A = pi x r x r" },
+        { type: "formula", front: "Circumference of circle", back: "C = 2 x pi x r" },
+        { type: "formula", front: "Simple interest", back: "SI = (P x R x T) / 100" },
+        { type: "formula", front: "Average", back: "Average = Sum of values / Number of values" },
+        { type: "definition", front: "Prime number", back: "A number greater than 1 with exactly two factors: 1 and itself." },
+        { type: "definition", front: "Rational number", back: "A number that can be written in the form p/q where q is not 0." },
+        { type: "definition", front: "Linear equation", back: "An equation in which highest power of variable is 1." }
+    ],
+    Science: [
+        { type: "formula", front: "Speed formula", back: "Speed = Distance / Time" },
+        { type: "formula", front: "Density formula", back: "Density = Mass / Volume" },
+        { type: "formula", front: "Ohm's Law", back: "V = I x R" },
+        { type: "formula", front: "Work formula", back: "Work = Force x Displacement" },
+        { type: "formula", front: "Power formula", back: "Power = Work / Time" },
+        { type: "definition", front: "Photosynthesis", back: "Process by which green plants make food using sunlight, water and carbon dioxide." },
+        { type: "definition", front: "Atom", back: "Smallest unit of an element that retains its chemical properties." },
+        { type: "definition", front: "Ecosystem", back: "A community of living organisms interacting with each other and their environment." }
+    ],
+    English: [
+        { type: "definition", front: "Noun", back: "A word used to name a person, place, thing or idea." },
+        { type: "definition", front: "Pronoun", back: "A word used in place of a noun." },
+        { type: "definition", front: "Adjective", back: "A word that describes a noun or pronoun." },
+        { type: "definition", front: "Adverb", back: "A word that modifies a verb, adjective or another adverb." },
+        { type: "definition", front: "Metaphor", back: "A figure of speech that compares two unlike things directly." },
+        { type: "definition", front: "Simile", back: "A figure of speech comparing two things using like or as." },
+        { type: "definition", front: "Tense", back: "A verb form that indicates time of action or state." },
+        { type: "definition", front: "Subject-verb agreement", back: "The subject and verb must agree in number and person." }
+    ],
+    History: [
+        { type: "definition", front: "Primary source", back: "An original historical record from the time being studied." },
+        { type: "definition", front: "Secondary source", back: "A source that interprets or analyzes primary sources." },
+        { type: "definition", front: "Nationalism", back: "A sense of shared identity and loyalty toward a nation." },
+        { type: "definition", front: "Colonialism", back: "Control of one country by another for political and economic gain." },
+        { type: "definition", front: "Reform movement", back: "An organized effort to improve social, political or religious systems." },
+        { type: "definition", front: "Industrialization", back: "Shift from hand production to machine-based manufacturing." },
+        { type: "definition", front: "Revolution", back: "A major and often sudden change in political power or social structure." },
+        { type: "definition", front: "Constitution", back: "A fundamental set of rules and principles for governing a state." }
+    ],
+    Geography: [
+        { type: "formula", front: "Population density", back: "Population density = Total population / Land area" },
+        { type: "definition", front: "Latitude", back: "Imaginary lines measured east-west used to locate places north or south of the Equator." },
+        { type: "definition", front: "Longitude", back: "Imaginary lines measured north-south used to locate places east or west of Prime Meridian." },
+        { type: "definition", front: "Climate", back: "Average weather conditions of a place over a long period." },
+        { type: "definition", front: "Weathering", back: "Breaking down of rocks at Earth's surface by natural processes." },
+        { type: "definition", front: "Erosion", back: "Removal and transport of soil or rock by water, wind or ice." },
+        { type: "definition", front: "Plate tectonics", back: "Theory that Earth's crust is made of moving plates." },
+        { type: "definition", front: "Natural resource", back: "Materials from nature used by humans, such as water, forests and minerals." }
+    ],
+    Programming: [
+        { type: "definition", front: "Variable", back: "A named storage location for data in a program." },
+        { type: "definition", front: "Function", back: "A reusable block of code that performs a specific task." },
+        { type: "definition", front: "Loop", back: "A control structure that repeats instructions while a condition is true." },
+        { type: "definition", front: "Array", back: "A data structure that stores multiple values in an ordered list." },
+        { type: "definition", front: "Conditional statement", back: "A statement that runs code only if a condition is met." },
+        { type: "definition", front: "Algorithm", back: "A step-by-step procedure to solve a problem." },
+        { type: "definition", front: "Debugging", back: "The process of finding and fixing errors in code." },
+        { type: "definition", front: "Syntax", back: "The set of rules that defines valid code structure in a language." }
+    ]
+};
+
+function setDrillCardsStatus(message, tone = "neutral") {
+    const statusEl = document.getElementById('drillCardsStatus');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.classList.remove('success', 'warning');
+    if (tone === 'success') statusEl.classList.add('success');
+    if (tone === 'warning') statusEl.classList.add('warning');
+}
+
+function generateSubjectDrillCards() {
+    const subject = document.getElementById('drillSubjectSelect')?.value || 'Math';
+    const drillType = document.getElementById('drillTypeSelect')?.value || 'mixed';
+    const requestedCount = Math.max(3, Math.min(20, Number(document.getElementById('drillCountSelect')?.value || 10)));
+
+    const library = Array.isArray(DRILL_CARDS_BY_SUBJECT[subject]) ? DRILL_CARDS_BY_SUBJECT[subject] : [];
+    if (library.length === 0) {
+        setDrillCardsStatus(`No drill library available for ${subject}.`, 'warning');
+        return;
+    }
+
+    const filtered = drillType === 'mixed'
+        ? library
+        : library.filter(item => item.type === drillType);
+    if (filtered.length === 0) {
+        setDrillCardsStatus(`No ${drillType} cards available for ${subject}.`, 'warning');
+        return;
+    }
+
+    const deckName = `${subject} ${drillType === 'mixed' ? 'Drill' : drillType === 'formula' ? 'Formula Drill' : 'Definition Drill'}`;
+    if (!flashcards[deckName]) flashcards[deckName] = [];
+
+    const existingKeys = new Set(
+        flashcards[deckName].map(card =>
+            `${String(card.front || '').trim().toLowerCase()}||${String(card.back || '').trim().toLowerCase()}`
+        )
+    );
+
+    let added = 0;
+    shuffleArray(filtered).forEach((item) => {
+        if (added >= requestedCount) return;
+        const front = String(item.front || '').trim();
+        const back = String(item.back || '').trim();
+        if (!front || !back) return;
+        const key = `${front.toLowerCase()}||${back.toLowerCase()}`;
+        if (existingKeys.has(key)) return;
+        existingKeys.add(key);
+        flashcards[deckName].push(normalizeFlashcardCard({ front, back }));
+        added += 1;
+    });
+
+    saveState({ flashcards });
+    saveFlashcardsToBackend();
+    renderFlashcards();
+    selectDeck(deckName);
+    setFlashcardStudyModeSelectValue('all');
+    startStudy('all');
+
+    if (added === 0) {
+        setDrillCardsStatus(`${deckName} already has these cards. No new cards added.`, 'warning');
+    } else {
+        setDrillCardsStatus(`Added ${added} new cards to "${deckName}". Session started.`, 'success');
+        addActivity('bolt', 'Drill Cards Generated', `${deckName}: +${added}`);
     }
 }
 
@@ -5245,7 +5734,96 @@ function filterFreeNotes() {
     renderFreeNotes();
 }
 
+function updateVoiceNoteUI(statusText, isRecording) {
+    const statusEl = document.getElementById('voiceNoteStatus');
+    const startBtn = document.getElementById('voiceNoteStartBtn');
+    const stopBtn = document.getElementById('voiceNoteStopBtn');
+    if (statusEl) {
+        statusEl.textContent = statusText;
+        statusEl.classList.toggle('recording', Boolean(isRecording));
+    }
+    if (startBtn) startBtn.disabled = Boolean(isRecording);
+    if (stopBtn) stopBtn.disabled = !isRecording;
+}
+
+function appendVoiceTextToNote(text) {
+    const contentInput = document.getElementById('freeNoteContentInput');
+    if (!contentInput) return;
+    const current = String(contentInput.value || '').trim();
+    const cleaned = String(text || '').trim();
+    if (!cleaned) return;
+
+    const point = `- ${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)}`;
+    contentInput.value = current ? `${current}\n${point}` : point;
+}
+
+function stopVoiceNoteCapture() {
+    if (voiceNoteRecognition && voiceNoteListening) {
+        voiceNoteRecognition.stop();
+    }
+    voiceNoteListening = false;
+    updateVoiceNoteUI('Ready', false);
+}
+
+function startVoiceNoteCapture() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert('Voice capture is not supported in this browser. Please use Chrome or Edge.');
+        return;
+    }
+    if (voiceNoteListening) return;
+
+    voiceNoteRecognition = new SpeechRecognition();
+    voiceNoteRecognition.lang = 'en-US';
+    voiceNoteRecognition.interimResults = true;
+    voiceNoteRecognition.maxAlternatives = 1;
+    voiceNoteRecognition.continuous = true;
+
+    let transcriptBuffer = '';
+
+    voiceNoteRecognition.onstart = () => {
+        voiceNoteListening = true;
+        updateVoiceNoteUI('Listening...', true);
+    };
+
+    voiceNoteRecognition.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = String(event.results[i][0].transcript || '').trim();
+            if (!transcript) continue;
+            if (event.results[i].isFinal) {
+                transcriptBuffer = `${transcriptBuffer} ${transcript}`.trim();
+                appendVoiceTextToNote(transcript);
+            } else {
+                interim = transcript;
+            }
+        }
+        const previewText = interim || transcriptBuffer;
+        updateVoiceNoteUI(previewText ? `Listening... ${previewText.slice(0, 50)}` : 'Listening...', true);
+    };
+
+    voiceNoteRecognition.onerror = () => {
+        voiceNoteListening = false;
+        updateVoiceNoteUI('Voice capture error', false);
+    };
+
+    voiceNoteRecognition.onend = () => {
+        voiceNoteListening = false;
+        updateVoiceNoteUI('Ready', false);
+    };
+
+    try {
+        voiceNoteRecognition.start();
+    } catch (_) {
+        updateVoiceNoteUI('Unable to start mic', false);
+    }
+}
+
 async function addFreeNote() {
+    if (voiceNoteListening) {
+        stopVoiceNoteCapture();
+    }
+
     const title = document.getElementById('freeNoteTitleInput')?.value.trim();
     const subject = document.getElementById('freeNoteSubjectInput')?.value || 'General';
     const level = document.getElementById('freeNoteLevelInput')?.value.trim() || 'General';
@@ -5631,8 +6209,148 @@ async function submitQuiz() {
     await syncQuizScoreWithServer(record);
 }
 
+function formatClockFromSeconds(totalSeconds) {
+    const safe = Math.max(0, Number(totalSeconds) || 0);
+    const mins = Math.floor(safe / 60);
+    const secs = safe % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function updatePastPaperTimerDisplay() {
+    const display = document.getElementById('pastPaperTimerDisplay');
+    if (!display) return;
+    display.textContent = formatClockFromSeconds(pastPaperSecondsRemaining);
+}
+
+function resetPastPaperPracticeTimer() {
+    clearInterval(pastPaperTimerInterval);
+    pastPaperTimerInterval = null;
+    pastPaperTimerRunning = false;
+    const durationInput = document.getElementById('pastPaperDurationInput');
+    const duration = Math.max(15, Math.min(180, Number(durationInput && durationInput.value ? durationInput.value : 60)));
+    pastPaperSecondsRemaining = duration * 60;
+    updatePastPaperTimerDisplay();
+}
+
+function startPastPaperPracticeTimer() {
+    const durationInput = document.getElementById('pastPaperDurationInput');
+    const duration = Math.max(15, Math.min(180, Number(durationInput && durationInput.value ? durationInput.value : 60)));
+
+    if (!pastPaperTimerRunning || pastPaperSecondsRemaining <= 0) {
+        pastPaperSecondsRemaining = duration * 60;
+    }
+    if (pastPaperTimerRunning) return;
+
+    pastPaperTimerRunning = true;
+    updatePastPaperTimerDisplay();
+    pastPaperTimerInterval = setInterval(() => {
+        if (pastPaperSecondsRemaining <= 0) {
+            clearInterval(pastPaperTimerInterval);
+            pastPaperTimerInterval = null;
+            pastPaperTimerRunning = false;
+            alert('Past paper timer complete. Submit your score now.');
+            return;
+        }
+        pastPaperSecondsRemaining -= 1;
+        updatePastPaperTimerDisplay();
+    }, 1000);
+}
+
+function submitPastPaperScore() {
+    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'Math';
+    const obtained = Number(document.getElementById('pastPaperObtainedInput')?.value);
+    const total = Number(document.getElementById('pastPaperTotalInput')?.value);
+    const duration = Math.max(15, Math.min(180, Number(document.getElementById('pastPaperDurationInput')?.value || 60)));
+
+    if (!Number.isFinite(obtained) || !Number.isFinite(total) || total <= 0) {
+        alert('Enter valid score and total marks.');
+        return;
+    }
+    if (obtained < 0 || obtained > total) {
+        alert('Score must be between 0 and total marks.');
+        return;
+    }
+
+    const percent = Math.round((obtained / total) * 100);
+    const attempt = {
+        id: `paper-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        subject,
+        obtained: Math.round(obtained * 100) / 100,
+        total: Math.round(total * 100) / 100,
+        percent,
+        durationMinutes: duration,
+        createdAt: new Date().toISOString()
+    };
+
+    pastPaperAttempts.unshift(attempt);
+    pastPaperAttempts = normalizePastPaperAttempts(pastPaperAttempts).slice(0, 100);
+    saveState({ pastPaperAttempts });
+    addActivity('file-pen', 'Past Paper Attempt', `${subject}: ${percent}%`);
+    renderPastPaperTrend();
+
+    const scoreInput = document.getElementById('pastPaperObtainedInput');
+    if (scoreInput) scoreInput.value = '';
+}
+
+function renderPastPaperTrend() {
+    const summary = document.getElementById('pastPaperTrendSummary');
+    const subjectFilter = document.getElementById('pastPaperTrendSubject')?.value || 'All';
+    const canvas = document.getElementById('pastPaperTrendChart');
+    if (!summary || !canvas) return;
+
+    const filtered = (pastPaperAttempts || [])
+        .filter(item => subjectFilter === 'All' || item.subject === subjectFilter)
+        .slice()
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+    if (pastPaperTrendChartInstance) {
+        pastPaperTrendChartInstance.destroy();
+        pastPaperTrendChartInstance = null;
+    }
+
+    if (filtered.length === 0) {
+        summary.textContent = 'No past paper attempts yet.';
+        return;
+    }
+
+    const latest = filtered[filtered.length - 1];
+    const avg = Math.round(filtered.reduce((sum, item) => sum + (Number(item.percent) || 0), 0) / filtered.length);
+    summary.textContent = `${subjectFilter === 'All' ? 'All subjects' : subjectFilter}: ${filtered.length} attempts | Latest ${latest.percent}% | Avg ${avg}%`;
+
+    const labels = filtered.map((item, idx) => `A${idx + 1}`);
+    const values = filtered.map(item => Number(item.percent) || 0);
+
+    pastPaperTrendChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Past Paper Score %',
+                data: values,
+                borderColor: '#0f766e',
+                backgroundColor: 'rgba(15, 118, 110, 0.18)',
+                fill: true,
+                tension: 0.25
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                y: { min: 0, max: 100 }
+            }
+        }
+    });
+}
+
 function renderQuizPage() {
     renderQuizQuestions();
+    if (!pastPaperTimerRunning) {
+        resetPastPaperPracticeTimer();
+    } else {
+        updatePastPaperTimerDisplay();
+    }
+    renderPastPaperTrend();
     const history = document.getElementById('quizHistoryList');
     if (!history) return;
     const currentUser = getCurrentUser();
@@ -6521,6 +7239,136 @@ function createRevisionTemplatePlan() {
     }
 }
 
+function getSprintRevisionPlan(days, subject) {
+    const totalDays = Math.max(7, Math.min(30, Number(days) || 7));
+    const normalizedSubject = String(subject || 'Math');
+    const focusLibrary = {
+        Math: [
+            'Core formulas and concepts',
+            'Worked examples from key chapters',
+            'Timed problem-solving set',
+            'Weak-topic drill and corrections',
+            'Mixed chapter practice',
+            'Previous paper questions',
+            'Mock test and error log'
+        ],
+        Science: [
+            'Concept recap and definitions',
+            'Diagrams and labelled practice',
+            'Numericals/application questions',
+            'Weak-topic correction session',
+            'Chapter-wise short tests',
+            'Previous paper questions',
+            'Mock test and corrections'
+        ],
+        English: [
+            'Reading comprehension strategy',
+            'Grammar drill and editing',
+            'Writing format practice',
+            'Literature chapter recap',
+            'Weak-topic correction session',
+            'Sample paper practice',
+            'Mock test and corrections'
+        ],
+        History: [
+            'Timeline and chronology recap',
+            'Causes-effects long-answer prep',
+            'Map/source-based practice',
+            'Weak-topic correction session',
+            'Chapter summary recall',
+            'Previous paper questions',
+            'Mock test and corrections'
+        ]
+    };
+    const focuses = focusLibrary[normalizedSubject] || focusLibrary.Math;
+    const totalBlocks = totalDays <= 7 ? 7 : totalDays <= 14 ? 8 : 12;
+    const plan = [];
+    for (let i = 0; i < totalBlocks; i++) {
+        const dayOffset = totalBlocks === 1 ? 0 : Math.round((i * (totalDays - 1)) / (totalBlocks - 1));
+        plan.push({
+            dayOffset,
+            title: `Sprint Day ${dayOffset + 1}: ${focuses[i % focuses.length]}`
+        });
+    }
+    return plan;
+}
+
+function renderSprintRevisionPreview() {
+    const daysInput = document.getElementById('sprintRevisionDays');
+    const subjectInput = document.getElementById('sprintRevisionSubject');
+    const list = document.getElementById('sprintRevisionPreviewList');
+    if (!list) return;
+
+    const days = Number(daysInput && daysInput.value ? daysInput.value : 7);
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const plan = getSprintRevisionPlan(days, subject);
+    if (plan.length === 0) {
+        list.innerHTML = '<li class="empty-state">No sprint plan generated.</li>';
+        return;
+    }
+
+    list.innerHTML = plan.map(item => `
+        <li>
+            <strong>${item.title}</strong>
+            <span>${subject} | Day ${item.dayOffset + 1}</span>
+        </li>
+    `).join('');
+}
+
+function createSprintRevisionTasks() {
+    const daysInput = document.getElementById('sprintRevisionDays');
+    const subjectInput = document.getElementById('sprintRevisionSubject');
+    const days = Number(daysInput && daysInput.value ? daysInput.value : 7);
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const plan = getSprintRevisionPlan(days, subject);
+
+    if (plan.length === 0) {
+        alert('Unable to generate sprint plan.');
+        return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const examWeight = days <= 7 ? 5 : days <= 14 ? 4 : 3;
+    const createdTasks = [];
+
+    plan.forEach(item => {
+        const text = `${subject} ${item.title}`;
+        const exists = tasks.some(task => String(task.text || '').trim() === text);
+        if (exists) return;
+        const due = new Date(today);
+        due.setDate(due.getDate() + item.dayOffset);
+        const task = normalizeTask({
+            id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            subject,
+            priority: item.dayOffset >= Math.floor(days * 0.7) ? 'high' : 'medium',
+            difficulty: item.dayOffset >= Math.floor(days * 0.7) ? 'hard' : 'medium',
+            examWeight,
+            estimatedHours: days <= 7 ? 2 : 1.5,
+            dueDate: due.toISOString().split('T')[0],
+            done: false,
+            doneAt: '',
+            createdAt: new Date().toISOString()
+        });
+        tasks.push(task);
+        createdTasks.push(task);
+    });
+
+    if (createdTasks.length === 0) {
+        alert('Sprint tasks already exist for this selection.');
+        renderSprintRevisionPreview();
+        return;
+    }
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('bolt', 'Sprint Revision Plan Created', `${createdTasks.length} tasks for ${days}-day ${subject} sprint`);
+    alert(`${createdTasks.length} sprint revision task(s) created.`);
+    renderSprintRevisionPreview();
+}
+
 function renderDoubtTracker() {
     const list = document.getElementById('doubtTrackerList');
     if (!list) return;
@@ -6682,6 +7530,7 @@ function renderGoals() {
     renderGoalRoadmap();
     renderChapterTracker();
     renderRevisionTemplatePreview();
+    renderSprintRevisionPreview();
     renderDoubtTracker();
 }
 
@@ -6725,12 +7574,71 @@ function updateTimerDisplay() {
     document.getElementById('timerSeconds').textContent = timerSeconds.toString().padStart(2, '0');
 }
 
+function getConsecutiveFocusStats() {
+    let focusMinutes = 0;
+    let focusSessions = 0;
+
+    for (let i = pomodoroSessions.length - 1; i >= 0; i--) {
+        const session = pomodoroSessions[i];
+        const type = String((session && session.type) || "");
+        if (type === "Short Break" || type === "Long Break" || type === "Break") break;
+        if (type === "Focus") {
+            focusSessions += 1;
+            focusMinutes += Number(session.minutes) || 0;
+        }
+    }
+
+    return { focusMinutes, focusSessions };
+}
+
+function isBurnoutRisk(stats = getConsecutiveFocusStats()) {
+    return stats.focusMinutes >= BURNOUT_GUARD_MINUTES || stats.focusSessions >= BURNOUT_GUARD_FOCUS_SESSIONS;
+}
+
+function renderBurnoutGuardHint() {
+    const hint = document.getElementById('burnoutGuardHint');
+    if (!hint) return;
+
+    const stats = getConsecutiveFocusStats();
+    if (isBurnoutRisk(stats)) {
+        hint.textContent = `Burnout Guard: ${stats.focusMinutes} min across ${stats.focusSessions} focus sessions. Break recommended.`;
+        hint.style.color = '#b91c1c';
+        return;
+    }
+
+    hint.textContent = `Burnout Guard: ${stats.focusMinutes} min focus streak (${stats.focusSessions} session${stats.focusSessions === 1 ? '' : 's'}).`;
+    hint.style.color = '';
+}
+
+function promptBurnoutGuardBreak(contextLabel) {
+    const stats = getConsecutiveFocusStats();
+    if (!isBurnoutRisk(stats)) {
+        renderBurnoutGuardHint();
+        return false;
+    }
+
+    const startBreakNow = confirm(
+        `Burnout Guard: You have focused for ${stats.focusMinutes} minutes across ${stats.focusSessions} sessions without a break. ` +
+        `Start a 5-minute break now?`
+    );
+
+    if (startBreakNow) {
+        setTimerMode(5);
+        addActivity('mug-hot', 'Burnout Guard Break', `Suggested after ${stats.focusMinutes} min focus streak (${contextLabel})`);
+    }
+    renderBurnoutGuardHint();
+    return startBreakNow;
+}
+
 function startTimer() {
     if (isTimerRunning) return;
     const modeLabel = getTimerModeLabel(timerModeMinutes);
     if (modeLabel === 'Focus' && pendingReflectionRequired) {
         alert('Please complete your previous reflection check-in before starting the next focus session.');
         openReflectionCheckin(pendingReflectionContext);
+        return;
+    }
+    if (modeLabel === 'Focus' && promptBurnoutGuardBreak('before focus session')) {
         return;
     }
     isTimerRunning = true;
@@ -6761,8 +7669,10 @@ function startTimer() {
                 renderPomodoroHistory();
                 renderDashboard();
                 renderAnalytics();
+                renderBurnoutGuardHint();
 
                 if (type === 'Focus') {
+                    promptBurnoutGuardBreak('after focus session');
                     pendingReflectionRequired = true;
                     pendingReflectionContext = { subject, minutes: sessionMinutes };
                     openReflectionCheckin({ subject, minutes: sessionMinutes });
@@ -6898,6 +7808,7 @@ function exportData() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        pastPaperAttempts,
         teacherUpdates,
         smartSettings,
         dailyPlan,
@@ -6947,6 +7858,7 @@ function importData(event) {
             if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
             if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
             if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
+            if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
             if (Array.isArray(data.teacherUpdates)) teacherUpdates = data.teacherUpdates;
             if (data.smartSettings) smartSettings = normalizeSmartSettings(data.smartSettings);
             if (data.dailyPlan) dailyPlan = { ...DEFAULT_STATE.dailyPlan, ...data.dailyPlan };
@@ -6976,6 +7888,7 @@ function importData(event) {
                 studyMaterials,
                 freeNotesLibrary,
                 quizScores,
+                pastPaperAttempts,
                 teacherUpdates,
                 smartSettings,
                 dailyPlan,
