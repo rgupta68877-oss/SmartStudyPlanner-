@@ -245,6 +245,38 @@ body {
     gap: 10px;
 }
 
+.mistake-due-badge {
+    margin-left: auto;
+    min-width: 24px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.4;
+    background: #dc2626;
+    color: #ffffff;
+}
+
+.mistake-due-badge.zero {
+    background: #64748b;
+}
+
+.mood-checkin {
+    margin-bottom: 12px;
+}
+
+.mood-checkin p {
+    margin-bottom: 8px;
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+.mood-btn.active-mood {
+    background: var(--primary-color);
+    color: #fff;
+}
+
 /* Quote Card */
 .quote-card {
     background: var(--card-bg);

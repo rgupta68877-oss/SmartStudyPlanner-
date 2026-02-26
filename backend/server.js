@@ -21,6 +21,7 @@ const UPDATES_FILE = path.join(DATA_DIR, "teacher-updates.json");
 const SCORES_FILE = path.join(DATA_DIR, "quiz-scores.json");
 const FLASHCARDS_FILE = path.join(DATA_DIR, "flashcards.json");
 const SHARED_NOTES_FILE = path.join(DATA_DIR, "shared-notes.json");
+const PEER_CHALLENGES_FILE = path.join(DATA_DIR, "peer-challenges.json");
 const PRESENCE_TTL_MS = Math.max(30_000, Number(process.env.PRESENCE_TTL_MS || 60_000));
 const presenceByClientId = new Map();
 
@@ -39,6 +40,90 @@ function readJson(filePath, fallback) {
 
 function writeJson(filePath, value) {
     fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+function getTodayKeyUTC() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function toDateKey(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+}
+
+function addDays(dateKey, dayCount) {
+    const base = new Date(`${dateKey}T00:00:00.000Z`);
+    if (Number.isNaN(base.getTime())) return dateKey;
+    base.setUTCDate(base.getUTCDate() + Number(dayCount || 0));
+    return base.toISOString().slice(0, 10);
+}
+
+function daysBetween(dateA, dateB) {
+    const a = new Date(`${dateA}T00:00:00.000Z`);
+    const b = new Date(`${dateB}T00:00:00.000Z`);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+    return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
+function randomChallengeCode() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let out = "";
+    for (let i = 0; i < 8; i++) {
+        out += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return out;
+}
+
+function normalizeParticipant(value) {
+    const participant = value && typeof value === "object" ? value : {};
+    const checkins = Array.isArray(participant.checkins)
+        ? [...new Set(participant.checkins.map((d) => String(d || "").slice(0, 10)).filter(Boolean))].sort()
+        : [];
+    return {
+        email: String(participant.email || "").trim().toLowerCase(),
+        name: String(participant.name || "").trim() || "Student",
+        role: ["student", "teacher", "admin"].includes(participant.role) ? participant.role : "student",
+        joinedAt: participant.joinedAt || new Date().toISOString(),
+        checkins,
+        currentStreak: Math.max(0, Number(participant.currentStreak) || 0),
+        bestStreak: Math.max(0, Number(participant.bestStreak) || 0),
+        lastCheckinDate: String(participant.lastCheckinDate || "")
+    };
+}
+
+function normalizePeerChallenge(value) {
+    const challenge = value && typeof value === "object" ? value : {};
+    const durationDays = Math.max(1, Math.min(30, Number(challenge.durationDays) || 7));
+    const startDate = String(challenge.startDate || getTodayKeyUTC()).slice(0, 10);
+    const endDate = String(challenge.endDate || addDays(startDate, durationDays - 1)).slice(0, 10);
+    const participants = Array.isArray(challenge.participants)
+        ? challenge.participants.map(normalizeParticipant).filter((p) => p.email)
+        : [];
+    const today = getTodayKeyUTC();
+    const active = today <= endDate;
+    return {
+        id: String(challenge.id || `challenge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        code: String(challenge.code || randomChallengeCode()).trim().toUpperCase(),
+        name: String(challenge.name || "7-Day Streak Challenge").trim() || "7-Day Streak Challenge",
+        durationDays,
+        startDate,
+        endDate,
+        createdBy: String(challenge.createdBy || "").trim().toLowerCase(),
+        createdAt: challenge.createdAt || new Date().toISOString(),
+        status: active ? "active" : "completed",
+        participants
+    };
+}
+
+function getPeerChallenges() {
+    const raw = readJson(PEER_CHALLENGES_FILE, []);
+    return Array.isArray(raw) ? raw.map(normalizePeerChallenge) : [];
+}
+
+function savePeerChallenges(challenges) {
+    const safe = Array.isArray(challenges) ? challenges.map(normalizePeerChallenge) : [];
+    writeJson(PEER_CHALLENGES_FILE, safe.slice(0, 500));
 }
 
 function issueToken(user) {
@@ -414,6 +499,146 @@ app.post("/api/reminders/send", authenticateJWT, authorizeRoles("teacher", "admi
     } catch (err) {
         return res.status(500).json({ error: err.message || "Failed to send email" });
     }
+});
+
+app.get("/api/peer-challenges", authenticateJWT, (req, res) => {
+    const email = String(req.user?.email || "").trim().toLowerCase();
+    const challenges = getPeerChallenges();
+    const mine = challenges.filter((challenge) =>
+        Array.isArray(challenge.participants) &&
+        challenge.participants.some((participant) => participant.email === email)
+    );
+    return res.json(mine);
+});
+
+app.post("/api/peer-challenges", authenticateJWT, (req, res) => {
+    const name = String(req.body?.name || "").trim() || "7-Day Streak Challenge";
+    const durationDays = Math.max(1, Math.min(30, Number(req.body?.durationDays) || 7));
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+
+    const challenges = getPeerChallenges();
+    const usedCodes = new Set(challenges.map((c) => String(c.code || "").toUpperCase()));
+    let code = randomChallengeCode();
+    let attempts = 0;
+    while (usedCodes.has(code) && attempts < 10) {
+        code = randomChallengeCode();
+        attempts += 1;
+    }
+
+    const startDate = getTodayKeyUTC();
+    const challenge = normalizePeerChallenge({
+        id: `challenge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        code,
+        name,
+        durationDays,
+        startDate,
+        endDate: addDays(startDate, durationDays - 1),
+        createdBy: userEmail,
+        createdAt: new Date().toISOString(),
+        participants: [
+            {
+                email: userEmail,
+                name: userName,
+                role: userRole,
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }
+        ]
+    });
+
+    challenges.unshift(challenge);
+    savePeerChallenges(challenges);
+    return res.status(201).json(challenge);
+});
+
+app.post("/api/peer-challenges/join", authenticateJWT, (req, res) => {
+    const code = String(req.body?.code || "").trim().toUpperCase();
+    if (!code) {
+        return res.status(400).json({ error: "Invite code is required" });
+    }
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+
+    const challenges = getPeerChallenges();
+    const idx = challenges.findIndex((challenge) => String(challenge.code || "").toUpperCase() === code);
+    if (idx < 0) {
+        return res.status(404).json({ error: "Challenge not found for invite code" });
+    }
+
+    const challenge = challenges[idx];
+    if (challenge.status !== "active") {
+        return res.status(400).json({ error: "Challenge has already ended" });
+    }
+
+    const exists = challenge.participants.some((participant) => participant.email === userEmail);
+    if (!exists) {
+        challenge.participants.push(
+            normalizeParticipant({
+                email: userEmail,
+                name: userName,
+                role: userRole,
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            })
+        );
+        challenges[idx] = normalizePeerChallenge(challenge);
+        savePeerChallenges(challenges);
+    }
+
+    return res.json(challenges[idx]);
+});
+
+app.post("/api/peer-challenges/:id/checkin", authenticateJWT, (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ error: "Challenge id is required" });
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const today = getTodayKeyUTC();
+
+    const challenges = getPeerChallenges();
+    const idx = challenges.findIndex((challenge) => challenge.id === id);
+    if (idx < 0) return res.status(404).json({ error: "Challenge not found" });
+
+    const challenge = challenges[idx];
+    if (today > challenge.endDate) {
+        challenge.status = "completed";
+        challenges[idx] = normalizePeerChallenge(challenge);
+        savePeerChallenges(challenges);
+        return res.status(400).json({ error: "Challenge has ended" });
+    }
+
+    const pIdx = challenge.participants.findIndex((participant) => participant.email === userEmail);
+    if (pIdx < 0) return res.status(403).json({ error: "Join this challenge first" });
+
+    const participant = normalizeParticipant(challenge.participants[pIdx]);
+    if (participant.checkins.includes(today)) {
+        challenges[idx] = normalizePeerChallenge(challenge);
+        return res.json(challenges[idx]);
+    }
+
+    const previousDate = participant.lastCheckinDate || "";
+    const gap = previousDate ? daysBetween(previousDate, today) : 0;
+    if (!previousDate) participant.currentStreak = 1;
+    else if (gap === 1) participant.currentStreak += 1;
+    else participant.currentStreak = 1;
+    participant.bestStreak = Math.max(participant.bestStreak, participant.currentStreak);
+    participant.lastCheckinDate = today;
+    participant.checkins = [...participant.checkins, today].sort();
+
+    challenge.participants[pIdx] = participant;
+    challenges[idx] = normalizePeerChallenge(challenge);
+    savePeerChallenges(challenges);
+    return res.json(challenges[idx]);
 });
 
 app.listen(PORT, () => {

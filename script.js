@@ -541,6 +541,8 @@ const STORAGE_KEYS = {
     pomodoroSessions: "pomodoroSessions",
     activityLog: "activityLog",
     weeklyStats: "weeklyStats",
+    microWinStats: "microWinStats",
+    distractionLog: "distractionLog",
     goals: "goals",
     goalRoadmap: "goalRoadmap",
     weakTopicStats: "weakTopicStats",
@@ -552,10 +554,13 @@ const STORAGE_KEYS = {
     studyMaterials: "studyMaterials",
     freeNotesLibrary: "freeNotesLibrary",
     quizScores: "quizScores",
+    mistakeNotebook: "mistakeNotebook",
     pastPaperAttempts: "pastPaperAttempts",
     teacherUpdates: "teacherUpdates",
     smartSettings: "smartSettings",
+    studyMood: "studyMood",
     dailyPlan: "dailyPlan",
+    recoveryPlan: "recoveryPlan",
     authUsers: "authUsers",
     authSession: "authSession",
     studyStreak: "studyStreak",
@@ -596,6 +601,15 @@ const DEFAULT_STATE = {
         studyHours: 0,
         flashcardsReviewed: 0
     },
+    distractionLog: [],
+    microWinStats: {
+        points: 0,
+        startOnTimeCount: 0,
+        focusCompletedCount: 0,
+        noDistractionStreak: 0,
+        bestNoDistractionStreak: 0,
+        history: []
+    },
     weakTopicStats: {},
     chapterTracker: [],
     doubtTracker: [],
@@ -620,13 +634,27 @@ const DEFAULT_STATE = {
     studyMaterials: DEFAULT_STUDY_MATERIALS,
     freeNotesLibrary: DEFAULT_FREE_NOTES_LIBRARY,
     quizScores: [],
+    mistakeNotebook: [],
     pastPaperAttempts: [],
     teacherUpdates: [],
     smartSettings: DEFAULT_SMART_SETTINGS,
+    studyMood: {
+        level: "normal",
+        updatedAt: ""
+    },
     dailyPlan: {
         date: "",
         items: [],
         availableHours: 0
+    },
+    recoveryPlan: {
+        lastAutoDate: "",
+        lastGeneratedDate: "",
+        lastMode: "",
+        lastGapDays: 0,
+        generatedCount: 0,
+        historyFilter: "all",
+        history: []
     },
     authUsers: [],
     authSession: null
@@ -687,6 +715,82 @@ function normalizeTask(task) {
         estimatedHours: Number.isFinite(parsedEstimatedHours) && parsedEstimatedHours > 0 ? parsedEstimatedHours : 1,
         difficulty: ["easy", "medium", "hard"].includes(difficulty) ? difficulty : "medium",
         examWeight: Number.isFinite(parsedExamWeight) ? Math.min(5, Math.max(1, Math.round(parsedExamWeight))) : 3
+    };
+}
+
+function normalizeMicroWinStats(value) {
+    const normalized = value && typeof value === "object" ? value : {};
+    const history = Array.isArray(normalized.history) ? normalized.history : [];
+    return {
+        points: Math.max(0, Math.round(Number(normalized.points) || 0)),
+        startOnTimeCount: Math.max(0, Math.round(Number(normalized.startOnTimeCount) || 0)),
+        focusCompletedCount: Math.max(0, Math.round(Number(normalized.focusCompletedCount) || 0)),
+        noDistractionStreak: Math.max(0, Math.round(Number(normalized.noDistractionStreak) || 0)),
+        bestNoDistractionStreak: Math.max(0, Math.round(Number(normalized.bestNoDistractionStreak) || 0)),
+        history: history
+            .map(item => ({
+                reason: String((item && item.reason) || "").trim(),
+                points: Math.round(Number(item && item.points) || 0),
+                at: String((item && item.at) || "")
+            }))
+            .filter(item => item.reason && Number.isFinite(item.points))
+            .slice(0, 50)
+    };
+}
+
+function normalizeDistractionLog(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const type = String(normalized.type || "").trim().toLowerCase();
+            if (!type) return null;
+            return {
+                id: normalized.id || `distraction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type,
+                subject: String(normalized.subject || "General").trim() || "General",
+                createdAt: normalized.createdAt || new Date().toISOString()
+            };
+        })
+        .filter(Boolean)
+        .slice(0, 300);
+}
+
+function normalizeStudyMood(value) {
+    const normalized = value && typeof value === "object" ? value : {};
+    const level = String(normalized.level || "normal").trim().toLowerCase();
+    const safeLevel = ["light", "normal", "intense"].includes(level) ? level : "normal";
+    return {
+        level: safeLevel,
+        updatedAt: String(normalized.updatedAt || "")
+    };
+}
+
+function normalizeRecoveryPlan(value) {
+    const normalized = value && typeof value === "object" ? value : {};
+    const history = Array.isArray(normalized.history) ? normalized.history : [];
+    return {
+        lastAutoDate: String(normalized.lastAutoDate || ""),
+        lastGeneratedDate: String(normalized.lastGeneratedDate || ""),
+        lastMode: String(normalized.lastMode || ""),
+        lastGapDays: Math.max(0, Math.round(Number(normalized.lastGapDays) || 0)),
+        generatedCount: Math.max(0, Math.round(Number(normalized.generatedCount) || 0)),
+        historyFilter: ["all", "auto", "manual"].includes(String(normalized.historyFilter || "").toLowerCase())
+            ? String(normalized.historyFilter).toLowerCase()
+            : "all",
+        history: history
+            .map(item => ({
+                id: String((item && item.id) || `recovery-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+                date: String((item && item.date) || ""),
+                mode: String((item && item.mode) || "manual"),
+                gapDays: Math.max(0, Math.round(Number(item && item.gapDays) || 0)),
+                itemCount: Math.max(0, Math.round(Number(item && item.itemCount) || 0)),
+                linkedTaskIds: Array.isArray(item && item.linkedTaskIds)
+                    ? item.linkedTaskIds.map(id => String(id || "").trim()).filter(Boolean)
+                    : []
+            }))
+            .filter(item => item.date)
+            .slice(0, 20)
     };
 }
 
@@ -768,12 +872,16 @@ function normalizeChapterTracker(value) {
             const normalized = item && typeof item === "object" ? item : {};
             const status = String(normalized.status || "not-started");
             const score = Number(normalized.testScore);
+            const prerequisites = Array.isArray(normalized.prerequisites)
+                ? normalized.prerequisites.map(id => String(id || "").trim()).filter(Boolean)
+                : [];
             return {
                 id: normalized.id || `chapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 subject: String(normalized.subject || "General").trim() || "General",
                 chapter: String(normalized.chapter || "").trim(),
                 status: ["not-started", "in-progress", "done"].includes(status) ? status : "not-started",
                 testScore: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
+                prerequisites: [...new Set(prerequisites)],
                 createdAt: normalized.createdAt || new Date().toISOString()
             };
         })
@@ -844,6 +952,52 @@ function normalizePastPaperAttempts(value) {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
+function normalizeMistakeNotebook(value) {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(item => {
+            const normalized = item && typeof item === "object" ? item : {};
+            const question = String(normalized.question || "").trim();
+            const subject = String(normalized.subject || "General").trim() || "General";
+            const difficulty = String(normalized.difficulty || "mixed").trim() || "mixed";
+            const correctAnswer = String(normalized.correctAnswer || "").trim();
+            const selectedAnswer = String(normalized.selectedAnswer || "").trim();
+            const wrongReason = String(normalized.wrongReason || "").trim();
+            const reviewStage = Number(normalized.reviewStage);
+            const wrongCount = Number(normalized.wrongCount);
+            const reviewCount = Number(normalized.reviewCount);
+            const options = Array.isArray(normalized.options)
+                ? normalized.options.map(opt => String(opt || "").trim()).filter(Boolean)
+                : [];
+            if (!question) return null;
+            return {
+                id: normalized.id || `mistake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                userEmail: normalizeEmail(normalized.userEmail || ""),
+                subject,
+                difficulty,
+                question,
+                options,
+                correctAnswer,
+                selectedAnswer,
+                wrongReason,
+                reviewStage: Number.isFinite(reviewStage) ? Math.max(0, Math.min(2, Math.round(reviewStage))) : 0,
+                wrongCount: Number.isFinite(wrongCount) ? Math.max(1, Math.round(wrongCount)) : 1,
+                reviewCount: Number.isFinite(reviewCount) ? Math.max(0, Math.round(reviewCount)) : 0,
+                nextReviewAt: normalized.nextReviewAt || "",
+                createdAt: normalized.createdAt || new Date().toISOString(),
+                lastWrongAt: normalized.lastWrongAt || normalized.createdAt || new Date().toISOString(),
+                lastReviewedAt: normalized.lastReviewedAt || "",
+                masteredAt: normalized.masteredAt || ""
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+            const aDue = Date.parse(a.nextReviewAt || a.createdAt || 0);
+            const bDue = Date.parse(b.nextReviewAt || b.createdAt || 0);
+            return bDue - aDue;
+        });
+}
+
 function normalizeFlashcardCard(card) {
     const normalized = card && typeof card === "object" ? card : {};
     const front = String(normalized.front || "").trim();
@@ -906,6 +1060,8 @@ function loadState() {
         pomodoroSessions: parseStoredJSON(STORAGE_KEYS.pomodoroSessions, DEFAULT_STATE.pomodoroSessions),
         activityLog: parseStoredJSON(STORAGE_KEYS.activityLog, DEFAULT_STATE.activityLog),
         weeklyStats: parseStoredJSON(STORAGE_KEYS.weeklyStats, DEFAULT_STATE.weeklyStats),
+        distractionLog: parseStoredJSON(STORAGE_KEYS.distractionLog, DEFAULT_STATE.distractionLog),
+        microWinStats: parseStoredJSON(STORAGE_KEYS.microWinStats, DEFAULT_STATE.microWinStats),
         weakTopicStats: parseStoredJSON(STORAGE_KEYS.weakTopicStats, DEFAULT_STATE.weakTopicStats),
         chapterTracker: parseStoredJSON(STORAGE_KEYS.chapterTracker, DEFAULT_STATE.chapterTracker),
         doubtTracker: parseStoredJSON(STORAGE_KEYS.doubtTracker, DEFAULT_STATE.doubtTracker),
@@ -917,10 +1073,13 @@ function loadState() {
         studyMaterials: parseStoredJSON(STORAGE_KEYS.studyMaterials, DEFAULT_STATE.studyMaterials),
         freeNotesLibrary: parseStoredJSON(STORAGE_KEYS.freeNotesLibrary, DEFAULT_STATE.freeNotesLibrary),
         quizScores: parseStoredJSON(STORAGE_KEYS.quizScores, DEFAULT_STATE.quizScores),
+        mistakeNotebook: parseStoredJSON(STORAGE_KEYS.mistakeNotebook, DEFAULT_STATE.mistakeNotebook),
         pastPaperAttempts: parseStoredJSON(STORAGE_KEYS.pastPaperAttempts, DEFAULT_STATE.pastPaperAttempts),
         teacherUpdates: parseStoredJSON(STORAGE_KEYS.teacherUpdates, DEFAULT_STATE.teacherUpdates),
         smartSettings: parseStoredJSON(STORAGE_KEYS.smartSettings, DEFAULT_STATE.smartSettings),
+        studyMood: parseStoredJSON(STORAGE_KEYS.studyMood, DEFAULT_STATE.studyMood),
         dailyPlan: parseStoredJSON(STORAGE_KEYS.dailyPlan, DEFAULT_STATE.dailyPlan),
+        recoveryPlan: parseStoredJSON(STORAGE_KEYS.recoveryPlan, DEFAULT_STATE.recoveryPlan),
         authUsers: parseStoredJSON(STORAGE_KEYS.authUsers, DEFAULT_STATE.authUsers),
         authSession: parseStoredJSON(STORAGE_KEYS.authSession, DEFAULT_STATE.authSession),
         studyStreak: parseInt(localStorage.getItem(STORAGE_KEYS.studyStreak), 10),
@@ -935,6 +1094,8 @@ function loadState() {
         flashcards: normalizeFlashcards(loaded.flashcards),
         pomodoroSessions: normalizePomodoroSessions(loaded.pomodoroSessions),
         weeklyStats: { ...DEFAULT_STATE.weeklyStats, ...(loaded.weeklyStats || {}) },
+        distractionLog: normalizeDistractionLog(loaded.distractionLog),
+        microWinStats: normalizeMicroWinStats(loaded.microWinStats),
         weakTopicStats: normalizeWeakTopicStats(loaded.weakTopicStats),
         chapterTracker: normalizeChapterTracker(loaded.chapterTracker),
         doubtTracker: normalizeDoubtTracker(loaded.doubtTracker),
@@ -959,10 +1120,13 @@ function loadState() {
             return [...savedNotes, ...missingDefaults];
         })(),
         quizScores: Array.isArray(loaded.quizScores) ? loaded.quizScores : [],
+        mistakeNotebook: normalizeMistakeNotebook(loaded.mistakeNotebook),
         pastPaperAttempts: normalizePastPaperAttempts(loaded.pastPaperAttempts),
         teacherUpdates: Array.isArray(loaded.teacherUpdates) ? loaded.teacherUpdates : [],
         smartSettings: normalizeSmartSettings(loaded.smartSettings),
+        studyMood: normalizeStudyMood(loaded.studyMood),
         dailyPlan: { ...DEFAULT_STATE.dailyPlan, ...(loaded.dailyPlan || {}) },
+        recoveryPlan: normalizeRecoveryPlan(loaded.recoveryPlan),
         authUsers: Array.isArray(loaded.authUsers) ? loaded.authUsers : [],
         authSession: loaded.authSession || null,
         studyStreak: Number.isFinite(loaded.studyStreak) ? loaded.studyStreak : 0,
@@ -999,6 +1163,8 @@ let activityLog = initialState.activityLog;
 let studyStreak = initialState.studyStreak;
 let bestStreak = initialState.bestStreak;
 let weeklyStats = initialState.weeklyStats;
+let distractionLog = initialState.distractionLog;
+let microWinStats = initialState.microWinStats;
 let weakTopicStats = initialState.weakTopicStats;
 let chapterTracker = initialState.chapterTracker;
 let doubtTracker = initialState.doubtTracker;
@@ -1010,10 +1176,13 @@ let resources = initialState.resources;
 let studyMaterials = initialState.studyMaterials;
 let freeNotesLibrary = initialState.freeNotesLibrary;
 let quizScores = initialState.quizScores;
+let mistakeNotebook = initialState.mistakeNotebook;
 let pastPaperAttempts = initialState.pastPaperAttempts;
 let teacherUpdates = initialState.teacherUpdates;
 let smartSettings = initialState.smartSettings;
+let studyMood = initialState.studyMood;
 let dailyPlan = initialState.dailyPlan;
+let recoveryPlan = initialState.recoveryPlan;
 let authUsers = initialState.authUsers;
 let authSession = initialState.authSession;
 
@@ -1023,6 +1192,9 @@ let timerMinutes = 25;
 let timerSeconds = 0;
 let isTimerRunning = false;
 let timerModeMinutes = 25;
+let timerModeSetAt = Date.now();
+let timerCurrentSessionPaused = false;
+let timerCurrentSessionStartOnTimeAwarded = false;
 const BURNOUT_GUARD_MINUTES = 90;
 const BURNOUT_GUARD_FOCUS_SESSIONS = 3;
 let pendingReflectionRequired = false;
@@ -1043,6 +1215,8 @@ let pastPaperTimerRunning = false;
 let analyticsTrendSubject = "all";
 let lastAISuggestionPlan = null;
 let pendingAICreationPreview = null;
+let pendingExamCountdownPlan = null;
+let peerChallenges = [];
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
 let firebaseInitPromise = null;
 let firebaseAuth = null;
@@ -1092,6 +1266,7 @@ let dashboardQuestionBankSubject = "Any";
 let memoryBoosterSession = [];
 let voiceNoteRecognition = null;
 let voiceNoteListening = false;
+let voiceFlashcardListening = false;
 let draggedTimetableId = null;
 let backendFetchSuspendedUntil = 0;
 
@@ -1489,6 +1664,8 @@ function getCloudStatePayload() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        distractionLog,
+        microWinStats,
         weakTopicStats,
         chapterTracker,
         doubtTracker,
@@ -1502,10 +1679,13 @@ function getCloudStatePayload() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        mistakeNotebook,
         pastPaperAttempts,
         teacherUpdates,
         smartSettings,
+        studyMood,
         dailyPlan,
+        recoveryPlan,
         updatedAt: new Date().toISOString()
     };
     if (firebaseSdk.serverTimestamp) {
@@ -1525,6 +1705,8 @@ function resetUserScopedStateToDefaults() {
     pomodoroSessions = Array.isArray(DEFAULT_STATE.pomodoroSessions) ? [...DEFAULT_STATE.pomodoroSessions] : [];
     activityLog = Array.isArray(DEFAULT_STATE.activityLog) ? [...DEFAULT_STATE.activityLog] : [];
     weeklyStats = { ...DEFAULT_STATE.weeklyStats };
+    distractionLog = normalizeDistractionLog(DEFAULT_STATE.distractionLog);
+    microWinStats = normalizeMicroWinStats(DEFAULT_STATE.microWinStats);
     weakTopicStats = { ...DEFAULT_STATE.weakTopicStats };
     chapterTracker = Array.isArray(DEFAULT_STATE.chapterTracker) ? [...DEFAULT_STATE.chapterTracker] : [];
     doubtTracker = Array.isArray(DEFAULT_STATE.doubtTracker) ? [...DEFAULT_STATE.doubtTracker] : [];
@@ -1536,10 +1718,13 @@ function resetUserScopedStateToDefaults() {
     studyMaterials = DEFAULT_STUDY_MATERIALS.map(item => ({ ...item }));
     freeNotesLibrary = DEFAULT_FREE_NOTES_LIBRARY.map(item => ({ ...item }));
     quizScores = Array.isArray(DEFAULT_STATE.quizScores) ? [...DEFAULT_STATE.quizScores] : [];
+    mistakeNotebook = Array.isArray(DEFAULT_STATE.mistakeNotebook) ? [...DEFAULT_STATE.mistakeNotebook] : [];
     pastPaperAttempts = Array.isArray(DEFAULT_STATE.pastPaperAttempts) ? [...DEFAULT_STATE.pastPaperAttempts] : [];
     teacherUpdates = Array.isArray(DEFAULT_STATE.teacherUpdates) ? [...DEFAULT_STATE.teacherUpdates] : [];
     smartSettings = normalizeSmartSettings(DEFAULT_STATE.smartSettings);
+    studyMood = normalizeStudyMood(DEFAULT_STATE.studyMood);
     dailyPlan = { ...DEFAULT_STATE.dailyPlan };
+    recoveryPlan = normalizeRecoveryPlan(DEFAULT_STATE.recoveryPlan);
     studyStreak = DEFAULT_STATE.studyStreak;
     bestStreak = DEFAULT_STATE.bestStreak;
 
@@ -1554,6 +1739,8 @@ function resetUserScopedStateToDefaults() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        distractionLog,
+        microWinStats,
         weakTopicStats,
         chapterTracker,
         doubtTracker,
@@ -1567,10 +1754,13 @@ function resetUserScopedStateToDefaults() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        mistakeNotebook,
         pastPaperAttempts,
         teacherUpdates,
         smartSettings,
-        dailyPlan
+        studyMood,
+        dailyPlan,
+        recoveryPlan
     });
 }
 
@@ -1588,6 +1778,8 @@ function applyCloudState(data) {
         if (Array.isArray(data.pomodoroSessions)) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
         if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
         if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
+        if (Array.isArray(data.distractionLog)) distractionLog = normalizeDistractionLog(data.distractionLog);
+        if (data.microWinStats) microWinStats = normalizeMicroWinStats(data.microWinStats);
         if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
         if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
         if (Array.isArray(data.doubtTracker)) doubtTracker = normalizeDoubtTracker(data.doubtTracker);
@@ -1601,10 +1793,13 @@ function applyCloudState(data) {
         if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
         if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
         if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
+        if (Array.isArray(data.mistakeNotebook)) mistakeNotebook = normalizeMistakeNotebook(data.mistakeNotebook);
         if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
         if (Array.isArray(data.teacherUpdates)) teacherUpdates = data.teacherUpdates;
         if (data.smartSettings) smartSettings = normalizeSmartSettings(data.smartSettings);
+        if (data.studyMood) studyMood = normalizeStudyMood(data.studyMood);
         if (data.dailyPlan) dailyPlan = { ...DEFAULT_STATE.dailyPlan, ...data.dailyPlan };
+        if (data.recoveryPlan) recoveryPlan = normalizeRecoveryPlan(data.recoveryPlan);
 
         saveTasks();
         saveState({
@@ -1617,6 +1812,8 @@ function applyCloudState(data) {
             pomodoroSessions,
             activityLog,
             weeklyStats,
+            distractionLog,
+            microWinStats,
             weakTopicStats,
             chapterTracker,
             doubtTracker,
@@ -1630,10 +1827,13 @@ function applyCloudState(data) {
             studyMaterials,
             freeNotesLibrary,
             quizScores,
+            mistakeNotebook,
             pastPaperAttempts,
             teacherUpdates,
             smartSettings,
-            dailyPlan
+            studyMood,
+            dailyPlan,
+            recoveryPlan
         });
     } finally {
         isHydratingFromCloud = false;
@@ -1936,13 +2136,20 @@ async function registerUser() {
                 email: credential.user.email || email,
                 name
             }, role);
-            authSession = { email };
+            if (firebaseSdk.signOut) {
+                try {
+                    await firebaseSdk.signOut(firebaseAuth);
+                } catch (_) {}
+            }
+            authSession = null;
             saveState({ authUsers, authSession });
-            await syncCurrentUserProfileToCloud();
-            await syncRegisterWithBackend(name, email, password, role);
-            await syncStateToCloudNow();
-            setAuthMessage("Account created successfully.");
-            applyAuthState();
+            setAuthMessage("Account created successfully. Please login.");
+            showAuthView("login");
+            Promise.allSettled([
+                syncCurrentUserProfileToCloud(),
+                syncRegisterWithBackend(name, email, password, role),
+                syncStateToCloudNow()
+            ]);
             return;
         } catch (err) {
             setAuthMessage(getFirebaseAuthErrorMessage(err?.code), true);
@@ -1969,11 +2176,11 @@ async function registerUser() {
         createdAt: new Date().toISOString()
     };
     authUsers.push(user);
-    authSession = { email };
+    authSession = null;
     saveState({ authUsers, authSession });
-    await syncRegisterWithBackend(name, email, password, role);
-    setAuthMessage("Account created successfully.");
-    applyAuthState();
+    setAuthMessage("Account created successfully. Please login.");
+    showAuthView("login");
+    syncRegisterWithBackend(name, email, password, role);
 }
 
 async function loginUser() {
@@ -2531,13 +2738,291 @@ function estimateTaskHours(task) {
     return 1;
 }
 
+function getStudyMoodProfile() {
+    const level = normalizeStudyMood(studyMood).level;
+    if (level === "light") {
+        return {
+            level: "light",
+            label: "Light",
+            workloadFactor: 0.7,
+            minSessionMinutes: 20,
+            maxSessionMinutes: 60
+        };
+    }
+    if (level === "intense") {
+        return {
+            level: "intense",
+            label: "Intense",
+            workloadFactor: 1.25,
+            minSessionMinutes: 30,
+            maxSessionMinutes: 150
+        };
+    }
+    return {
+        level: "normal",
+        label: "Normal",
+        workloadFactor: 1,
+        minSessionMinutes: 25,
+        maxSessionMinutes: 120
+    };
+}
+
+function renderStudyMoodCheckin() {
+    const statusEl = document.getElementById('studyMoodStatus');
+    const btnContainer = document.getElementById('studyMoodButtons');
+    const hintEl = document.getElementById('todayPlanMoodHint');
+    if (!statusEl || !btnContainer) return;
+
+    const mood = getStudyMoodProfile();
+    statusEl.textContent = `Energy mood: ${mood.label}`;
+    if (hintEl) {
+        const factorPercent = Math.round(mood.workloadFactor * 100);
+        hintEl.textContent = `Workload mode: ${mood.label} (${factorPercent}% load)`;
+    }
+    const buttons = Array.from(btnContainer.querySelectorAll('.mood-btn'));
+    buttons.forEach(btn => {
+        const buttonMood = String(btn.dataset.mood || "").trim().toLowerCase();
+        btn.classList.toggle('active-mood', buttonMood === mood.level);
+    });
+}
+
+function setStudyMood(level) {
+    const normalizedLevel = String(level || "normal").trim().toLowerCase();
+    const safeLevel = ["light", "normal", "intense"].includes(normalizedLevel) ? normalizedLevel : "normal";
+    studyMood = {
+        level: safeLevel,
+        updatedAt: new Date().toISOString()
+    };
+    saveState({ studyMood });
+    renderStudyMoodCheckin();
+}
+
+function getDistractionLabel(type) {
+    const map = {
+        phone: "Phone",
+        social: "Social Media",
+        noise: "Noise",
+        chat: "Chat",
+        fatigue: "Fatigue"
+    };
+    return map[String(type || "").toLowerCase()] || toSentenceCase(String(type || "Other"));
+}
+
+function getDistractionFixes(type) {
+    const key = String(type || "").toLowerCase();
+    if (key === "phone") {
+        return [
+            "Put phone on airplane mode for the next 25-minute block.",
+            "Keep phone outside arm's reach until timer ends."
+        ];
+    }
+    if (key === "social") {
+        return [
+            "Block social apps for 30 minutes before the next session.",
+            "Use one 5-minute social check only after a completed focus block."
+        ];
+    }
+    if (key === "noise") {
+        return [
+            "Use earphones or white noise for your next focus session.",
+            "Move to a quieter spot for high-difficulty tasks."
+        ];
+    }
+    if (key === "chat") {
+        return [
+            "Set status to busy and reply after the current timer ends.",
+            "Batch messages into one 10-minute window after two focus blocks."
+        ];
+    }
+    if (key === "fatigue") {
+        return [
+            "Take a 5-minute break: water + stretch, then restart with Light mood.",
+            "Switch to one easy micro-task before returning to hard topics."
+        ];
+    }
+    return ["Use a short timer and remove one distraction source before starting."];
+}
+
+function getRecentDistractionStats(days = 7) {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    from.setDate(from.getDate() - Math.max(0, Number(days) - 1));
+
+    const counts = {};
+    (distractionLog || []).forEach(item => {
+        const ts = new Date(item.createdAt || 0);
+        if (Number.isNaN(ts.getTime()) || ts < from) return;
+        const type = String(item.type || "").toLowerCase();
+        if (!type) return;
+        counts[type] = (counts[type] || 0) + 1;
+    });
+
+    const ranked = Object.entries(counts)
+        .map(([type, count]) => ({ type, count }))
+        .sort((a, b) => b.count - a.count);
+    return { counts, ranked };
+}
+
+function renderDistractionPanel() {
+    const statusEl = document.getElementById('distractionLogStatus');
+    const listEl = document.getElementById('distractionFixList');
+    if (!statusEl || !listEl) return;
+
+    const stats = getRecentDistractionStats(7);
+    if (!stats.ranked.length) {
+        statusEl.textContent = 'Distraction Log: Tap what pulled your attention.';
+        listEl.innerHTML = '<li class="empty-state">Personalized anti-distraction fixes will appear here.</li>';
+        return;
+    }
+
+    const top = stats.ranked[0];
+    const topLabel = getDistractionLabel(top.type);
+    statusEl.textContent = `Top distraction this week: ${topLabel} (${top.count} time${top.count === 1 ? '' : 's'}).`;
+    const fixes = getDistractionFixes(top.type);
+    listEl.innerHTML = fixes.map(item => `<li>${item}</li>`).join('');
+}
+
+function logDistractionEvent(type) {
+    const normalizedType = String(type || "").trim().toLowerCase();
+    if (!normalizedType) return;
+    distractionLog.unshift({
+        id: `distraction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: normalizedType,
+        subject: getSelectedTimerSubject(),
+        createdAt: new Date().toISOString()
+    });
+    distractionLog = normalizeDistractionLog(distractionLog);
+    saveState({ distractionLog });
+    addActivity('ban', 'Distraction Logged', getDistractionLabel(normalizedType));
+    renderDistractionPanel();
+}
+
+function hasMoodCheckinForToday() {
+    const updatedAt = String((studyMood && studyMood.updatedAt) || "");
+    if (!updatedAt) return false;
+    const checkinDate = new Date(updatedAt);
+    if (Number.isNaN(checkinDate.getTime())) return false;
+    return checkinDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+}
+
+function formatHourLabel(hour24) {
+    const safeHour = ((Number(hour24) || 0) + 24) % 24;
+    const suffix = safeHour >= 12 ? "PM" : "AM";
+    const hour12 = safeHour % 12 === 0 ? 12 : safeHour % 12;
+    return `${hour12}:00 ${suffix}`;
+}
+
+function formatClockLabelFromMinutes(totalMinutes) {
+    const normalized = ((Math.round(totalMinutes) % 1440) + 1440) % 1440;
+    const hour = Math.floor(normalized / 60);
+    const minute = normalized % 60;
+    const suffix = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function getFocusDNAProfile() {
+    const focusSessions = (pomodoroSessions || [])
+        .filter(session => String(session && session.type || "") === "Focus")
+        .map(session => ({
+            subject: String(session && session.subject || "General").trim() || "General",
+            minutes: Math.max(0, Number(session && session.minutes) || 0),
+            date: new Date(session && session.date || "")
+        }))
+        .filter(session => session.minutes > 0 && !Number.isNaN(session.date.getTime()));
+
+    if (focusSessions.length < 4) {
+        return {
+            hasData: false,
+            totalSessions: focusSessions.length,
+            peakHours: [],
+            topSubjects: [],
+            preferredSessionMinutes: 25,
+            recommendedStartHour: 18
+        };
+    }
+
+    const hourStats = Array.from({ length: 24 }, (_, hour) => ({ hour, sessions: 0, minutes: 0 }));
+    const subjectStats = new Map();
+    let totalMinutes = 0;
+
+    focusSessions.forEach(session => {
+        const hour = session.date.getHours();
+        hourStats[hour].sessions += 1;
+        hourStats[hour].minutes += session.minutes;
+        totalMinutes += session.minutes;
+
+        const current = subjectStats.get(session.subject) || { subject: session.subject, sessions: 0, minutes: 0 };
+        current.sessions += 1;
+        current.minutes += session.minutes;
+        subjectStats.set(session.subject, current);
+    });
+
+    const peakHours = hourStats
+        .filter(item => item.sessions > 0)
+        .sort((a, b) => {
+            if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+            return b.sessions - a.sessions;
+        })
+        .slice(0, 3)
+        .map(item => item.hour);
+
+    const topSubjects = [...subjectStats.values()]
+        .sort((a, b) => {
+            if (b.minutes !== a.minutes) return b.minutes - a.minutes;
+            return b.sessions - a.sessions;
+        })
+        .slice(0, 3);
+
+    const preferredSessionMinutes = Math.max(20, Math.min(90, Math.round((totalMinutes / focusSessions.length) / 5) * 5));
+    const recommendedStartHour = peakHours.length > 0 ? peakHours[0] : 18;
+
+    return {
+        hasData: true,
+        totalSessions: focusSessions.length,
+        peakHours,
+        topSubjects,
+        preferredSessionMinutes,
+        recommendedStartHour
+    };
+}
+
+function renderFocusDNAProfile() {
+    const statusEl = document.getElementById('focusDNAStatus');
+    const listEl = document.getElementById('focusDNAInsightsList');
+    if (!statusEl || !listEl) return;
+
+    const dna = getFocusDNAProfile();
+    if (!dna.hasData) {
+        statusEl.textContent = `Not enough focus sessions yet (${dna.totalSessions}/4). Complete a few timer sessions to unlock your profile.`;
+        listEl.innerHTML = '<li class="empty-state">Your peak study hours, best subjects, and ideal session length will appear here.</li>';
+        return;
+    }
+
+    const peakHourText = dna.peakHours.length > 0
+        ? dna.peakHours.map(formatHourLabel).join(", ")
+        : "No peak window detected";
+    const topSubjectsText = dna.topSubjects.length > 0
+        ? dna.topSubjects.map(item => `${item.subject} (${Math.round(item.minutes)} min)`).join(", ")
+        : "General";
+
+    statusEl.textContent = `Focus DNA ready: hard topics will be scheduled first around ${formatHourLabel(dna.recommendedStartHour)}.`;
+    listEl.innerHTML = `
+        <li><strong>Peak hours:</strong> ${peakHourText}</li>
+        <li><strong>Top focus subjects:</strong> ${topSubjectsText}</li>
+        <li><strong>Ideal session length:</strong> ${dna.preferredSessionMinutes} minutes</li>
+    `;
+}
+
 function generateDailyPlan(taskList, options = {}) {
     const now = options.now || new Date();
     const availableHours = Math.max(1, Number(options.availableHours) || 2);
     const weakSubjects = Array.isArray(options.weakSubjects) ? options.weakSubjects : [];
     const examList = Array.isArray(options.exams) ? options.exams : [];
     const prioritizeTaskIds = new Set(Array.isArray(options.prioritizeTaskIds) ? options.prioritizeTaskIds : []);
-    const remainingMinutes = Math.round(availableHours * 60);
+    const focusDNA = options.focusDNAProfile && options.focusDNAProfile.hasData ? options.focusDNAProfile : null;
+    const studyMoodProfile = options.studyMoodProfile || getStudyMoodProfile();
+    const remainingMinutes = Math.max(30, Math.round(availableHours * 60 * (studyMoodProfile.workloadFactor || 1)));
     let usedMinutes = 0;
 
     const ranked = rankTasks(taskList, { now, weakSubjects, exams: examList })
@@ -2546,15 +3031,49 @@ function generateDailyPlan(taskList, options = {}) {
             const aPriority = prioritizeTaskIds.has(a.id) ? 1 : 0;
             const bPriority = prioritizeTaskIds.has(b.id) ? 1 : 0;
             if (aPriority !== bPriority) return bPriority - aPriority;
+            if (studyMoodProfile.level === "light" || studyMoodProfile.level === "intense") {
+                const weightFor = (task) => {
+                    const diff = String(task && task.difficulty || "medium");
+                    if (studyMoodProfile.level === "intense") {
+                        if (diff === "hard") return 2;
+                        if (diff === "medium") return 1;
+                        return 0;
+                    }
+                    if (diff === "easy") return 2;
+                    if (diff === "medium") return 1;
+                    return 0;
+                };
+                const aMoodWeight = weightFor(a);
+                const bMoodWeight = weightFor(b);
+                if (aMoodWeight !== bMoodWeight) return bMoodWeight - aMoodWeight;
+            }
+            if (focusDNA) {
+                const topSubject = String((focusDNA.topSubjects[0] && focusDNA.topSubjects[0].subject) || "").trim().toLowerCase();
+                const aSubject = String(a.subject || "").trim().toLowerCase();
+                const bSubject = String(b.subject || "").trim().toLowerCase();
+                const aHardPriority =
+                    (a.difficulty === "hard" ? 2 : (a.difficulty === "medium" ? 1 : 0)) +
+                    (topSubject && aSubject === topSubject ? 1 : 0);
+                const bHardPriority =
+                    (b.difficulty === "hard" ? 2 : (b.difficulty === "medium" ? 1 : 0)) +
+                    (topSubject && bSubject === topSubject ? 1 : 0);
+                if (aHardPriority !== bHardPriority) return bHardPriority - aHardPriority;
+            }
             return b._score - a._score;
         });
 
     const items = [];
+    const startHour = focusDNA ? focusDNA.recommendedStartHour : now.getHours();
+    const baseStartMinutes = Math.max(0, Math.min(23, startHour)) * 60;
     for (const task of ranked) {
-        const recommendedMinutes = Math.max(25, Math.min(120, Math.round(estimateTaskHours(task) * 60)));
+        const recommendedMinutes = Math.max(
+            studyMoodProfile.minSessionMinutes,
+            Math.min(studyMoodProfile.maxSessionMinutes, Math.round(estimateTaskHours(task) * 60))
+        );
         if (usedMinutes + recommendedMinutes > remainingMinutes && items.length > 0) continue;
         if (usedMinutes >= remainingMinutes) break;
 
+        const plannedStartMinutes = baseStartMinutes + usedMinutes;
         const allocatedMinutes = Math.min(recommendedMinutes, remainingMinutes - usedMinutes);
         usedMinutes += allocatedMinutes;
         items.push({
@@ -2563,13 +3082,17 @@ function generateDailyPlan(taskList, options = {}) {
             subject: task.subject || "General",
             priority: task.priority,
             score: task._score,
-            allocatedMinutes
+            allocatedMinutes,
+            plannedStartLabel: formatClockLabelFromMinutes(plannedStartMinutes)
         });
     }
 
     return {
         date: now.toISOString().split("T")[0],
         availableHours,
+        mode: focusDNA ? "focus-dna" : "default",
+        mood: studyMoodProfile.level,
+        focusDNARecommendedStartHour: focusDNA ? focusDNA.recommendedStartHour : null,
         items
     };
 }
@@ -2577,6 +3100,8 @@ function generateDailyPlan(taskList, options = {}) {
 function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
     const now = options.now || new Date();
     const weakSubjects = Array.isArray(options.weakSubjects) ? options.weakSubjects : [];
+    const focusDNAProfile = options.focusDNAProfile || getFocusDNAProfile();
+    const studyMoodProfile = options.studyMoodProfile || getStudyMoodProfile();
     const previousItems = previousPlan && Array.isArray(previousPlan.items) ? previousPlan.items : [];
     const carryOverIds = new Set(
         previousItems
@@ -2589,7 +3114,9 @@ function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
         availableHours: options.availableHours,
         weakSubjects,
         exams: options.exams,
-        prioritizeTaskIds: Array.from(carryOverIds)
+        prioritizeTaskIds: Array.from(carryOverIds),
+        focusDNAProfile,
+        studyMoodProfile
     });
 }
 
@@ -2635,8 +3162,18 @@ function renderDashboard() {
     renderUpcomingDeadlines();
     renderDailyTop3AdaptiveTasks();
     renderWeakTopicDetection();
+    renderMistakeDueBadges();
+    renderStudyMoodCheckin();
+    renderDistractionPanel();
+    renderLiveClassMode();
+    renderFocusDNAProfile();
+    renderMicroWinStats();
+    renderPeerChallenges();
+    loadPeerChallengesFromServer();
     renderFlashcardsDueToday();
     renderTodayPlan();
+    renderRecoveryPlanStatus();
+    renderRecoveryHistory();
     renderDashboardQuestionBank();
     renderMemoryBoosterSession();
 }
@@ -2811,6 +3348,261 @@ function renderConsistencyRewards() {
             <span>(${challenge.progress}${challenge.achieved ? ` | +${challenge.bonus}` : ''})</span>
         </li>
     `).join('');
+}
+
+function renderMicroWinStats() {
+    const pointsEl = document.getElementById('microWinPoints');
+    const streakEl = document.getElementById('microWinStreak');
+    const bestEl = document.getElementById('microWinBest');
+    const historyListEl = document.getElementById('microWinHistoryList');
+    const badgeListEl = document.getElementById('microWinBadgeList');
+    if (!pointsEl || !streakEl || !bestEl || !historyListEl || !badgeListEl) return;
+
+    pointsEl.textContent = String(Math.max(0, Number(microWinStats.points) || 0));
+    streakEl.textContent = `No-distraction streak: ${Math.max(0, Number(microWinStats.noDistractionStreak) || 0)}`;
+    bestEl.textContent = `Best no-distraction streak: ${Math.max(0, Number(microWinStats.bestNoDistractionStreak) || 0)}`;
+
+    const history = Array.isArray(microWinStats.history) ? microWinStats.history.slice(0, 6) : [];
+    if (history.length === 0) {
+        historyListEl.innerHTML = '<li class="empty-state">Start focus sessions on time and finish clean Pomodoros to earn points.</li>';
+        return;
+    }
+
+    historyListEl.innerHTML = history.map(item => `
+        <li>
+            <strong>${item.reason}</strong>
+            <span>+${item.points} pts</span>
+        </li>
+    `).join('');
+
+    const weeklyBadges = getMicroWinWeeklyBadges();
+    badgeListEl.innerHTML = weeklyBadges.map(badge => `
+        <li class="${badge.achieved ? '' : 'empty-state'}">
+            <strong>${badge.achieved ? 'Completed' : 'In progress'}: ${badge.name}</strong>
+            <span>${badge.progress}${badge.achieved ? ` | +${badge.bonus} pts` : ''}</span>
+        </li>
+    `).join('');
+}
+
+function getTodayDateKey() {
+    return new Date().toISOString().split('T')[0];
+}
+
+function getCurrentPeerChallengeParticipant(challenge) {
+    const user = getCurrentUser();
+    if (!user || !challenge || !Array.isArray(challenge.participants)) return null;
+    const email = normalizeEmail(user.email || "");
+    return challenge.participants.find(p => normalizeEmail(p && p.email || "") === email) || null;
+}
+
+function renderPeerChallenges() {
+    const statusEl = document.getElementById('peerChallengeStatus');
+    const listEl = document.getElementById('peerChallengeList');
+    if (!statusEl || !listEl) return;
+
+    if (!backendAdminToken) {
+        statusEl.textContent = 'Peer challenges need backend login token. Login to enable invite-code sync.';
+        listEl.innerHTML = '<li class="empty-state">No active peer challenges yet.</li>';
+        return;
+    }
+
+    const active = (peerChallenges || []).filter(ch => ch && ch.status !== 'completed');
+    if (active.length === 0) {
+        statusEl.textContent = 'Create or join a private invite-code challenge.';
+        listEl.innerHTML = '<li class="empty-state">No active peer challenges yet.</li>';
+        return;
+    }
+
+    statusEl.textContent = `${active.length} active challenge(s). Invite your friends with the code.`;
+    listEl.innerHTML = active.map(challenge => {
+        const participant = getCurrentPeerChallengeParticipant(challenge);
+        const checkins = Array.isArray(participant && participant.checkins) ? participant.checkins : [];
+        const checkedToday = checkins.includes(getTodayDateKey());
+        const currentStreak = Number(participant && participant.currentStreak || 0);
+        const bestStreak = Number(participant && participant.bestStreak || 0);
+        const memberCount = Array.isArray(challenge.participants) ? challenge.participants.length : 0;
+        return `
+            <li>
+                <strong>${escapeHtml(challenge.name || '7-Day Streak Challenge')}</strong>
+                <span>Code: ${escapeHtml(challenge.code || '-')} | Members: ${memberCount}</span>
+                <div class="assignment-meta">
+                    <span>My streak: ${currentStreak} | Best: ${bestStreak}</span>
+                    <span class="task-due">${escapeHtml(challenge.startDate || '')} to ${escapeHtml(challenge.endDate || '')}</span>
+                </div>
+                <div class="task-options">
+                    <button class="action-btn" onclick="checkInPeerChallenge('${encodeURIComponent(challenge.id || '')}')" ${checkedToday ? 'disabled' : ''}>
+                        <i class="fas fa-check"></i> ${checkedToday ? 'Checked In Today' : 'Check In Today'}
+                    </button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+async function loadPeerChallengesFromServer() {
+    if (!backendAdminToken) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/peer-challenges`, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            }
+        });
+        if (!response.ok) return;
+        const data = await response.json().catch(() => []);
+        peerChallenges = Array.isArray(data) ? data : [];
+        renderPeerChallenges();
+    } catch (_) {}
+}
+
+async function createPeerChallenge() {
+    if (!backendAdminToken) {
+        alert('Please login first to enable invite-code challenges.');
+        return;
+    }
+    const input = document.getElementById('peerChallengeNameInput');
+    const name = String(input && input.value ? input.value : '').trim() || '7-Day Streak Challenge';
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/peer-challenges`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ name, durationDays: 7 })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to create challenge');
+        if (input) input.value = '';
+        await loadPeerChallengesFromServer();
+        addActivity('user-group', 'Peer Challenge Created', `${name} | Code ${data.code || ''}`);
+        alert(`Challenge created. Invite code: ${data.code || ''}`);
+    } catch (err) {
+        alert(`Create failed: ${err.message}`);
+    }
+}
+
+async function joinPeerChallenge() {
+    if (!backendAdminToken) {
+        alert('Please login first to join invite-code challenges.');
+        return;
+    }
+    const input = document.getElementById('peerChallengeJoinCodeInput');
+    const code = String(input && input.value ? input.value : '').trim().toUpperCase();
+    if (!code) {
+        alert('Enter invite code first.');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/peer-challenges/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to join challenge');
+        if (input) input.value = '';
+        await loadPeerChallengesFromServer();
+        addActivity('link', 'Peer Challenge Joined', `${data.name || 'Challenge'} | Code ${code}`);
+        alert(`Joined: ${data.name || 'Challenge'}`);
+    } catch (err) {
+        alert(`Join failed: ${err.message}`);
+    }
+}
+
+async function checkInPeerChallenge(encodedId) {
+    const id = decodeURIComponent(String(encodedId || ''));
+    if (!id || !backendAdminToken) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/peer-challenges/${encodeURIComponent(id)}/checkin`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to check in');
+        await loadPeerChallengesFromServer();
+        const participant = getCurrentPeerChallengeParticipant(data);
+        const streak = Number(participant && participant.currentStreak || 0);
+        addActivity('check', 'Peer Challenge Check-In', `${data.name || 'Challenge'} | Streak ${streak}`);
+    } catch (err) {
+        alert(`Check-in failed: ${err.message}`);
+    }
+}
+
+function awardMicroWin(points, reason, skipActivity = false) {
+    const safePoints = Math.max(0, Math.round(Number(points) || 0));
+    const safeReason = String(reason || '').trim();
+    if (!safePoints || !safeReason) return;
+
+    microWinStats.points = Math.max(0, Number(microWinStats.points) || 0) + safePoints;
+    if (!Array.isArray(microWinStats.history)) microWinStats.history = [];
+    microWinStats.history.unshift({
+        reason: safeReason,
+        points: safePoints,
+        at: new Date().toISOString()
+    });
+    microWinStats.history = microWinStats.history.slice(0, 50);
+    saveState({ microWinStats });
+    renderMicroWinStats();
+    if (!skipActivity) {
+        addActivity('seedling', 'Micro-Win Earned', `${safeReason} (+${safePoints})`);
+    }
+}
+
+function getMicroWinWeeklyBadges(now = new Date()) {
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - 6);
+
+    const history = Array.isArray(microWinStats.history) ? microWinStats.history : [];
+    let onTimeStarts = 0;
+    let completedPomodoros = 0;
+    let cleanStreakWins = 0;
+    let totalPoints = 0;
+
+    history.forEach(item => {
+        const at = new Date(item.at || '');
+        if (Number.isNaN(at.getTime()) || at < weekStart) return;
+        const reason = String(item.reason || '').toLowerCase();
+        const pts = Number(item.points) || 0;
+        totalPoints += pts;
+        if (reason.includes('started focus session on time')) onTimeStarts += 1;
+        if (reason.includes('finished pomodoro focus session')) completedPomodoros += 1;
+        if (reason.includes('no-distraction focus streak')) cleanStreakWins += 1;
+    });
+
+    return [
+        {
+            name: 'Starter Spark',
+            achieved: onTimeStarts >= 3,
+            progress: `${Math.min(onTimeStarts, 3)}/3 on-time starts`,
+            bonus: 5
+        },
+        {
+            name: 'Pomodoro Finisher',
+            achieved: completedPomodoros >= 5,
+            progress: `${Math.min(completedPomodoros, 5)}/5 completed focus sessions`,
+            bonus: 8
+        },
+        {
+            name: 'No-Distraction Rookie',
+            achieved: cleanStreakWins >= 4,
+            progress: `${Math.min(cleanStreakWins, 4)}/4 clean streak wins`,
+            bonus: 10
+        },
+        {
+            name: 'Habit Momentum',
+            achieved: totalPoints >= 40,
+            progress: `${Math.min(totalPoints, 40)}/40 weekly micro-win points`,
+            bonus: 12
+        }
+    ];
 }
 
 function getFlashcardsDueTodayByDeck(now = new Date()) {
@@ -3335,13 +4127,14 @@ function renderTodayPlan() {
     if (!dailyPlan.items || dailyPlan.items.length === 0 || dailyPlan.date !== today) {
         list.innerHTML = '<li class="empty-state">No plan generated yet</li>';
         if (todayOnlyActions) todayOnlyActions.innerHTML = '';
+        renderRecoveryPlanStatus();
         return;
     }
 
     list.innerHTML = dailyPlan.items.map(item => `
         <li>
             <strong>${item.text}</strong>
-            <span>${item.subject} | ${item.allocatedMinutes} min | Score ${item.score}</span>
+            <span>${item.subject} | ${item.allocatedMinutes} min | ${item.plannedStartLabel ? `Starts ${item.plannedStartLabel} | ` : ''}Score ${item.score}</span>
         </li>
     `).join('');
 
@@ -3364,20 +4157,27 @@ function renderTodayPlan() {
             todayOnlyActions.innerHTML = '';
         }
     }
+    renderRecoveryPlanStatus();
+    renderRecoveryHistory();
 }
 
 function generateTodayPlan() {
     const input = document.getElementById('planHoursToday');
     const availableHours = Number(input && input.value ? input.value : 2);
+    const focusDNAProfile = getFocusDNAProfile();
+    const studyMoodProfile = getStudyMoodProfile();
     dailyPlan = generateDailyPlan(tasks, {
         now: new Date(),
         availableHours,
         weakSubjects: smartSettings.weakSubjects || [],
-        exams
+        exams,
+        focusDNAProfile,
+        studyMoodProfile
     });
     saveState({ dailyPlan });
     renderTodayPlan();
-    addActivity('calendar-day', 'Daily Plan Generated', `${dailyPlan.items.length} study blocks created`);
+    const planNote = `${studyMoodProfile.label} workload${focusDNAProfile.hasData ? ` + Focus DNA at ${formatHourLabel(focusDNAProfile.recommendedStartHour)}` : ''}`;
+    addActivity('calendar-day', 'Daily Plan Generated', `${dailyPlan.items.length} study blocks created (${planNote})`);
 }
 
 function generateTodayOnlyMode() {
@@ -3538,7 +4338,9 @@ function replanMissedTasks() {
         now: new Date(),
         availableHours,
         weakSubjects: smartSettings.weakSubjects || [],
-        exams
+        exams,
+        focusDNAProfile: getFocusDNAProfile(),
+        studyMoodProfile: getStudyMoodProfile()
     });
     saveState({ dailyPlan });
     renderTodayPlan();
@@ -3557,10 +4359,295 @@ function autoReplanMissedTasksOnNewDay() {
         now: new Date(),
         availableHours: dailyPlan.availableHours || 2,
         weakSubjects: smartSettings.weakSubjects || [],
-        exams
+        exams,
+        focusDNAProfile: getFocusDNAProfile(),
+        studyMoodProfile: getStudyMoodProfile()
     });
     saveState({ dailyPlan });
     addActivity('calendar-day', 'Auto Replan Complete', `${unfinishedIds.length} missed task(s) moved to today`);
+}
+
+function getLatestStudyActivityDate() {
+    let latest = null;
+    const updateLatest = (value) => {
+        if (!value) return;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return;
+        if (!latest || date > latest) latest = date;
+    };
+
+    (tasks || [])
+        .filter(task => task && task.done && task.doneAt)
+        .forEach(task => updateLatest(task.doneAt));
+
+    (pomodoroSessions || [])
+        .filter(session => String((session && session.type) || "") === "Focus")
+        .forEach(session => updateLatest(session.date));
+
+    return latest;
+}
+
+function getMissedStudyDayCount(now = new Date()) {
+    const latest = getLatestStudyActivityDate();
+    if (!latest) return 0;
+    const startToday = new Date(now);
+    startToday.setHours(0, 0, 0, 0);
+    const startLatest = new Date(latest);
+    startLatest.setHours(0, 0, 0, 0);
+    const dayMs = 24 * 60 * 60 * 1000;
+    return Math.max(0, Math.floor((startToday - startLatest) / dayMs));
+}
+
+function createRecoveryPlan(options = {}) {
+    const now = options.now || new Date();
+    const gapDays = Math.max(0, Number(options.gapDays) || 0);
+    const fallbackHours = Number(smartSettings.defaultPlanHours) || 2;
+    const availableHours = Math.max(1, Math.min(2, Number(options.availableHours) || fallbackHours));
+    const availableMinutes = Math.max(45, Math.round(availableHours * 60));
+    const ranked = rankTasks(tasks.filter(task => !task.done), {
+        now,
+        weakSubjects: smartSettings.weakSubjects || [],
+        exams
+    });
+    const easyFirst = ranked.sort((a, b) => {
+        const weight = (task) => {
+            const diff = String((task && task.difficulty) || "medium");
+            if (diff === "easy") return 0;
+            if (diff === "medium") return 1;
+            return 2;
+        };
+        const byDifficulty = weight(a) - weight(b);
+        if (byDifficulty !== 0) return byDifficulty;
+        return b._score - a._score;
+    });
+    const weakest = getWeakTopics(1)[0];
+
+    const items = [{
+        taskId: "",
+        text: "Restart ritual: 10-min setup + open one chapter summary",
+        subject: "General",
+        allocatedMinutes: 10,
+        score: 100
+    }];
+
+    for (const task of easyFirst.slice(0, 3)) {
+        const minutesByDifficulty = task.difficulty === "hard" ? 25 : (task.difficulty === "easy" ? 15 : 20);
+        items.push({
+            taskId: task.id,
+            text: `Comeback step: ${task.text}`,
+            subject: task.subject || "General",
+            allocatedMinutes: minutesByDifficulty,
+            score: task._score
+        });
+    }
+
+    if (weakest && items.length < 4) {
+        items.push({
+            taskId: "",
+            text: `Quick weak-topic fix: ${weakest.topic}`,
+            subject: weakest.subject || "General",
+            allocatedMinutes: 15,
+            score: 98
+        });
+    }
+
+    let used = 0;
+    const trimmed = [];
+    for (const item of items) {
+        if (used + item.allocatedMinutes > availableMinutes && trimmed.length > 0) continue;
+        used += item.allocatedMinutes;
+        trimmed.push(item);
+        if (trimmed.length >= 4) break;
+    }
+
+    const focusSubject = (trimmed.find(item => String(item.subject || "").trim() && item.subject !== "General") || {}).subject || "General";
+    return {
+        date: now.toISOString().split("T")[0],
+        items: trimmed,
+        availableHours,
+        mode: "recovery",
+        focusSubject,
+        recoveryGapDays: gapDays
+    };
+}
+
+function updateRecoveryPlanMeta(mode, gapDays, now = new Date()) {
+    const today = now.toISOString().split("T")[0];
+    recoveryPlan = normalizeRecoveryPlan({
+        ...recoveryPlan,
+        lastGeneratedDate: today,
+        lastMode: mode,
+        lastGapDays: gapDays,
+        generatedCount: (Number(recoveryPlan.generatedCount) || 0) + 1,
+        lastAutoDate: mode === "auto" ? today : recoveryPlan.lastAutoDate
+    });
+}
+
+function renderRecoveryPlanStatus() {
+    const statusEl = document.getElementById('recoveryPlanStatus');
+    if (!statusEl) return;
+    const today = new Date().toISOString().split('T')[0];
+    const latest = getLatestStudyActivityDate();
+    if (!latest) {
+        statusEl.textContent = 'Recovery plan activates after you complete tasks or focus sessions.';
+        return;
+    }
+
+    if (dailyPlan.mode === "recovery" && dailyPlan.date === today) {
+        const gapDays = Math.max(0, Number(dailyPlan.recoveryGapDays) || 0);
+        statusEl.textContent = `Comeback plan ready (${gapDays} missed day${gapDays === 1 ? "" : "s"}). Start with Step 1.`;
+        return;
+    }
+
+    const gapDays = getMissedStudyDayCount();
+    if (gapDays >= 2) {
+        statusEl.textContent = `${gapDays} inactive days detected. Tap One-Click Recovery Plan for small restart steps.`;
+    } else {
+        statusEl.textContent = 'Recovery status: on track. If you miss 2+ days, a comeback plan is generated.';
+    }
+}
+
+function getRecoveryHistoryStats(entry) {
+    const linkedIds = Array.isArray(entry && entry.linkedTaskIds) ? entry.linkedTaskIds : [];
+    if (linkedIds.length === 0) {
+        return { total: 0, done: 0, rate: null };
+    }
+    let done = 0;
+    linkedIds.forEach(id => {
+        const task = tasks.find(t => t.id === id);
+        if (task && task.done) done += 1;
+    });
+    const rate = Math.round((done / linkedIds.length) * 100);
+    return { total: linkedIds.length, done, rate };
+}
+
+function renderRecoveryHistory() {
+    const summaryEl = document.getElementById('recoveryHistorySummary');
+    const listEl = document.getElementById('recoveryHistoryList');
+    const filterEl = document.getElementById('recoveryHistoryFilter');
+    if (!summaryEl || !listEl) return;
+
+    const history = Array.isArray(recoveryPlan.history) ? recoveryPlan.history.slice(0, 6) : [];
+    const filter = ["all", "auto", "manual"].includes(String(recoveryPlan.historyFilter || "").toLowerCase())
+        ? String(recoveryPlan.historyFilter).toLowerCase()
+        : "all";
+    if (filterEl) filterEl.value = filter;
+
+    const filtered = filter === "all" ? history : history.filter(item => String(item.mode || "").toLowerCase() === filter);
+    if (history.length === 0) {
+        summaryEl.textContent = 'Recovery history: no attempts yet.';
+        listEl.innerHTML = '<li class="empty-state">Generate a recovery plan to track comeback success.</li>';
+        return;
+    }
+    if (filtered.length === 0) {
+        summaryEl.textContent = `Recovery history: ${history.length} total attempt(s), 0 in current filter.`;
+        listEl.innerHTML = '<li class="empty-state">No recovery attempts for this filter yet.</li>';
+        return;
+    }
+
+    const withRates = filtered
+        .map(entry => getRecoveryHistoryStats(entry))
+        .filter(stats => stats.rate !== null);
+    const avgRate = withRates.length > 0
+        ? Math.round(withRates.reduce((sum, item) => sum + item.rate, 0) / withRates.length)
+        : null;
+
+    summaryEl.textContent = avgRate === null
+        ? `Recovery history: ${filtered.length}/${history.length} attempt(s) shown.`
+        : `Recovery history: ${filtered.length}/${history.length} shown, average success ${avgRate}%.`;
+
+    listEl.innerHTML = filtered.map(entry => {
+        const stats = getRecoveryHistoryStats(entry);
+        const modeLabel = entry.mode === 'auto' ? 'Auto' : 'Manual';
+        const successText = stats.rate === null
+            ? 'Task success: N/A'
+            : `Task success: ${stats.done}/${stats.total} (${stats.rate}%)`;
+        return `
+            <li>
+                <strong>${entry.date} | ${modeLabel} recovery</strong>
+                <span>${entry.gapDays} missed day(s), ${entry.itemCount} step(s)</span>
+                <span>${successText}</span>
+            </li>
+        `;
+    }).join('');
+}
+
+function setRecoveryHistoryFilter(value) {
+    const next = ["all", "auto", "manual"].includes(String(value || "").toLowerCase())
+        ? String(value).toLowerCase()
+        : "all";
+    recoveryPlan = normalizeRecoveryPlan({
+        ...recoveryPlan,
+        historyFilter: next
+    });
+    saveState({ recoveryPlan });
+    renderRecoveryHistory();
+}
+
+function clearRecoveryHistory() {
+    const history = Array.isArray(recoveryPlan.history) ? recoveryPlan.history : [];
+    if (history.length === 0) {
+        alert('Recovery history is already empty.');
+        return;
+    }
+    if (!confirm('Clear all recovery history?')) return;
+    recoveryPlan = normalizeRecoveryPlan({
+        ...recoveryPlan,
+        history: []
+    });
+    saveState({ recoveryPlan });
+    renderRecoveryHistory();
+    addActivity('trash', 'Recovery History Cleared', 'All recovery attempts removed');
+}
+
+function generateRecoveryPlan(mode = "manual", options = {}) {
+    const now = options.now || new Date();
+    const input = document.getElementById('planHoursToday');
+    const availableHours = Number(options.availableHours || (input && input.value) || dailyPlan.availableHours || smartSettings.defaultPlanHours || 2);
+    const gapDays = Math.max(0, Number(options.gapDays) || getMissedStudyDayCount(now));
+
+    const hasPending = tasks.some(task => !task.done);
+    if (!hasPending) {
+        alert('No pending tasks. Add tasks first to build a recovery plan.');
+        return false;
+    }
+
+    dailyPlan = createRecoveryPlan({ now, availableHours, gapDays });
+    const linkedTaskIds = (dailyPlan.items || [])
+        .map(item => item.taskId)
+        .filter(Boolean);
+    const historyEntry = {
+        id: `recovery-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        date: dailyPlan.date,
+        mode,
+        gapDays,
+        itemCount: Array.isArray(dailyPlan.items) ? dailyPlan.items.length : 0,
+        linkedTaskIds
+    };
+    recoveryPlan = normalizeRecoveryPlan({
+        ...recoveryPlan,
+        history: [historyEntry, ...(Array.isArray(recoveryPlan.history) ? recoveryPlan.history : [])]
+    });
+    updateRecoveryPlanMeta(mode, gapDays, now);
+    saveState({ dailyPlan, recoveryPlan });
+    renderTodayPlan();
+    renderRecoveryHistory();
+    addActivity('life-ring', 'Recovery Plan Generated', `${dailyPlan.items.length} small-step comeback blocks (${mode})`);
+    return true;
+}
+
+function autoGenerateRecoveryPlanIfNeeded() {
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const gapDays = getMissedStudyDayCount(now);
+    const hasPending = tasks.some(task => !task.done);
+    if (gapDays < 2 || !hasPending) return;
+    if (String(recoveryPlan.lastAutoDate || "") === today) return;
+
+    const hasCurrentPlan = dailyPlan && dailyPlan.date === today && Array.isArray(dailyPlan.items) && dailyPlan.items.length > 0;
+    if (hasCurrentPlan && dailyPlan.mode !== "recovery") return;
+
+    generateRecoveryPlan("auto", { now, gapDays, availableHours: dailyPlan.availableHours || smartSettings.defaultPlanHours || 2 });
 }
 
 function renderSmartSettings() {
@@ -3648,6 +4735,13 @@ let currentTaskFilter = "all";
 let taskSearchQuery = "";
 let taskSortMode = "smart-score";
 let selectedTaskIds = new Set();
+let liveClassSession = {
+    active: false,
+    startedAt: ""
+};
+let assignmentScannerImageDataUrl = "";
+let assignmentScannerParsedPreview = null;
+let assignmentScannerWorkerPromise = null;
 
 function saveTasks() {
     tasks = normalizeTasks(tasks);
@@ -3809,6 +4903,375 @@ function compareTasks(a, b, today) {
     if (isDoneDelta !== 0) return isDoneDelta;
 
     return getCreatedTime(b) - getCreatedTime(a);
+}
+
+function getLiveClassDueDateValue() {
+    const dueInput = document.getElementById('liveClassActionDueDate');
+    if (dueInput && dueInput.value) return dueInput.value;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().slice(0, 10);
+}
+
+function renderLiveClassMode() {
+    const statusEl = document.getElementById('liveClassStatus');
+    const toggleBtn = document.getElementById('liveClassToggleBtn');
+    const dueInput = document.getElementById('liveClassActionDueDate');
+    if (!statusEl || !toggleBtn) return;
+    if (dueInput && !dueInput.value) {
+        dueInput.value = getLiveClassDueDateValue();
+    }
+
+    if (!liveClassSession.active) {
+        statusEl.textContent = 'Not in class. Tap In Class when lecture starts.';
+        toggleBtn.innerHTML = '<i class="fas fa-play"></i> In Class';
+        return;
+    }
+
+    const started = liveClassSession.startedAt ? new Date(liveClassSession.startedAt) : null;
+    const timeLabel = started && !Number.isNaN(started.getTime())
+        ? started.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        : 'now';
+    statusEl.textContent = `Live class running since ${timeLabel}. Quick notes, doubts, and action items auto-save.`;
+    toggleBtn.innerHTML = '<i class="fas fa-stop"></i> End Class';
+}
+
+function collectLiveClassDraft() {
+    const subject = String(document.getElementById('liveClassSubject')?.value || 'General').trim() || 'General';
+    const notesText = String(document.getElementById('liveClassQuickNotes')?.value || '').trim();
+    const doubtText = String(document.getElementById('liveClassDoubtText')?.value || '').trim();
+    const actionRaw = String(document.getElementById('liveClassActionItems')?.value || '').trim();
+    const dueDate = getLiveClassDueDateValue();
+    const actionItems = actionRaw
+        .split(/\r?\n|;/g)
+        .map(line => String(line || '').trim())
+        .filter(Boolean);
+    return { subject, notesText, doubtText, actionItems, dueDate };
+}
+
+function clearLiveClassInputs() {
+    const notesInput = document.getElementById('liveClassQuickNotes');
+    const doubtInput = document.getElementById('liveClassDoubtText');
+    const actionInput = document.getElementById('liveClassActionItems');
+    if (notesInput) notesInput.value = '';
+    if (doubtInput) doubtInput.value = '';
+    if (actionInput) actionInput.value = '';
+}
+
+function saveLiveClassCapture(options = {}) {
+    const silent = Boolean(options.silent);
+    const draft = collectLiveClassDraft();
+    const hasContent = draft.notesText || draft.doubtText || draft.actionItems.length > 0;
+    if (!hasContent) {
+        if (!silent) alert('Add quick notes, doubt, or action items first.');
+        return 0;
+    }
+
+    let savedCount = 0;
+    if (draft.notesText) {
+        notes.push({
+            title: `Live Class Note - ${draft.subject}`,
+            subject: draft.subject,
+            content: draft.notesText,
+            color: '#d9f7ff',
+            date: new Date().toISOString()
+        });
+        savedCount += 1;
+    }
+
+    if (draft.doubtText) {
+        doubtTracker.unshift({
+            id: `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            subject: draft.subject,
+            chapter: 'Live Class',
+            text: draft.doubtText,
+            status: 'unresolved',
+            createdAt: new Date().toISOString(),
+            resolvedAt: ''
+        });
+        savedCount += 1;
+    }
+
+    draft.actionItems.forEach(item => {
+        tasks.push({
+            text: `Live Class Action: ${item}`,
+            subject: draft.subject,
+            priority: 'high',
+            difficulty: 'medium',
+            examWeight: 3,
+            estimatedHours: 0.5,
+            dueDate: draft.dueDate,
+            done: false,
+            doneAt: '',
+            createdAt: new Date().toISOString()
+        });
+        savedCount += 1;
+    });
+
+    saveTasks();
+    saveState({ notes, doubtTracker });
+    renderTasks();
+    renderNotes();
+    renderGoals();
+    renderDashboard();
+    addActivity('chalkboard-user', 'Live Class Capture Saved', `${savedCount} item(s) saved`);
+    clearLiveClassInputs();
+    if (!silent) alert(`${savedCount} item(s) saved from Live Class.`);
+    return savedCount;
+}
+
+function toggleLiveClassMode() {
+    if (!liveClassSession.active) {
+        liveClassSession = {
+            active: true,
+            startedAt: new Date().toISOString()
+        };
+        renderLiveClassMode();
+        addActivity('play', 'Live Class Started', 'Quick capture enabled');
+        return;
+    }
+
+    saveLiveClassCapture({ silent: true });
+    liveClassSession = {
+        active: false,
+        startedAt: ''
+    };
+    renderLiveClassMode();
+    addActivity('stop', 'Live Class Ended', 'Session closed and draft auto-saved');
+}
+
+function setAssignmentScannerStatus(message) {
+    const statusEl = document.getElementById('assignmentScannerStatus');
+    if (!statusEl) return;
+    statusEl.textContent = String(message || '');
+}
+
+function openAssignmentPhotoPicker() {
+    const input = document.getElementById('assignmentPhotoInput');
+    if (!input) return;
+    input.click();
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function ensureAssignmentScannerWorker() {
+    if (window.Tesseract && window.Tesseract.recognize) {
+        return Promise.resolve(window.Tesseract);
+    }
+    if (assignmentScannerWorkerPromise) return assignmentScannerWorkerPromise;
+
+    assignmentScannerWorkerPromise = new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-scan-ocr="tesseract"]');
+        if (existing) {
+            const checkReady = () => {
+                if (window.Tesseract && window.Tesseract.recognize) resolve(window.Tesseract);
+                else reject(new Error('OCR library unavailable.'));
+            };
+            if (existing.dataset.loaded === '1') {
+                checkReady();
+            } else {
+                existing.addEventListener('load', checkReady, { once: true });
+                existing.addEventListener('error', () => reject(new Error('OCR library failed to load.')), { once: true });
+            }
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        script.async = true;
+        script.dataset.scanOcr = 'tesseract';
+        script.onload = () => {
+            script.dataset.loaded = '1';
+            if (window.Tesseract && window.Tesseract.recognize) resolve(window.Tesseract);
+            else reject(new Error('OCR library loaded but Tesseract is missing.'));
+        };
+        script.onerror = () => reject(new Error('Failed to load OCR library.'));
+        document.head.appendChild(script);
+    }).catch((error) => {
+        assignmentScannerWorkerPromise = null;
+        throw error;
+    });
+
+    return assignmentScannerWorkerPromise;
+}
+
+function parseDueDateFromAssignmentText(text) {
+    const raw = String(text || '');
+    if (!raw.trim()) return '';
+
+    if (/\btomorrow\b/i.test(raw)) {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().slice(0, 10);
+    }
+
+    const iso = raw.match(/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])\b/);
+    if (iso) {
+        const yyyy = Number(iso[1]);
+        const mm = Number(iso[2]);
+        const dd = Number(iso[3]);
+        return new Date(yyyy, mm - 1, dd).toISOString().slice(0, 10);
+    }
+
+    const slash = raw.match(/\b(0?[1-9]|1[0-2])[\/.-](0?[1-9]|[12]\d|3[01])[\/.-]((?:20)?\d{2})\b/);
+    if (slash) {
+        const mm = Number(slash[1]);
+        const dd = Number(slash[2]);
+        const yyRaw = Number(slash[3]);
+        const yyyy = yyRaw < 100 ? (2000 + yyRaw) : yyRaw;
+        return new Date(yyyy, mm - 1, dd).toISOString().slice(0, 10);
+    }
+
+    const monthNames = {
+        january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+        may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8, september: 9, sep: 9,
+        october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
+    };
+    const monthPattern = /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:,?\s*(20\d{2}))?\b/i;
+    const named = raw.match(monthPattern);
+    if (named) {
+        const mm = monthNames[String(named[1] || '').toLowerCase()] || 0;
+        const dd = Number(named[2]);
+        const yyyy = Number(named[3] || new Date().getFullYear());
+        if (mm > 0) {
+            return new Date(yyyy, mm - 1, dd).toISOString().slice(0, 10);
+        }
+    }
+
+    return '';
+}
+
+function inferSubjectFromAssignmentText(text) {
+    const lower = String(text || '').toLowerCase();
+    const subjectKeywords = [
+        { subject: 'Math', keys: ['math', 'algebra', 'geometry', 'trigonometry', 'calculus'] },
+        { subject: 'Science', keys: ['science', 'physics', 'chemistry', 'biology'] },
+        { subject: 'English', keys: ['english', 'grammar', 'essay', 'literature', 'comprehension'] },
+        { subject: 'History', keys: ['history', 'civilization', 'ancient', 'medieval', 'freedom movement'] },
+        { subject: 'Geography', keys: ['geography', 'map', 'climate', 'resources', 'latitude', 'longitude'] },
+        { subject: 'Programming', keys: ['programming', 'coding', 'javascript', 'python', 'algorithm', 'computer'] }
+    ];
+    for (const group of subjectKeywords) {
+        if (group.keys.some(key => lower.includes(key))) return group.subject;
+    }
+    return 'General';
+}
+
+function inferTaskTitleFromAssignmentText(text) {
+    const normalized = String(text || '').replace(/\r/g, '\n');
+    const lines = normalized.split('\n').map(line => line.trim()).filter(Boolean);
+    const preferred = lines.find(line => /homework|assignment|worksheet|project|exercise|chapter|task|submit/i.test(line));
+    const fallback = lines.find(line => line.length >= 10);
+    const title = preferred || fallback || 'Complete scanned homework task';
+    return title.slice(0, 140);
+}
+
+function parseAssignmentScannerText() {
+    const textArea = document.getElementById('assignmentScanText');
+    const titleInput = document.getElementById('assignmentScanTaskTitle');
+    const subjectInput = document.getElementById('assignmentScanSubject');
+    const dueDateInput = document.getElementById('assignmentScanDueDate');
+    const text = String(textArea && textArea.value ? textArea.value : '').trim();
+    if (!text) {
+        setAssignmentScannerStatus('No text detected yet. Upload a clear photo first.');
+        return;
+    }
+
+    const parsed = {
+        text,
+        title: inferTaskTitleFromAssignmentText(text),
+        subject: inferSubjectFromAssignmentText(text),
+        dueDate: parseDueDateFromAssignmentText(text)
+    };
+    assignmentScannerParsedPreview = parsed;
+
+    if (titleInput) titleInput.value = parsed.title;
+    if (subjectInput) subjectInput.value = parsed.subject;
+    if (dueDateInput) dueDateInput.value = parsed.dueDate;
+
+    const dueLabel = parsed.dueDate ? parsed.dueDate : 'no due date found';
+    setAssignmentScannerStatus(`Parsed: ${parsed.subject} | Due: ${dueLabel}`);
+}
+
+async function scanAssignmentPhoto(event) {
+    const input = event && event.target ? event.target : document.getElementById('assignmentPhotoInput');
+    const file = input && input.files && input.files[0] ? input.files[0] : null;
+    if (!file) return;
+
+    try {
+        setAssignmentScannerStatus('Reading photo...');
+        const dataUrl = await readFileAsDataUrl(file);
+        assignmentScannerImageDataUrl = dataUrl;
+        const previewImg = document.getElementById('assignmentScannerPreviewImage');
+        if (previewImg) {
+            previewImg.src = dataUrl;
+            previewImg.style.display = 'block';
+        }
+
+        setAssignmentScannerStatus('Loading OCR engine...');
+        const tesseract = await ensureAssignmentScannerWorker();
+        setAssignmentScannerStatus('Extracting text from photo...');
+        const result = await tesseract.recognize(dataUrl, 'eng');
+        const extractedText = String((result && result.data && result.data.text) || '').trim();
+
+        const textArea = document.getElementById('assignmentScanText');
+        if (textArea) textArea.value = extractedText;
+        parseAssignmentScannerText();
+    } catch (error) {
+        setAssignmentScannerStatus(`Scan failed: ${error && error.message ? error.message : 'unknown error'}`);
+    } finally {
+        if (input) input.value = '';
+    }
+}
+
+function createTaskFromAssignmentScan() {
+    const titleInput = document.getElementById('assignmentScanTaskTitle');
+    const subjectInput = document.getElementById('assignmentScanSubject');
+    const dueDateInput = document.getElementById('assignmentScanDueDate');
+    const title = String(titleInput && titleInput.value ? titleInput.value : '').trim();
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
+    const dueDate = String(dueDateInput && dueDateInput.value ? dueDateInput.value : '').trim();
+
+    if (!title) {
+        alert('Task title is empty. Scan or parse text first.');
+        return;
+    }
+
+    const exists = tasks.some(task =>
+        String(task.text || '').trim().toLowerCase() === title.toLowerCase() &&
+        String(task.subject || '').trim().toLowerCase() === subject.toLowerCase() &&
+        String(task.dueDate || '') === dueDate
+    );
+    if (exists) {
+        alert('This scanned task already exists.');
+        return;
+    }
+
+    tasks.push({
+        text: title,
+        subject,
+        priority: "medium",
+        difficulty: "medium",
+        examWeight: 3,
+        estimatedHours: 1,
+        dueDate,
+        done: false,
+        doneAt: "",
+        createdAt: new Date().toISOString()
+    });
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('camera', 'Task Created from Photo', `${title}${dueDate ? ` | Due ${dueDate}` : ''}`);
+    setAssignmentScannerStatus('Task created successfully from scanned assignment.');
 }
 
 function addTask() {
@@ -3985,7 +5448,162 @@ function handleEnter(e) {
 }
 
 // ==================== CALENDAR ====================
+const SPACED_REVISION_DAYS = [1, 3, 7, 14];
+
+function toDateInputValue(dateLike) {
+    const date = dateLike instanceof Date ? new Date(dateLike) : new Date(dateLike);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+}
+
+function getSpacedRevisionChapterSourceDate(entry) {
+    const fallback = entry && entry.createdAt ? entry.createdAt : new Date().toISOString();
+    return new Date(fallback);
+}
+
+function getSpacedRevisionMistakeSourceDate(entry) {
+    const source = (entry && (entry.lastWrongAt || entry.createdAt || entry.nextReviewAt)) || new Date().toISOString();
+    return new Date(source);
+}
+
+function buildSpacedRevisionBlueprints() {
+    const plans = [];
+
+    (chapterTracker || []).forEach(entry => {
+        if (!entry || !entry.chapter) return;
+        const sourceDate = getSpacedRevisionChapterSourceDate(entry);
+        if (Number.isNaN(sourceDate.getTime())) return;
+        SPACED_REVISION_DAYS.forEach(day => {
+            const due = new Date(sourceDate);
+            due.setDate(due.getDate() + day);
+            plans.push({
+                text: `Spaced Revision D+${day}: ${entry.subject || 'General'} - ${entry.chapter}`,
+                subject: entry.subject || 'General',
+                dueDate: toDateInputValue(due),
+                priority: day <= 3 ? 'high' : 'medium',
+                difficulty: 'medium',
+                examWeight: 3,
+                estimatedHours: 0.5
+            });
+        });
+    });
+
+    (mistakeNotebook || [])
+        .filter(entry => !entry.masteredAt)
+        .forEach(entry => {
+            const sourceDate = getSpacedRevisionMistakeSourceDate(entry);
+            if (Number.isNaN(sourceDate.getTime())) return;
+            const q = String(entry.question || '').trim();
+            const compactQuestion = q.length > 70 ? `${q.slice(0, 67)}...` : q;
+            SPACED_REVISION_DAYS.forEach(day => {
+                const due = new Date(sourceDate);
+                due.setDate(due.getDate() + day);
+                plans.push({
+                    text: `Spaced Revision D+${day}: ${entry.subject || 'General'} - Mistake: ${compactQuestion}`,
+                    subject: entry.subject || 'General',
+                    dueDate: toDateInputValue(due),
+                    priority: day <= 3 ? 'high' : 'medium',
+                    difficulty: 'hard',
+                    examWeight: 4,
+                    estimatedHours: 0.5
+                });
+            });
+        });
+
+    return plans;
+}
+
+function autoScheduleSpacedRevisionTasks(options = {}) {
+    const silent = Boolean(options.silent);
+    const today = toDateInputValue(new Date());
+    const plans = buildSpacedRevisionBlueprints()
+        .filter(item => item.dueDate && item.dueDate >= today);
+    if (plans.length === 0) {
+        if (!silent) alert('No chapter/mistake entries available for spaced revision scheduling.');
+        return 0;
+    }
+
+    let created = 0;
+    plans.forEach(plan => {
+        const exists = tasks.some(task =>
+            String(task.text || '').trim() === String(plan.text || '').trim() &&
+            String(task.dueDate || '') === String(plan.dueDate || '')
+        );
+        if (exists) return;
+        tasks.push({
+            text: plan.text,
+            subject: plan.subject,
+            priority: plan.priority,
+            difficulty: plan.difficulty,
+            examWeight: plan.examWeight,
+            estimatedHours: plan.estimatedHours,
+            dueDate: plan.dueDate,
+            done: false,
+            doneAt: '',
+            createdAt: new Date().toISOString()
+        });
+        created += 1;
+    });
+
+    if (created > 0) {
+        saveTasks();
+        renderTasks();
+        renderDashboard();
+        if (!silent) {
+            addActivity('calendar-check', 'Spaced Revision Scheduled', `${created} revision task(s) auto-created`);
+        }
+    }
+    return created;
+}
+
+function getUpcomingSpacedRevisionTasks(limit = 16) {
+    const today = toDateInputValue(new Date());
+    return tasks
+        .filter(task => !task.done)
+        .filter(task => String(task.text || '').startsWith('Spaced Revision D+'))
+        .filter(task => String(task.dueDate || '') >= today)
+        .sort((a, b) => {
+            const dueCmp = String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+            if (dueCmp !== 0) return dueCmp;
+            return String(a.text || '').localeCompare(String(b.text || ''));
+        })
+        .slice(0, Math.max(1, limit));
+}
+
+function renderSpacedRevisionCalendar() {
+    const summaryEl = document.getElementById('spacedRevisionSummary');
+    const listEl = document.getElementById('spacedRevisionList');
+    if (!summaryEl || !listEl) return;
+
+    const upcoming = getUpcomingSpacedRevisionTasks(16);
+    if (upcoming.length === 0) {
+        summaryEl.textContent = 'Auto-schedules revision at D+1, D+3, D+7, D+14 for chapters and mistakes.';
+        listEl.innerHTML = '<li class="empty-state">No spaced revision tasks yet.</li>';
+        return;
+    }
+
+    summaryEl.textContent = `${upcoming.length} upcoming spaced revision task(s).`;
+    listEl.innerHTML = upcoming.map(task => `
+        <li>
+            <strong>${escapeHtml(task.text)}</strong>
+            <span>${escapeHtml(task.subject || 'General')} | Due ${escapeHtml(task.dueDate || '')}</span>
+        </li>
+    `).join('');
+}
+
+function runSpacedRevisionScheduler() {
+    const created = autoScheduleSpacedRevisionTasks({ silent: false });
+    renderSpacedRevisionCalendar();
+    renderCalendar();
+    if (created > 0) {
+        alert(`${created} spaced revision task(s) scheduled.`);
+    } else {
+        alert('No new spaced revision tasks were needed.');
+    }
+}
+
 function renderCalendar() {
+    autoScheduleSpacedRevisionTasks({ silent: true });
     const monthNames = ["January", "February", "March", "April", "May", "June", 
                        "July", "August", "September", "October", "November", "December"];
     
@@ -4020,6 +5638,7 @@ function renderCalendar() {
     }
     
     document.getElementById('calendarDays').innerHTML = html;
+    renderSpacedRevisionCalendar();
 }
 
 function changeMonth(delta) {
@@ -5919,6 +7538,7 @@ function startVoiceNoteCapture() {
         return;
     }
     if (voiceNoteListening) return;
+    if (voiceFlashcardListening) stopVoiceFlashcardCapture();
 
     voiceNoteRecognition = new SpeechRecognition();
     voiceNoteRecognition.lang = 'en-US';
@@ -5964,6 +7584,195 @@ function startVoiceNoteCapture() {
     } catch (_) {
         updateVoiceNoteUI('Unable to start mic', false);
     }
+}
+
+function updateVoiceFlashUI(statusText, isRecording) {
+    const statusEl = document.getElementById('voiceFlashStatus');
+    const startBtn = document.getElementById('voiceFlashStartBtn');
+    const stopBtn = document.getElementById('voiceFlashStopBtn');
+    if (statusEl) {
+        statusEl.textContent = statusText;
+        statusEl.classList.toggle('recording', Boolean(isRecording));
+    }
+    if (startBtn) startBtn.disabled = Boolean(isRecording);
+    if (stopBtn) stopBtn.disabled = !isRecording;
+}
+
+function appendVoiceTextToFlashTranscript(text) {
+    const transcriptEl = document.getElementById('voiceFlashTranscriptInput');
+    if (!transcriptEl) return;
+    const cleaned = String(text || '').trim();
+    if (!cleaned) return;
+    const current = String(transcriptEl.value || '').trim();
+    transcriptEl.value = current ? `${current}\n${cleaned}` : cleaned;
+}
+
+function stopVoiceFlashcardCapture() {
+    if (voiceNoteRecognition && voiceFlashcardListening) {
+        voiceNoteRecognition.stop();
+    }
+    voiceFlashcardListening = false;
+    updateVoiceFlashUI('Ready', false);
+}
+
+function startVoiceFlashcardCapture() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        alert('Voice capture is not supported in this browser. Please use Chrome or Edge.');
+        return;
+    }
+    if (voiceFlashcardListening) return;
+    if (voiceNoteListening) stopVoiceNoteCapture();
+
+    voiceNoteRecognition = new SpeechRecognition();
+    voiceNoteRecognition.lang = 'en-US';
+    voiceNoteRecognition.interimResults = true;
+    voiceNoteRecognition.maxAlternatives = 1;
+    voiceNoteRecognition.continuous = true;
+
+    let transcriptBuffer = '';
+
+    voiceNoteRecognition.onstart = () => {
+        voiceFlashcardListening = true;
+        updateVoiceFlashUI('Listening...', true);
+    };
+
+    voiceNoteRecognition.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = String(event.results[i][0].transcript || '').trim();
+            if (!transcript) continue;
+            if (event.results[i].isFinal) {
+                transcriptBuffer = `${transcriptBuffer} ${transcript}`.trim();
+                appendVoiceTextToFlashTranscript(transcript);
+            } else {
+                interim = transcript;
+            }
+        }
+        const previewText = interim || transcriptBuffer;
+        updateVoiceFlashUI(previewText ? `Listening... ${previewText.slice(0, 50)}` : 'Listening...', true);
+    };
+
+    voiceNoteRecognition.onerror = () => {
+        voiceFlashcardListening = false;
+        updateVoiceFlashUI('Voice capture error', false);
+    };
+
+    voiceNoteRecognition.onend = () => {
+        voiceFlashcardListening = false;
+        updateVoiceFlashUI('Ready', false);
+    };
+
+    try {
+        voiceNoteRecognition.start();
+    } catch (_) {
+        updateVoiceFlashUI('Unable to start mic', false);
+    }
+}
+
+function clearVoiceFlashTranscript() {
+    const transcriptEl = document.getElementById('voiceFlashTranscriptInput');
+    if (transcriptEl) transcriptEl.value = '';
+    updateVoiceFlashUI('Ready', false);
+}
+
+function toSentenceCase(text) {
+    const value = String(text || '').trim();
+    if (!value) return '';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function sanitizeVoiceLine(text) {
+    return String(text || '')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\-*\d\.\)\s]+/, '')
+        .trim();
+}
+
+function buildFlashcardFromVoiceLine(line, subject) {
+    const cleaned = sanitizeVoiceLine(line);
+    if (!cleaned || cleaned.length < 8) return null;
+    const sentence = cleaned.replace(/[;]+$/g, '').trim();
+
+    const colonIdx = sentence.indexOf(':');
+    if (colonIdx > 1 && colonIdx < sentence.length - 2) {
+        const left = sentence.slice(0, colonIdx).trim();
+        const right = sentence.slice(colonIdx + 1).trim();
+        if (left && right) {
+            const front = /[?]$/.test(left) ? left : `${toSentenceCase(left)}?`;
+            const back = toSentenceCase(right);
+            return { front, back };
+        }
+    }
+
+    const definitional = sentence.match(/^(.{2,90})\s+(is|are|means|refers to|can be defined as)\s+(.{3,240})$/i);
+    if (definitional) {
+        const term = toSentenceCase(definitional[1].trim().replace(/[,.!?]$/g, ''));
+        const back = toSentenceCase(sentence);
+        const front = `What is ${term}?`;
+        return { front, back };
+    }
+
+    const words = sentence.split(' ').filter(Boolean);
+    const cue = words.slice(0, Math.min(7, words.length)).join(' ');
+    const front = `Explain: ${toSentenceCase(cue)}${words.length > 7 ? '...' : ''}`;
+    const back = toSentenceCase(sentence);
+    return { front, back };
+}
+
+function convertVoiceNotesToFlashcards() {
+    if (voiceFlashcardListening) {
+        stopVoiceFlashcardCapture();
+    }
+
+    const transcriptEl = document.getElementById('voiceFlashTranscriptInput');
+    const deckInput = document.getElementById('voiceFlashDeckInput');
+    const subjectSelect = document.getElementById('voiceFlashSubjectSelect');
+    const selectedDeck = document.getElementById('flashcardDeck')?.value || '';
+    const subject = String(subjectSelect?.value || 'General');
+    const transcript = String(transcriptEl?.value || '').trim();
+    if (!transcript) {
+        alert('Capture or type some short notes first.');
+        return;
+    }
+
+    const deckName = String(deckInput?.value || '').trim() || selectedDeck || `${subject} Voice Notes`;
+    if (!flashcards[deckName]) flashcards[deckName] = [];
+
+    const existingKeys = new Set(
+        flashcards[deckName].map(card =>
+            `${String(card.front || '').trim().toLowerCase()}||${String(card.back || '').trim().toLowerCase()}`
+        )
+    );
+
+    const segments = transcript
+        .split(/\n|[.!?]+/g)
+        .map(sanitizeVoiceLine)
+        .filter(Boolean);
+
+    let added = 0;
+    segments.forEach(segment => {
+        const qa = buildFlashcardFromVoiceLine(segment, subject);
+        if (!qa || !qa.front || !qa.back) return;
+        const key = `${qa.front.toLowerCase()}||${qa.back.toLowerCase()}`;
+        if (existingKeys.has(key)) return;
+        existingKeys.add(key);
+        flashcards[deckName].push(normalizeFlashcardCard({ front: qa.front, back: qa.back }));
+        added += 1;
+    });
+
+    if (added === 0) {
+        alert('No new flashcards generated (content may be too short or already exists).');
+        return;
+    }
+
+    saveState({ flashcards });
+    saveFlashcardsToBackend();
+    renderFlashcards();
+    selectDeck(deckName);
+    if (deckInput) deckInput.value = deckName;
+    updateVoiceFlashUI(`Created ${added} flashcards`, false);
+    addActivity('microphone-lines', 'Voice Notes Converted', `${deckName}: +${added} flashcards`);
 }
 
 async function addFreeNote() {
@@ -6268,9 +8077,433 @@ function ensureMinimumQuizQuestionsPerSubjectDifficulty(minCount) {
 
 ensureMinimumQuizQuestionsPerSubjectDifficulty(QUIZ_MIN_PER_SUBJECT_DIFFICULTY);
 let currentQuizSession = [];
+let currentQuizMode = "standard";
+let currentQuizAdaptiveEnabled = true;
+let mistakeNotebookFilter = "due";
 let chapterSearchQuery = "";
 let chapterFilterSubject = "all";
 let chapterIncompleteOnly = false;
+let conceptDependencySubjectFilter = "all";
+const MISTAKE_RETRY_DAYS = [2, 7, 14];
+
+function daysFromNow(days) {
+    const now = new Date();
+    return new Date(now.getTime() + (days * 24 * 60 * 60 * 1000)).toISOString();
+}
+
+function findMistakeNotebookEntryIndex(userEmail, question, subject) {
+    const normalizedEmail = normalizeEmail(userEmail || "");
+    return mistakeNotebook.findIndex(item =>
+        normalizeEmail(item.userEmail) === normalizedEmail &&
+        String(item.question || "").trim() === String(question || "").trim() &&
+        String(item.subject || "General").trim() === String(subject || "General").trim()
+    );
+}
+
+function updateQuizSessionModeLabel() {
+    const label = document.getElementById('quizSessionModeLabel');
+    if (!label) return;
+    if (currentQuizMode === "retry") {
+        label.textContent = `Mode: Retry Due Now (${currentQuizSession.length} questions)`;
+        return;
+    }
+    label.textContent = currentQuizAdaptiveEnabled
+        ? 'Mode: Adaptive Quiz (weak boosted, mastered reduced)'
+        : 'Mode: Standard Quiz';
+}
+
+function isAdaptiveQuizEnabled() {
+    const toggle = document.getElementById('adaptiveQuizToggle');
+    if (!toggle) return true;
+    return Boolean(toggle.checked);
+}
+
+function getAdaptiveTopicBuckets() {
+    const weak = new Set();
+    const mastered = new Set();
+
+    Object.entries(weakTopicStats || {}).forEach(([key, item]) => {
+        const attempts = Number(item && item.attempts) || 0;
+        const wrong = Number(item && item.wrong) || 0;
+        const wrongRate = attempts > 0 ? wrong / attempts : 0;
+        if (attempts >= 2 && wrongRate >= 0.4) {
+            weak.add(key);
+        } else if (attempts >= 3 && wrongRate <= 0.2) {
+            mastered.add(key);
+        }
+    });
+
+    return { weak, mastered };
+}
+
+function getAdaptiveQuestionWeight(question, buckets) {
+    const topic = extractTopicFromQuestion(question);
+    const key = buildWeakTopicKey(question && question.subject, topic);
+    if (buckets.weak.has(key)) return 3.4;
+    if (buckets.mastered.has(key)) return 0.45;
+    return 1;
+}
+
+function pickAdaptiveQuizQuestions(pool, requestedCount) {
+    const selected = [];
+    const available = [...pool];
+    const buckets = getAdaptiveTopicBuckets();
+
+    while (selected.length < requestedCount && available.length > 0) {
+        const weights = available.map(item => getAdaptiveQuestionWeight(item, buckets));
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+        if (!Number.isFinite(totalWeight) || totalWeight <= 0) {
+            selected.push(...shuffleArray(available).slice(0, requestedCount - selected.length));
+            break;
+        }
+
+        let roll = Math.random() * totalWeight;
+        let pickedIndex = 0;
+        for (let i = 0; i < weights.length; i++) {
+            roll -= weights[i];
+            if (roll <= 0) {
+                pickedIndex = i;
+                break;
+            }
+        }
+        selected.push(available[pickedIndex]);
+        available.splice(pickedIndex, 1);
+    }
+
+    return selected;
+}
+
+function buildRetryQuestionFromMistake(entry) {
+    const correctAnswer = String(entry.correctAnswer || "").trim();
+    const selectedAnswer = String(entry.selectedAnswer || "").trim();
+    let options = Array.isArray(entry.options) ? entry.options.map(opt => String(opt || "").trim()).filter(Boolean) : [];
+
+    if (correctAnswer && !options.includes(correctAnswer)) {
+        options.push(correctAnswer);
+    }
+    if (selectedAnswer && !options.includes(selectedAnswer)) {
+        options.push(selectedAnswer);
+    }
+
+    options = Array.from(new Set(options));
+    if (options.length < 2) {
+        options.push("Not sure yet");
+    }
+    if (options.length < 2) {
+        options.push("Need to revise");
+    }
+
+    const shuffledOptions = shuffleArray(options.slice(0, 6));
+    const answerIndex = Math.max(0, shuffledOptions.findIndex(opt => opt === correctAnswer));
+
+    return {
+        subject: entry.subject || "General",
+        difficulty: entry.difficulty || "mixed",
+        question: entry.question || "",
+        options: shuffledOptions,
+        answerIndex,
+        mistakeId: entry.id || "",
+        isRetryQuestion: true
+    };
+}
+
+function generateDueMistakeRetrySession() {
+    const requestedCount = Math.max(5, Math.min(25, Number(document.getElementById('quizQuestionCount')?.value || 5)));
+    const subject = document.getElementById('quizSubject')?.value || 'Any';
+    const now = Date.now();
+    const dueEntries = getCurrentUserMistakeNotebook()
+        .filter(item => !item.masteredAt)
+        .filter(item => Date.parse(item.nextReviewAt || "") <= now || !item.nextReviewAt)
+        .filter(item => subject === 'Any' || item.subject === subject);
+
+    if (dueEntries.length === 0) {
+        alert('No due mistakes available right now for the selected subject.');
+        return;
+    }
+
+    const selectedEntries = dueEntries.slice(0, Math.min(requestedCount, dueEntries.length));
+    currentQuizSession = selectedEntries.map(buildRetryQuestionFromMistake).filter(q => q.question && Array.isArray(q.options) && q.options.length >= 2);
+    if (currentQuizSession.length === 0) {
+        alert('Unable to generate retry quiz from due mistakes.');
+        return;
+    }
+    currentQuizMode = "retry";
+    currentQuizAdaptiveEnabled = false;
+    renderQuizQuestions();
+    updateQuizSessionModeLabel();
+}
+
+function logQuizMistake(question, selectedIndex) {
+    const user = getCurrentUser();
+    if (!user || !question) return;
+
+    const subject = String(question.subject || "General").trim() || "General";
+    const selectedAnswer = Number.isFinite(selectedIndex)
+        ? String(question.options && question.options[selectedIndex] ? question.options[selectedIndex] : "").trim()
+        : "";
+    const correctAnswer = String(question.options && question.options[question.answerIndex] ? question.options[question.answerIndex] : "").trim();
+    const wrongReason = selectedAnswer
+        ? `Selected "${selectedAnswer}" instead of "${correctAnswer}".`
+        : `Skipped the question. Correct answer: "${correctAnswer}".`;
+
+    const existingIdx = findMistakeNotebookEntryIndex(user.email, question.question, subject);
+    const nextReviewAt = daysFromNow(MISTAKE_RETRY_DAYS[0]);
+
+    if (existingIdx >= 0) {
+        const existing = mistakeNotebook[existingIdx];
+        mistakeNotebook[existingIdx] = {
+            ...existing,
+            difficulty: String(question.difficulty || existing.difficulty || "mixed"),
+            options: Array.isArray(question.options) ? [...question.options] : (existing.options || []),
+            correctAnswer: correctAnswer || existing.correctAnswer || "",
+            selectedAnswer,
+            wrongReason,
+            reviewStage: 0,
+            wrongCount: (Number(existing.wrongCount) || 0) + 1,
+            nextReviewAt,
+            lastWrongAt: new Date().toISOString(),
+            masteredAt: ""
+        };
+    } else {
+        mistakeNotebook.unshift({
+            id: `mistake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            userEmail: normalizeEmail(user.email),
+            subject,
+            difficulty: String(question.difficulty || "mixed"),
+            question: String(question.question || "").trim(),
+            options: Array.isArray(question.options) ? [...question.options] : [],
+            correctAnswer,
+            selectedAnswer,
+            wrongReason,
+            reviewStage: 0,
+            wrongCount: 1,
+            reviewCount: 0,
+            nextReviewAt,
+            createdAt: new Date().toISOString(),
+            lastWrongAt: new Date().toISOString(),
+            lastReviewedAt: "",
+            masteredAt: ""
+        });
+    }
+
+    mistakeNotebook = normalizeMistakeNotebook(mistakeNotebook).slice(0, 300);
+}
+
+function getCurrentUserMistakeNotebook() {
+    const user = getCurrentUser();
+    if (!user || !user.email) return [];
+    const userEmail = normalizeEmail(user.email);
+    return mistakeNotebook
+        .filter(item => normalizeEmail(item.userEmail) === userEmail)
+        .sort((a, b) => {
+            const aMastered = Boolean(a.masteredAt);
+            const bMastered = Boolean(b.masteredAt);
+            if (aMastered !== bMastered) return aMastered ? 1 : -1;
+            const aDue = Date.parse(a.nextReviewAt || a.createdAt || 0);
+            const bDue = Date.parse(b.nextReviewAt || b.createdAt || 0);
+            return aDue - bDue;
+        });
+}
+
+function formatMistakeDueText(entry) {
+    if (!entry) return "No schedule";
+    if (entry.masteredAt) return "Mastered";
+    const dueTime = Date.parse(entry.nextReviewAt || "");
+    if (!Number.isFinite(dueTime)) return "Review soon";
+    const deltaMs = dueTime - Date.now();
+    const deltaDays = Math.ceil(deltaMs / (24 * 60 * 60 * 1000));
+    if (deltaDays <= 0) return "Due now";
+    if (deltaDays === 1) return "Due in 1 day";
+    return `Due in ${deltaDays} days`;
+}
+
+function getDueMistakeCountForCurrentUser() {
+    const now = Date.now();
+    return getCurrentUserMistakeNotebook()
+        .filter(item => !item.masteredAt)
+        .filter(item => Date.parse(item.nextReviewAt || "") <= now || !item.nextReviewAt)
+        .length;
+}
+
+function renderMistakeDueBadges() {
+    const dueCount = getDueMistakeCountForCurrentUser();
+    const badgeIds = ['sidebarMistakesDueBadge', 'dashboardMistakesDueBadge'];
+    badgeIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = String(dueCount);
+        el.classList.toggle('zero', dueCount === 0);
+        el.title = dueCount === 0
+            ? 'No mistakes due now'
+            : `${dueCount} mistake${dueCount === 1 ? '' : 's'} due now`;
+    });
+}
+
+function openDueMistakesFromBadge(event) {
+    if (event && typeof event.stopPropagation === "function") {
+        event.stopPropagation();
+    }
+    if (event && typeof event.preventDefault === "function") {
+        event.preventDefault();
+    }
+    mistakeNotebookFilter = "due";
+    navigateTo('student-quiz-weak');
+    renderMistakeNotebook();
+}
+
+function setMistakeNotebookFilter(value) {
+    const next = String(value || "due").trim().toLowerCase();
+    if (!["due", "all", "mastered"].includes(next)) {
+        mistakeNotebookFilter = "due";
+    } else {
+        mistakeNotebookFilter = next;
+    }
+    renderMistakeNotebook();
+}
+
+function renderMistakeNotebook() {
+    const list = document.getElementById('quizMistakeNotebookList');
+    const summary = document.getElementById('mistakeNotebookSummary');
+    const filterSelect = document.getElementById('mistakeNotebookFilter');
+    if (!list || !summary) return;
+    if (filterSelect) filterSelect.value = mistakeNotebookFilter;
+    renderMistakeDueBadges();
+
+    const items = getCurrentUserMistakeNotebook();
+    const now = Date.now();
+    const dueItems = items.filter(item => !item.masteredAt && (Date.parse(item.nextReviewAt || "") <= now || !item.nextReviewAt));
+    const masteredItems = items.filter(item => Boolean(item.masteredAt));
+    const activeItems = items.filter(item => !item.masteredAt);
+
+    let filteredItems = items;
+    if (mistakeNotebookFilter === "due") {
+        filteredItems = dueItems;
+    } else if (mistakeNotebookFilter === "mastered") {
+        filteredItems = masteredItems;
+    }
+
+    if (items.length === 0) {
+        summary.textContent = 'No mistakes captured yet.';
+        list.innerHTML = '<li class="empty-state">Wrong quiz answers will be saved here with retry reminders (2/7/14 days).</li>';
+        return;
+    }
+
+    summary.textContent = `${activeItems.length} active | ${dueItems.length} due now | ${masteredItems.length} mastered`;
+
+    if (filteredItems.length === 0) {
+        const emptyByFilter = mistakeNotebookFilter === "mastered"
+            ? 'No mastered mistakes yet.'
+            : mistakeNotebookFilter === "due"
+                ? 'No due mistakes right now.'
+                : 'No mistakes available.';
+        list.innerHTML = `<li class="empty-state">${emptyByFilter}</li>`;
+        return;
+    }
+
+    list.innerHTML = filteredItems.slice(0, 20).map(item => {
+        const stage = Number(item.reviewStage) || 0;
+        const stageText = item.masteredAt ? 'Completed' : `Stage ${Math.min(stage + 1, MISTAKE_RETRY_DAYS.length)}/${MISTAKE_RETRY_DAYS.length}`;
+        return `
+            <li>
+                <div class="assignment-header">
+                    <span class="assignment-title">${escapeHtml(item.subject)} | ${escapeHtml(String(item.difficulty || 'mixed'))}</span>
+                    <span class="assignment-type">${escapeHtml(formatMistakeDueText(item))}</span>
+                </div>
+                <p class="assignment-desc"><strong>Q:</strong> ${escapeHtml(item.question)}</p>
+                <p class="assignment-desc"><strong>Your answer:</strong> ${escapeHtml(item.selectedAnswer || 'Not answered')}</p>
+                <p class="assignment-desc"><strong>Correct answer:</strong> ${escapeHtml(item.correctAnswer || '-')}</p>
+                <p class="assignment-desc"><strong>Why wrong:</strong> ${escapeHtml(item.wrongReason || 'Review concept and retry')}</p>
+                <div class="assignment-meta">
+                    <span>${escapeHtml(stageText)} | Wrong ${Number(item.wrongCount) || 0}x</span>
+                    <span class="task-due">${item.nextReviewAt ? new Date(item.nextReviewAt).toLocaleDateString() : 'No due date'}</span>
+                </div>
+                <div class="task-options">
+                    <button class="action-btn" onclick="markMistakeReviewCorrect('${encodeURIComponent(item.id)}')">
+                        <i class="fas fa-check"></i> Reviewed Correctly
+                    </button>
+                    <button class="action-btn" onclick="markMistakeReviewWrong('${encodeURIComponent(item.id)}')">
+                        <i class="fas fa-rotate-left"></i> Still Wrong
+                    </button>
+                    <button class="clear-btn" onclick="deleteMistakeEntry('${encodeURIComponent(item.id)}')">
+                        <i class="fas fa-trash"></i> Remove
+                    </button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+function markMistakeReviewCorrect(encodedId) {
+    const id = decodeURIComponent(encodedId || "");
+    const updated = updateMistakeReviewById(id, true);
+    if (!updated) return;
+    mistakeNotebook = normalizeMistakeNotebook(mistakeNotebook);
+    saveState({ mistakeNotebook });
+    renderMistakeNotebook();
+    renderMistakeDueBadges();
+}
+
+function markMistakeReviewWrong(encodedId) {
+    const id = decodeURIComponent(encodedId || "");
+    const updated = updateMistakeReviewById(id, false);
+    if (!updated) return;
+    mistakeNotebook = normalizeMistakeNotebook(mistakeNotebook);
+    saveState({ mistakeNotebook });
+    renderMistakeNotebook();
+    renderMistakeDueBadges();
+}
+
+function deleteMistakeEntry(encodedId) {
+    const id = decodeURIComponent(encodedId || "");
+    const before = mistakeNotebook.length;
+    mistakeNotebook = mistakeNotebook.filter(item => item.id !== id);
+    if (mistakeNotebook.length === before) return;
+    saveState({ mistakeNotebook });
+    renderMistakeNotebook();
+    renderMistakeDueBadges();
+}
+
+function updateMistakeReviewById(id, isCorrect) {
+    const idx = mistakeNotebook.findIndex(item => item.id === id);
+    if (idx < 0) return false;
+
+    const entry = mistakeNotebook[idx];
+    const nowIso = new Date().toISOString();
+    if (isCorrect) {
+        const nextStage = (Number(entry.reviewStage) || 0) + 1;
+        if (nextStage >= MISTAKE_RETRY_DAYS.length) {
+            mistakeNotebook[idx] = {
+                ...entry,
+                reviewStage: MISTAKE_RETRY_DAYS.length - 1,
+                reviewCount: (Number(entry.reviewCount) || 0) + 1,
+                lastReviewedAt: nowIso,
+                masteredAt: nowIso,
+                nextReviewAt: ""
+            };
+            addActivity('brain', 'Mistake Mastered', `${entry.subject}: ${entry.question}`);
+            return true;
+        }
+        mistakeNotebook[idx] = {
+            ...entry,
+            reviewStage: nextStage,
+            reviewCount: (Number(entry.reviewCount) || 0) + 1,
+            lastReviewedAt: nowIso,
+            nextReviewAt: daysFromNow(MISTAKE_RETRY_DAYS[nextStage]),
+            masteredAt: ""
+        };
+        return true;
+    }
+
+    mistakeNotebook[idx] = {
+        ...entry,
+        reviewStage: 0,
+        wrongCount: (Number(entry.wrongCount) || 0) + 1,
+        lastWrongAt: nowIso,
+        masteredAt: "",
+        nextReviewAt: daysFromNow(MISTAKE_RETRY_DAYS[0])
+    };
+    return true;
+}
 
 function generateQuizSession() {
     const subject = document.getElementById('quizSubject')?.value || 'Any';
@@ -6297,9 +8530,16 @@ function generateQuizSession() {
         return;
     }
 
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    currentQuizSession = shuffled.slice(0, requestedCount);
+    currentQuizAdaptiveEnabled = isAdaptiveQuizEnabled();
+    if (currentQuizAdaptiveEnabled) {
+        currentQuizSession = pickAdaptiveQuizQuestions(pool, requestedCount);
+    } else {
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        currentQuizSession = shuffled.slice(0, requestedCount);
+    }
+    currentQuizMode = "standard";
     renderQuizQuestions();
+    updateQuizSessionModeLabel();
 }
 
 function renderQuizQuestions() {
@@ -6333,8 +8573,14 @@ async function submitQuiz() {
     let score = 0;
     currentQuizSession.forEach((q, idx) => {
         const selected = document.querySelector(`input[name="quiz-q-${idx}"]:checked`);
-        const isCorrect = Boolean(selected) && Number(selected.value) === q.answerIndex;
+        const selectedIndex = selected ? Number(selected.value) : NaN;
+        const isCorrect = Number.isFinite(selectedIndex) && selectedIndex === q.answerIndex;
         if (isCorrect) score++;
+        if (q && q.mistakeId) {
+            updateMistakeReviewById(q.mistakeId, isCorrect);
+        } else if (!isCorrect) {
+            logQuizMistake(q, selectedIndex);
+        }
         trackWeakTopicAttempt(q, isCorrect);
     });
     const percent = Math.round((score / currentQuizSession.length) * 100);
@@ -6350,9 +8596,11 @@ async function submitQuiz() {
         createdAt: new Date().toISOString()
     };
     quizScores.unshift(record);
-    saveState({ quizScores, weakTopicStats });
+    saveState({ quizScores, weakTopicStats, mistakeNotebook });
     document.getElementById('quizScoreResult').textContent = `${score}/${currentQuizSession.length} (${percent}%)`;
     addActivity('graduation-cap', 'Quiz Submitted', `Score ${percent}%`);
+    renderMistakeNotebook();
+    renderMistakeDueBadges();
     await syncQuizScoreWithServer(record);
 }
 
@@ -6490,14 +8738,272 @@ function renderPastPaperTrend() {
     });
 }
 
+function getExamCountdownFormValues() {
+    const examName = String(document.getElementById('countdownExamName')?.value || '').trim();
+    const subject = String(document.getElementById('countdownExamSubject')?.value || 'General').trim() || 'General';
+    const examDate = String(document.getElementById('countdownExamDate')?.value || '').trim();
+    const revisionWaves = Math.max(1, Math.min(6, Number(document.getElementById('countdownRevisionWaves')?.value || 3)));
+    const mockTests = Math.max(0, Math.min(6, Number(document.getElementById('countdownMockTests')?.value || 2)));
+    const bufferDays = Math.max(0, Math.min(7, Number(document.getElementById('countdownBufferDays')?.value || 2)));
+    return { examName, subject, examDate, revisionWaves, mockTests, bufferDays };
+}
+
+function buildExamCountdownPlan(values) {
+    const examName = String(values.examName || '').trim();
+    const subject = String(values.subject || 'General').trim() || 'General';
+    const examDateStr = String(values.examDate || '').trim();
+    const revisionWaves = Math.max(1, Math.min(6, Number(values.revisionWaves) || 3));
+    const mockTests = Math.max(0, Math.min(6, Number(values.mockTests) || 2));
+    const bufferDays = Math.max(0, Math.min(7, Number(values.bufferDays) || 2));
+
+    if (!examName || !examDateStr) {
+        return { error: 'Enter exam name and exam date first.' };
+    }
+
+    const examDate = new Date(examDateStr);
+    examDate.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysLeft = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
+    if (daysLeft < 2) {
+        return { error: 'Exam date must be at least 2 days in the future.' };
+    }
+
+    const availableDays = daysLeft - 1;
+    const effectiveBufferDays = Math.min(bufferDays, Math.max(0, availableDays - 1));
+    const nonBufferDays = Math.max(1, availableDays - effectiveBufferDays);
+    const effectiveMockTests = Math.min(mockTests, Math.max(0, nonBufferDays - 1));
+    const effectiveRevisionWaves = Math.min(revisionWaves, Math.max(1, nonBufferDays - effectiveMockTests));
+
+    const planItems = [];
+    const usedOffsets = new Set();
+    const toDate = (offsetBeforeExam) => {
+        const due = new Date(examDate);
+        due.setDate(examDate.getDate() - offsetBeforeExam);
+        return due.toISOString().split('T')[0];
+    };
+
+    const mockOffsets = [];
+    if (effectiveMockTests > 0) {
+        const rangeLen = Math.max(1, nonBufferDays);
+        for (let i = 0; i < effectiveMockTests; i++) {
+            const pos = Math.max(1, Math.round(((i + 1) * rangeLen) / (effectiveMockTests + 1)));
+            const offset = Math.max(effectiveBufferDays + 1, Math.min(availableDays, effectiveBufferDays + pos));
+            if (usedOffsets.has(offset)) continue;
+            usedOffsets.add(offset);
+            mockOffsets.push(offset);
+        }
+    }
+
+    const revisionCandidateOffsets = [];
+    for (let offset = effectiveBufferDays + 1; offset <= availableDays; offset++) {
+        if (!usedOffsets.has(offset)) revisionCandidateOffsets.push(offset);
+    }
+    const selectedRevisionOffsets = [];
+    for (let i = 0; i < effectiveRevisionWaves; i++) {
+        if (revisionCandidateOffsets.length === 0) break;
+        const idx = Math.max(0, Math.min(revisionCandidateOffsets.length - 1, Math.floor(((i + 1) * revisionCandidateOffsets.length) / (effectiveRevisionWaves + 1))));
+        const offset = revisionCandidateOffsets.splice(idx, 1)[0];
+        selectedRevisionOffsets.push(offset);
+    }
+
+    selectedRevisionOffsets.forEach((offset, idx) => {
+        const waveNumber = idx + 1;
+        planItems.push({
+            kind: 'revision',
+            text: `${examName} - Revision Wave ${waveNumber}`,
+            dueDate: toDate(offset),
+            subject,
+            priority: waveNumber >= Math.ceil(effectiveRevisionWaves * 0.67) ? 'high' : 'medium',
+            difficulty: waveNumber >= Math.ceil(effectiveRevisionWaves * 0.67) ? 'hard' : 'medium',
+            estimatedHours: waveNumber >= Math.ceil(effectiveRevisionWaves * 0.67) ? 2 : 1.5,
+            examWeight: 4
+        });
+    });
+
+    mockOffsets.forEach((offset, idx) => {
+        const mockNumber = idx + 1;
+        planItems.push({
+            kind: 'mock',
+            text: `${examName} - Mock Test ${mockNumber}`,
+            dueDate: toDate(offset),
+            subject,
+            priority: 'high',
+            difficulty: 'hard',
+            estimatedHours: 2,
+            examWeight: 5
+        });
+    });
+
+    for (let offset = effectiveBufferDays; offset >= 1; offset--) {
+        const dayNumber = effectiveBufferDays - offset + 1;
+        planItems.push({
+            kind: 'buffer',
+            text: `${examName} - Buffer Day ${dayNumber} (Final Revision + Error Log)`,
+            dueDate: toDate(offset),
+            subject,
+            priority: 'high',
+            difficulty: 'medium',
+            estimatedHours: 1,
+            examWeight: 5
+        });
+    }
+
+    planItems.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    return {
+        examName,
+        subject,
+        examDate: examDate.toISOString().split('T')[0],
+        daysLeft,
+        revisionWaves: effectiveRevisionWaves,
+        mockTests: mockOffsets.length,
+        bufferDays: effectiveBufferDays,
+        items: planItems
+    };
+}
+
+function renderExamCountdownPlanPreview(plan) {
+    const summary = document.getElementById('countdownEngineSummary');
+    const list = document.getElementById('countdownEnginePlanList');
+    if (!summary || !list) return;
+
+    if (!plan || !Array.isArray(plan.items) || plan.items.length === 0) {
+        summary.textContent = 'No countdown plan generated yet.';
+        list.innerHTML = '<li class="empty-state">No countdown plan generated yet.</li>';
+        return;
+    }
+
+    summary.textContent = `${plan.examName}: ${plan.daysLeft} day(s) left | ${plan.revisionWaves} revision wave(s) | ${plan.mockTests} mock test(s) | ${plan.bufferDays} buffer day(s)`;
+    list.innerHTML = plan.items.map(item => `
+        <li>
+            <strong>${item.text}</strong>
+            <span>${item.subject} | ${item.dueDate} | ${item.kind}</span>
+        </li>
+    `).join('');
+}
+
+function previewExamCountdownPlan() {
+    const plan = buildExamCountdownPlan(getExamCountdownFormValues());
+    if (plan.error) {
+        alert(plan.error);
+        pendingExamCountdownPlan = null;
+        renderExamCountdownPlanPreview(null);
+        return;
+    }
+    pendingExamCountdownPlan = plan;
+    renderExamCountdownPlanPreview(plan);
+}
+
+function createExamCountdownPlanTasks() {
+    if (!pendingExamCountdownPlan) {
+        previewExamCountdownPlan();
+        if (!pendingExamCountdownPlan) return;
+    }
+
+    const plan = pendingExamCountdownPlan;
+    let createdCount = 0;
+    plan.items.forEach(item => {
+        const exists = tasks.some(task => String(task.text || '').trim() === item.text && String(task.dueDate || '') === item.dueDate);
+        if (exists) return;
+        tasks.push(normalizeTask({
+            text: item.text,
+            subject: item.subject,
+            priority: item.priority,
+            difficulty: item.difficulty,
+            estimatedHours: item.estimatedHours,
+            examWeight: item.examWeight,
+            dueDate: item.dueDate,
+            done: false,
+            createdAt: new Date().toISOString()
+        }));
+        createdCount++;
+    });
+
+    const examExists = exams.some(exam =>
+        String(exam && exam.name || '').trim() === plan.examName &&
+        String(exam && exam.date || '').trim() === plan.examDate
+    );
+    if (!examExists) {
+        exams.push({
+            name: plan.examName,
+            subject: plan.subject,
+            date: plan.examDate,
+            notes: `Countdown Engine: ${plan.revisionWaves} waves, ${plan.mockTests} mocks, ${plan.bufferDays} buffers`
+        });
+    }
+
+    saveTasks();
+    saveState({ exams });
+    renderTasks();
+    renderDashboard();
+    renderCalendar();
+    renderQuizPage();
+    addActivity('hourglass-half', 'Exam Countdown Plan Created', `${plan.examName}: ${createdCount} task(s)`);
+    alert(`${createdCount} task(s) created for ${plan.examName}.`);
+}
+
+function removeExamCountdownTasksForExam(examName) {
+    const normalizedExamName = String(examName || '').trim();
+    if (!normalizedExamName) return 0;
+
+    const before = tasks.length;
+    tasks = tasks.filter(task => {
+        const text = String(task && task.text || '').trim();
+        if (!text.startsWith(`${normalizedExamName} - `)) return true;
+        if (text.includes(' - Revision Wave ')) return false;
+        if (text.includes(' - Mock Test ')) return false;
+        if (text.includes(' - Buffer Day ')) return false;
+        return true;
+    });
+
+    const removed = before - tasks.length;
+    if (removed > 0) {
+        saveTasks();
+    }
+    return removed;
+}
+
+function regenerateExamCountdownPlan() {
+    const values = getExamCountdownFormValues();
+    if (!values.examName || !values.examDate) {
+        alert('Enter exam name and exam date first.');
+        return;
+    }
+
+    const freshPlan = buildExamCountdownPlan(values);
+    if (freshPlan.error) {
+        alert(freshPlan.error);
+        return;
+    }
+    pendingExamCountdownPlan = freshPlan;
+
+    const removed = removeExamCountdownTasksForExam(freshPlan.examName);
+    createExamCountdownPlanTasks();
+    addActivity('arrows-rotate', 'Exam Countdown Plan Regenerated', `${freshPlan.examName}: removed ${removed}, rebuilt`);
+}
+
 function renderQuizPage() {
     renderQuizQuestions();
+    updateQuizSessionModeLabel();
+    const countdownDateInput = document.getElementById('countdownExamDate');
+    if (countdownDateInput && !countdownDateInput.value) {
+        const nextMonth = new Date();
+        nextMonth.setDate(nextMonth.getDate() + 30);
+        countdownDateInput.value = nextMonth.toISOString().split('T')[0];
+    }
     if (!pastPaperTimerRunning) {
         resetPastPaperPracticeTimer();
     } else {
         updatePastPaperTimerDisplay();
     }
     renderPastPaperTrend();
+    renderMistakeNotebook();
+    renderMistakeDueBadges();
+    if (pendingExamCountdownPlan) {
+        renderExamCountdownPlanPreview(pendingExamCountdownPlan);
+    } else {
+        renderExamCountdownPlanPreview(null);
+    }
     const history = document.getElementById('quizHistoryList');
     if (!history) return;
     const currentUser = getCurrentUser();
@@ -7004,6 +9510,212 @@ function createTasksFromGoalRoadmap() {
     alert(`${created} roadmap task(s) created.`);
 }
 
+const CAREER_PATH_LIBRARY = {
+    Math: [
+        {
+            name: "Data Scientist",
+            roadmap: [
+                "Master algebra, statistics, and probability.",
+                "Practice Python + data analysis projects weekly.",
+                "Learn machine learning basics and model evaluation.",
+                "Build 3 portfolio projects and prepare interviews."
+            ]
+        },
+        {
+            name: "Mechanical/Software Engineer",
+            roadmap: [
+                "Strengthen core math problem solving.",
+                "Practice numerical reasoning and coding basics.",
+                "Study entrance-level physics integration.",
+                "Take timed mocks and track weak chapters."
+            ]
+        }
+    ],
+    Science: [
+        {
+            name: "Doctor (MBBS Path)",
+            roadmap: [
+                "Build NCERT mastery in Biology and Chemistry.",
+                "Practice concept-to-application MCQs daily.",
+                "Use spaced revision for high-yield chapters.",
+                "Take full-length mocks and fix error log weekly."
+            ]
+        },
+        {
+            name: "Biotech / Research Scientist",
+            roadmap: [
+                "Strengthen Biology fundamentals and lab concepts.",
+                "Learn scientific reading and note-making.",
+                "Practice data interpretation and experiment design.",
+                "Join projects/olympiad-style science practice."
+            ]
+        }
+    ],
+    English: [
+        {
+            name: "Law / Civil Services (Language Edge)",
+            roadmap: [
+                "Improve grammar precision and comprehension speed.",
+                "Practice analytical writing 3 times per week.",
+                "Build current-affairs vocabulary notebook.",
+                "Take timed reading + essay drills."
+            ]
+        },
+        {
+            name: "Journalism / Content Strategy",
+            roadmap: [
+                "Train summary writing and headline framing.",
+                "Practice research-backed article writing.",
+                "Develop editing and clarity skills.",
+                "Publish small portfolio pieces consistently."
+            ]
+        }
+    ],
+    History: [
+        {
+            name: "Civil Services / Policy Studies",
+            roadmap: [
+                "Create timeline-first chapter notes.",
+                "Practice cause-effect answer structure.",
+                "Revise maps/events with weekly tests.",
+                "Write short and long answers under time limit."
+            ]
+        }
+    ],
+    Geography: [
+        {
+            name: "GIS Analyst / Urban Planner",
+            roadmap: [
+                "Strengthen map-work and physical geography basics.",
+                "Practice data tables, climate and resource analysis.",
+                "Learn GIS fundamentals from beginner resources.",
+                "Build mini location-analysis projects."
+            ]
+        }
+    ],
+    Programming: [
+        {
+            name: "Software Engineer",
+            roadmap: [
+                "Master variables, loops, functions, and debugging.",
+                "Solve coding problems by topic each week.",
+                "Build 2-3 small apps with clean code.",
+                "Prepare DSA basics and interview-style questions."
+            ]
+        },
+        {
+            name: "AI/ML Engineer",
+            roadmap: [
+                "Strengthen Python + math for ML.",
+                "Learn data preprocessing and model basics.",
+                "Train on small datasets and evaluate results.",
+                "Create a practical ML mini-project portfolio."
+            ]
+        }
+    ],
+    General: [
+        {
+            name: "Multi-Skill Academic Path",
+            roadmap: [
+                "Stabilize core subjects with daily study rhythm.",
+                "Identify top 2 strengths and 1 weak area.",
+                "Use weekly quizzes and chapter checklists.",
+                "Choose specialization after 6-8 weeks of data."
+            ]
+        }
+    ]
+};
+
+function getSubjectChapterCompletion(subjectName) {
+    const related = chapterTracker.filter(item => subjectMatches(item.subject || "", subjectName));
+    if (related.length === 0) return null;
+    const done = related.filter(item => item.status === "done").length;
+    return Math.round((done / related.length) * 100);
+}
+
+function getSubjectStrengthRanking(limit = 3) {
+    const candidateSubjects = getKnownGoalSubjects()
+        .map(name => String(name || "").trim())
+        .filter(name => name && name.toLowerCase() !== "general");
+    const unique = [...new Set(candidateSubjects)];
+
+    const scored = unique.map(subjectName => {
+        const quiz = getSubjectQuizBaseline(subjectName);
+        const task = getSubjectTaskStats(subjectName).completionPercent;
+        const focus = getSubjectFocusHours(subjectName, 14);
+        const focusScore = focus > 0 ? Math.min(100, Math.round((focus / 8) * 100)) : null;
+        const chapter = getSubjectChapterCompletion(subjectName);
+
+        const weighted = [];
+        if (Number.isFinite(quiz)) weighted.push({ value: quiz, weight: 0.45 });
+        if (Number.isFinite(chapter)) weighted.push({ value: chapter, weight: 0.25 });
+        if (Number.isFinite(task)) weighted.push({ value: task, weight: 0.15 });
+        if (Number.isFinite(focusScore)) weighted.push({ value: focusScore, weight: 0.15 });
+        const score = weighted.length > 0
+            ? Math.round(weighted.reduce((sum, item) => sum + (item.value * item.weight), 0) / weighted.reduce((sum, item) => sum + item.weight, 0))
+            : 40;
+
+        return { subject: subjectName, score };
+    }).sort((a, b) => b.score - a.score);
+
+    return scored.slice(0, Math.max(1, limit));
+}
+
+function getCareerSuggestionsFromStrength(strengthList) {
+    const picks = [];
+    strengthList.forEach(item => {
+        const subject = item.subject || "General";
+        const options = CAREER_PATH_LIBRARY[subject] || CAREER_PATH_LIBRARY.General;
+        if (!Array.isArray(options) || options.length === 0) return;
+        const selection = options[0];
+        picks.push({
+            subject,
+            strengthScore: item.score,
+            career: selection.name,
+            roadmap: selection.roadmap
+        });
+    });
+    if (picks.length === 0) {
+        const fallback = CAREER_PATH_LIBRARY.General[0];
+        picks.push({
+            subject: "General",
+            strengthScore: 40,
+            career: fallback.name,
+            roadmap: fallback.roadmap
+        });
+    }
+    return picks.slice(0, 3);
+}
+
+function renderCareerPathTeaser(suggestions = null) {
+    const summaryEl = document.getElementById('careerTeaserSummary');
+    const listEl = document.getElementById('careerTeaserList');
+    if (!summaryEl || !listEl) return;
+
+    const strength = getSubjectStrengthRanking(3);
+    const picks = Array.isArray(suggestions) ? suggestions : getCareerSuggestionsFromStrength(strength);
+    if (!Array.isArray(picks) || picks.length === 0) {
+        summaryEl.textContent = 'Add quiz/chapter/focus data to unlock career teaser.';
+        listEl.innerHTML = '<li class="empty-state">Generate to see career matches.</li>';
+        return;
+    }
+
+    const strengthText = strength.map(item => `${item.subject} (${item.score})`).join(", ");
+    summaryEl.textContent = `Top strengths: ${strengthText}. Suggested careers with roadmap below.`;
+    listEl.innerHTML = picks.map(item => `
+        <li>
+            <strong>${escapeHtml(item.career)} (from ${escapeHtml(item.subject)} strength ${item.strengthScore})</strong>
+            <span>Roadmap: ${(item.roadmap || []).map(step => escapeHtml(step)).join(" -> ")}</span>
+        </li>
+    `).join('');
+}
+
+function generateCareerPathTeaser() {
+    const suggestions = getCareerSuggestionsFromStrength(getSubjectStrengthRanking(3));
+    renderCareerPathTeaser(suggestions);
+    addActivity('briefcase', 'Career Teaser Generated', `${suggestions.length} career path(s) suggested`);
+}
+
 function renderChapterTracker() {
     const list = document.getElementById('chapterTrackerList');
     const progressList = document.getElementById('chapterTrackerProgressList');
@@ -7015,6 +9727,7 @@ function renderChapterTracker() {
     if (incompleteCheck) incompleteCheck.checked = Boolean(chapterIncompleteOnly);
 
     renderChapterFilterSubjects();
+    renderConceptDependencyControls();
 
     if (!Array.isArray(chapterTracker) || chapterTracker.length === 0) {
         if (completionText) completionText.textContent = 'Completion: 0% (0/0 chapters)';
@@ -7022,6 +9735,7 @@ function renderChapterTracker() {
             progressList.innerHTML = '<li class="empty-state">Subject progress will appear after adding chapters.</li>';
         }
         list.innerHTML = '<li class="empty-state">No chapters added yet</li>';
+        renderConceptDependencyMap();
         return;
     }
 
@@ -7095,6 +9809,7 @@ function renderChapterTracker() {
         <li>
             <strong>${item.subject}: ${item.chapter}</strong>
             <span>${statusLabel[item.status] || 'Not Started'} | Test score: ${Number.isFinite(item.testScore) ? `${item.testScore}%` : 'N/A'}</span>
+            <span>Prerequisites: ${Array.isArray(item.prerequisites) && item.prerequisites.length > 0 ? item.prerequisites.length : 0}</span>
             <div class="task-options">
                 <label>
                     <input type="checkbox" ${item.status === 'done' ? 'checked' : ''} onchange="toggleChapterChecklistDone('${item.id}', this.checked)">
@@ -7110,6 +9825,7 @@ function renderChapterTracker() {
             </div>
         </li>
     `).join('');
+    renderConceptDependencyMap();
 }
 
 function toggleChapterChecklistDone(id, checked) {
@@ -7133,6 +9849,274 @@ function renderChapterFilterSubjects() {
     select.innerHTML = ['<option value="all">All Subjects</option>', ...options.map(name => `<option value="${name}">${name}</option>`)].join('');
     select.value = options.includes(chapterFilterSubject) ? chapterFilterSubject : 'all';
     chapterFilterSubject = select.value;
+}
+
+function renderConceptDependencyControls() {
+    const subjectSelect = document.getElementById('conceptDependencySubjectFilter');
+    const chapterSelect = document.getElementById('dependencyChapterSelect');
+    const prereqSelect = document.getElementById('dependencyPrereqSelect');
+    const subjects = getChapterFilterSubjects();
+
+    if (subjectSelect) {
+        subjectSelect.innerHTML = ['<option value="all">All Subjects</option>', ...subjects.map(name => `<option value="${name}">${name}</option>`)].join('');
+        subjectSelect.value = subjects.includes(conceptDependencySubjectFilter) ? conceptDependencySubjectFilter : 'all';
+        conceptDependencySubjectFilter = subjectSelect.value;
+    }
+
+    const filtered = chapterTracker.filter(item =>
+        conceptDependencySubjectFilter === 'all' || subjectMatches(item.subject || '', conceptDependencySubjectFilter)
+    );
+    const toOption = (item) => `<option value="${escapeHtmlAttribute(item.id)}">${escapeHtml(item.subject)}: ${escapeHtml(item.chapter)}</option>`;
+    const options = filtered.map(toOption).join('');
+    const currentChapterValue = chapterSelect ? chapterSelect.value : '';
+    const currentPrereqValue = prereqSelect ? prereqSelect.value : '';
+
+    if (chapterSelect) {
+        chapterSelect.innerHTML = `<option value="">Chapter to learn</option>${options}`;
+        if (filtered.some(item => item.id === currentChapterValue)) chapterSelect.value = currentChapterValue;
+    }
+    if (prereqSelect) {
+        prereqSelect.innerHTML = `<option value="">Prerequisite chapter</option>${options}`;
+        if (filtered.some(item => item.id === currentPrereqValue)) prereqSelect.value = currentPrereqValue;
+    }
+}
+
+function setConceptDependencySubjectFilter(value) {
+    conceptDependencySubjectFilter = String(value || 'all');
+    renderConceptDependencyControls();
+    renderConceptDependencyMap();
+}
+
+function addChapterDependency() {
+    const chapterSelect = document.getElementById('dependencyChapterSelect');
+    const prereqSelect = document.getElementById('dependencyPrereqSelect');
+    const chapterId = String(chapterSelect && chapterSelect.value ? chapterSelect.value : '').trim();
+    const prereqId = String(prereqSelect && prereqSelect.value ? prereqSelect.value : '').trim();
+
+    if (!chapterId || !prereqId) {
+        alert('Select both chapter and prerequisite.');
+        return;
+    }
+    if (chapterId === prereqId) {
+        alert('A chapter cannot depend on itself.');
+        return;
+    }
+
+    const chapterIdx = chapterTracker.findIndex(item => item.id === chapterId);
+    const prereq = chapterTracker.find(item => item.id === prereqId);
+    if (chapterIdx < 0 || !prereq) {
+        alert('Selected chapters not found.');
+        return;
+    }
+
+    const current = Array.isArray(chapterTracker[chapterIdx].prerequisites) ? chapterTracker[chapterIdx].prerequisites : [];
+    if (current.includes(prereqId)) {
+        alert('This prerequisite link already exists.');
+        return;
+    }
+
+    chapterTracker[chapterIdx].prerequisites = [...current, prereqId];
+    saveState({ chapterTracker });
+    renderChapterTracker();
+    renderConceptDependencyMap();
+}
+
+function removeChapterDependency(chapterId, prereqId) {
+    const idx = chapterTracker.findIndex(item => item.id === chapterId);
+    if (idx < 0) return;
+    const current = Array.isArray(chapterTracker[idx].prerequisites) ? chapterTracker[idx].prerequisites : [];
+    chapterTracker[idx].prerequisites = current.filter(id => id !== prereqId);
+    saveState({ chapterTracker });
+    renderChapterTracker();
+    renderConceptDependencyMap();
+}
+
+function getChapterComplexityScore(chapterName) {
+    const name = String(chapterName || "").toLowerCase();
+    if (!name) return 2;
+    const basicKeywords = ["intro", "introduction", "basic", "basics", "foundation", "fundamentals", "concept", "overview"];
+    const advancedKeywords = ["advanced", "application", "applied", "mixed", "revision", "mock", "test", "challenge"];
+    if (basicKeywords.some(word => name.includes(word))) return 0;
+    if (advancedKeywords.some(word => name.includes(word))) return 3;
+    return 2;
+}
+
+function getChapterSequenceNumber(chapterName) {
+    const text = String(chapterName || "").trim();
+    if (!text) return Number.POSITIVE_INFINITY;
+    const patterns = [
+        /(chapter|unit|lesson)\s*(\d{1,2})/i,
+        /^(\d{1,2})[\s)\].:-]/i
+    ];
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && Number.isFinite(Number(match[2] || match[1]))) {
+            return Number(match[2] || match[1]);
+        }
+    }
+    return Number.POSITIVE_INFINITY;
+}
+
+function autoSuggestChapterDependencies() {
+    if (!Array.isArray(chapterTracker) || chapterTracker.length < 2) {
+        alert('Add at least 2 chapters to auto-suggest prerequisites.');
+        return;
+    }
+
+    const filtered = chapterTracker.filter(item =>
+        conceptDependencySubjectFilter === 'all' || subjectMatches(item.subject || '', conceptDependencySubjectFilter)
+    );
+    if (filtered.length < 2) {
+        alert('Need at least 2 chapters in this filter to suggest dependencies.');
+        return;
+    }
+
+    const bySubject = new Map();
+    filtered.forEach(item => {
+        const key = String(item.subject || "General").trim() || "General";
+        const list = bySubject.get(key) || [];
+        list.push(item);
+        bySubject.set(key, list);
+    });
+
+    let added = 0;
+    bySubject.forEach((items) => {
+        const ordered = [...items].sort((a, b) => {
+            const numA = getChapterSequenceNumber(a.chapter);
+            const numB = getChapterSequenceNumber(b.chapter);
+            if (numA !== numB) return numA - numB;
+            const levelA = getChapterComplexityScore(a.chapter);
+            const levelB = getChapterComplexityScore(b.chapter);
+            if (levelA !== levelB) return levelA - levelB;
+            const timeA = new Date(a.createdAt || 0).getTime();
+            const timeB = new Date(b.createdAt || 0).getTime();
+            return timeA - timeB;
+        });
+
+        for (let i = 1; i < ordered.length; i++) {
+            const previous = ordered[i - 1];
+            const current = ordered[i];
+            const idx = chapterTracker.findIndex(item => item.id === current.id);
+            if (idx < 0) continue;
+
+            const currentPrereqs = Array.isArray(chapterTracker[idx].prerequisites) ? chapterTracker[idx].prerequisites : [];
+            if (currentPrereqs.length > 0) continue;
+            if (previous.id === current.id) continue;
+
+            chapterTracker[idx].prerequisites = [...new Set([...currentPrereqs, previous.id])];
+            added += 1;
+        }
+    });
+
+    if (added === 0) {
+        alert('No new prerequisite links suggested. Existing links already cover current order.');
+        return;
+    }
+
+    saveState({ chapterTracker });
+    renderChapterTracker();
+    renderConceptDependencyMap();
+    addActivity('diagram-project', 'Dependencies Auto-Suggested', `${added} prerequisite link(s) added`);
+    alert(`Added ${added} prerequisite link(s).`);
+}
+
+function getConceptDependencyNodes() {
+    const base = chapterTracker.filter(item =>
+        conceptDependencySubjectFilter === 'all' || subjectMatches(item.subject || '', conceptDependencySubjectFilter)
+    );
+    const idSet = new Set(base.map(item => item.id));
+    return base.map(item => ({
+        ...item,
+        prerequisites: (Array.isArray(item.prerequisites) ? item.prerequisites : []).filter(id => idSet.has(id))
+    }));
+}
+
+function getConceptDependencyOrder(nodes) {
+    const inDegree = new Map();
+    const dependents = new Map();
+    nodes.forEach(node => {
+        inDegree.set(node.id, 0);
+        dependents.set(node.id, []);
+    });
+
+    nodes.forEach(node => {
+        node.prerequisites.forEach(prereqId => {
+            inDegree.set(node.id, (inDegree.get(node.id) || 0) + 1);
+            const list = dependents.get(prereqId) || [];
+            list.push(node.id);
+            dependents.set(prereqId, list);
+        });
+    });
+
+    const queue = nodes
+        .filter(node => (inDegree.get(node.id) || 0) === 0)
+        .sort((a, b) => String(a.subject || '').localeCompare(String(b.subject || '')) || String(a.chapter || '').localeCompare(String(b.chapter || '')))
+        .map(node => node.id);
+
+    const ordered = [];
+    while (queue.length > 0) {
+        const id = queue.shift();
+        ordered.push(id);
+        const next = dependents.get(id) || [];
+        next.forEach(depId => {
+            const deg = (inDegree.get(depId) || 0) - 1;
+            inDegree.set(depId, deg);
+            if (deg === 0) queue.push(depId);
+        });
+    }
+
+    const hasCycle = ordered.length !== nodes.length;
+    if (hasCycle) {
+        nodes
+            .filter(node => !ordered.includes(node.id))
+            .forEach(node => ordered.push(node.id));
+    }
+    return { ordered, hasCycle };
+}
+
+function renderConceptDependencyMap() {
+    const list = document.getElementById('conceptDependencyMapList');
+    const summary = document.getElementById('conceptDependencySummary');
+    if (!list || !summary) return;
+
+    const nodes = getConceptDependencyNodes();
+    if (nodes.length === 0) {
+        summary.textContent = 'Add chapters first, then connect prerequisites.';
+        list.innerHTML = '<li class="empty-state">No dependency map yet.</li>';
+        return;
+    }
+
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const order = getConceptDependencyOrder(nodes);
+    const completedIds = new Set(nodes.filter(node => node.status === 'done').map(node => node.id));
+    const withPrereq = nodes.filter(node => node.prerequisites.length > 0).length;
+    summary.textContent = `${nodes.length} chapter(s) | ${withPrereq} with prerequisites${order.hasCycle ? ' | Warning: cycle detected' : ''}`;
+
+    list.innerHTML = order.ordered.map((id, index) => {
+        const node = byId.get(id);
+        if (!node) return '';
+        const missing = node.prerequisites.filter(prereqId => !completedIds.has(prereqId));
+        const prereqItems = node.prerequisites.map(prereqId => {
+            const prereq = byId.get(prereqId);
+            if (!prereq) return '';
+            return `
+                <span class="task-subject">
+                    ${escapeHtml(prereq.chapter)}
+                    <button class="delete-btn" onclick="removeChapterDependency('${node.id}', '${prereqId}')"><i class="fas fa-xmark"></i></button>
+                </span>
+            `;
+        }).join('');
+        const readiness = missing.length === 0 ? 'Ready now' : `Learn ${missing.length} prerequisite(s) first`;
+        return `
+            <li>
+                <strong>Step ${index + 1}: ${escapeHtml(node.subject)} - ${escapeHtml(node.chapter)}</strong>
+                <span>${readiness} | Status: ${escapeHtml(String(node.status || 'not-started'))}</span>
+                <div class="task-options">
+                    ${prereqItems || '<span class="task-subject">No prerequisites</span>'}
+                </div>
+            </li>
+        `;
+    }).join('');
 }
 
 function setChapterSearchQuery(value) {
@@ -7172,6 +10156,7 @@ function addChapterTrackerEntry() {
         chapter,
         status: ['not-started', 'in-progress', 'done'].includes(status) ? status : 'not-started',
         testScore: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
+        prerequisites: [],
         createdAt: new Date().toISOString()
     });
     saveState({ chapterTracker });
@@ -7198,7 +10183,12 @@ function updateChapterScore(id, scoreValue) {
 }
 
 function deleteChapterTrackerEntry(id) {
-    chapterTracker = chapterTracker.filter(item => item.id !== id);
+    chapterTracker = chapterTracker
+        .filter(item => item.id !== id)
+        .map(item => ({
+            ...item,
+            prerequisites: (Array.isArray(item.prerequisites) ? item.prerequisites : []).filter(prereqId => prereqId !== id)
+        }));
     saveState({ chapterTracker });
     renderChapterTracker();
 }
@@ -7545,6 +10535,137 @@ function renderDoubtTracker() {
     `).join('');
 }
 
+function getDoubtEscalationQueue(limit = 10, now = new Date()) {
+    const unresolved = (doubtTracker || []).filter(item => item && item.status !== 'resolved');
+    if (unresolved.length === 0) return [];
+
+    const frequencyMap = new Map();
+    unresolved.forEach(item => {
+        const subject = String(item.subject || 'General').trim().toLowerCase();
+        const chapter = String(item.chapter || 'General').trim().toLowerCase();
+        const key = `${subject}||${chapter}`;
+        frequencyMap.set(key, (frequencyMap.get(key) || 0) + 1);
+    });
+
+    const scored = unresolved.map(item => {
+        const createdAt = new Date(item.createdAt || 0);
+        const ageDays = Math.max(1, Math.ceil((now - createdAt) / (1000 * 60 * 60 * 24)));
+        const ageScore = Math.min(40, ageDays * 4);
+
+        const subject = String(item.subject || 'General').trim();
+        const chapter = String(item.chapter || 'General').trim();
+        const freqKey = `${subject.toLowerCase()}||${chapter.toLowerCase()}`;
+        const frequency = frequencyMap.get(freqKey) || 1;
+        const frequencyScore = Math.min(25, Math.max(0, frequency - 1) * 8);
+
+        const matchingExamDays = (exams || [])
+            .filter(exam => exam && exam.date && subjectMatches(subject, exam.subject))
+            .map(exam => daysUntil(exam.date, now))
+            .filter(days => Number.isFinite(days) && days >= 0);
+        const closestExamDays = matchingExamDays.length > 0 ? Math.min(...matchingExamDays) : null;
+        let examScore = 0;
+        if (closestExamDays !== null) {
+            if (closestExamDays <= 1) examScore = 35;
+            else if (closestExamDays <= 3) examScore = 30;
+            else if (closestExamDays <= 7) examScore = 24;
+            else if (closestExamDays <= 14) examScore = 16;
+            else if (closestExamDays <= 30) examScore = 8;
+        }
+
+        return {
+            ...item,
+            ageDays,
+            frequency,
+            closestExamDays,
+            ageScore,
+            examScore,
+            frequencyScore,
+            escalationScore: Math.round(ageScore + examScore + frequencyScore)
+        };
+    });
+
+    return scored
+        .sort((a, b) => {
+            if (b.escalationScore !== a.escalationScore) return b.escalationScore - a.escalationScore;
+            return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+        })
+        .slice(0, Math.max(1, limit));
+}
+
+function addEscalatedDoubtTask(id) {
+    const queueItem = getDoubtEscalationQueue(100).find(item => item.id === id);
+    if (!queueItem) return;
+
+    const title = `Resolve doubt: ${queueItem.subject} - ${queueItem.chapter}`;
+    const alreadyExists = tasks.some(task =>
+        String(task.text || '').trim() === title &&
+        String(task.subject || '').trim().toLowerCase() === String(queueItem.subject || '').trim().toLowerCase() &&
+        !task.done
+    );
+    if (alreadyExists) {
+        alert('A priority task for this doubt already exists.');
+        return;
+    }
+
+    const due = new Date();
+    const nearestExam = Number.isFinite(queueItem.closestExamDays) ? queueItem.closestExamDays : null;
+    due.setDate(due.getDate() + (nearestExam !== null && nearestExam <= 3 ? 0 : 1));
+
+    tasks.push(normalizeTask({
+        text: title,
+        subject: queueItem.subject || 'General',
+        priority: 'high',
+        difficulty: 'hard',
+        examWeight: nearestExam !== null ? 5 : 4,
+        estimatedHours: 1,
+        dueDate: due.toISOString().split('T')[0],
+        done: false,
+        createdAt: new Date().toISOString()
+    }));
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    addActivity('triangle-exclamation', 'Escalated Doubt Task Added', title);
+}
+
+function renderDoubtEscalationQueue() {
+    const summary = document.getElementById('doubtEscalationSummary');
+    const list = document.getElementById('doubtEscalationList');
+    if (!summary || !list) return;
+
+    const unresolvedCount = (doubtTracker || []).filter(item => item && item.status !== 'resolved').length;
+    const queue = getDoubtEscalationQueue(10);
+    if (queue.length === 0) {
+        summary.textContent = unresolvedCount === 0
+            ? 'No unresolved doubts in queue.'
+            : 'No escalated items available right now.';
+        list.innerHTML = '<li class="empty-state">Doubts will be auto-prioritized by age, exam relevance, and frequency.</li>';
+        return;
+    }
+
+    const topScore = queue[0].escalationScore;
+    summary.textContent = `${unresolvedCount} unresolved doubts | Top escalation score: ${topScore}`;
+    list.innerHTML = queue.map(item => `
+        <li>
+            <strong>${item.subject} | ${item.chapter}</strong>
+            <span>${item.text}</span>
+            <div class="assignment-meta">
+                <span>Score ${item.escalationScore} = Age ${item.ageScore} + Exam ${item.examScore} + Frequency ${item.frequencyScore}</span>
+                <span class="task-due">${item.closestExamDays === null ? 'No upcoming exam' : `${item.closestExamDays} day(s) to exam`}</span>
+            </div>
+            <div class="task-options">
+                <button class="action-btn" onclick="addEscalatedDoubtTask('${item.id}')">
+                    <i class="fas fa-list-check"></i> Add Priority Task
+                </button>
+                <button class="action-btn" onclick="toggleDoubtResolved('${item.id}')">
+                    <i class="fas fa-check"></i> Mark Resolved
+                </button>
+            </div>
+        </li>
+    `).join('');
+}
+
 function addDoubtTrackerEntry() {
     const subjectInput = document.getElementById('doubtSubjectInput');
     const chapterInput = document.getElementById('doubtChapterInput');
@@ -7569,6 +10690,7 @@ function addDoubtTrackerEntry() {
     });
     saveState({ doubtTracker });
     renderDoubtTracker();
+    renderDoubtEscalationQueue();
     addActivity('circle-question', 'Doubt Added', `${subject} | ${chapter}`);
     if (textInput) textInput.value = '';
 }
@@ -7585,12 +10707,14 @@ function toggleDoubtResolved(id) {
     };
     saveState({ doubtTracker });
     renderDoubtTracker();
+    renderDoubtEscalationQueue();
 }
 
 function deleteDoubtTrackerEntry(id) {
     doubtTracker = doubtTracker.filter(item => item.id !== id);
     saveState({ doubtTracker });
     renderDoubtTracker();
+    renderDoubtEscalationQueue();
 }
 
 function renderReflectionHistory() {
@@ -7675,10 +10799,12 @@ function renderGoals() {
     document.getElementById('goalFlashcardsFill').style.width = flashcardPercent + '%';
     document.getElementById('goalFlashcardsProgress').textContent = `${weeklyStats.flashcardsReviewed} / ${goals.flashcards}`;
     renderGoalRoadmap();
+    renderCareerPathTeaser();
     renderChapterTracker();
     renderRevisionTemplatePreview();
     renderSprintRevisionPreview();
     renderDoubtTracker();
+    renderDoubtEscalationQueue();
 }
 
 function saveGoals() {
@@ -7780,6 +10906,15 @@ function promptBurnoutGuardBreak(contextLabel) {
 function startTimer() {
     if (isTimerRunning) return;
     const modeLabel = getTimerModeLabel(timerModeMinutes);
+    if (modeLabel === 'Focus' && !hasMoodCheckinForToday()) {
+        const quickSetNormal = confirm('Mood check-in for today is missing. Press OK to set Normal now, or Cancel to choose Light/Intense first.');
+        if (quickSetNormal) {
+            setStudyMood('normal');
+        } else {
+            alert('Select Light, Normal, or Intense mood before starting Focus timer.');
+            return;
+        }
+    }
     if (modeLabel === 'Focus' && pendingReflectionRequired) {
         alert('Please complete your previous reflection check-in before starting the next focus session.');
         openReflectionCheckin(pendingReflectionContext);
@@ -7788,6 +10923,18 @@ function startTimer() {
     if (modeLabel === 'Focus' && promptBurnoutGuardBreak('before focus session')) {
         return;
     }
+
+    if (modeLabel === 'Focus' && timerMinutes === timerModeMinutes && timerSeconds === 0) {
+        timerCurrentSessionPaused = false;
+        timerCurrentSessionStartOnTimeAwarded = false;
+        const startLagMs = Date.now() - (timerModeSetAt || Date.now());
+        if (startLagMs <= (2 * 60 * 1000)) {
+            timerCurrentSessionStartOnTimeAwarded = true;
+            microWinStats.startOnTimeCount = Math.max(0, Number(microWinStats.startOnTimeCount) || 0) + 1;
+            awardMicroWin(2, 'Started focus session on time');
+        }
+    }
+
     isTimerRunning = true;
     document.getElementById('startBtn').disabled = true;
     document.getElementById('pauseBtn').disabled = false;
@@ -7811,6 +10958,22 @@ function startTimer() {
                 }));
                 if (type === 'Focus') {
                     weeklyStats.studyHours += (sessionMinutes / 60);
+                    microWinStats.focusCompletedCount = Math.max(0, Number(microWinStats.focusCompletedCount) || 0) + 1;
+                    awardMicroWin(5, 'Finished Pomodoro focus session');
+                    if (!timerCurrentSessionPaused) {
+                        microWinStats.noDistractionStreak = Math.max(0, Number(microWinStats.noDistractionStreak) || 0) + 1;
+                        microWinStats.bestNoDistractionStreak = Math.max(
+                            Math.max(0, Number(microWinStats.bestNoDistractionStreak) || 0),
+                            microWinStats.noDistractionStreak
+                        );
+                        awardMicroWin(3, 'No-distraction focus streak');
+                        if (microWinStats.noDistractionStreak % 3 === 0) {
+                            awardMicroWin(8, `No-distraction streak ${microWinStats.noDistractionStreak}`);
+                        }
+                    } else {
+                        microWinStats.noDistractionStreak = 0;
+                    }
+                    saveState({ microWinStats });
                 }
                 saveState({ pomodoroSessions, weeklyStats });
                 renderPomodoroHistory();
@@ -7843,6 +11006,9 @@ function startTimer() {
 function pauseTimer() {
     clearInterval(timerInterval);
     isTimerRunning = false;
+    if (getTimerModeLabel(timerModeMinutes) === 'Focus') {
+        timerCurrentSessionPaused = true;
+    }
     document.getElementById('startBtn').disabled = false;
     document.getElementById('pauseBtn').disabled = true;
 }
@@ -7856,6 +11022,7 @@ function setTimerMode(minutes) {
     timerModeMinutes = minutes;
     timerMinutes = minutes;
     timerSeconds = 0;
+    timerModeSetAt = Date.now();
     updateTimerDisplay();
     
     document.querySelectorAll('.timer-modes .mode-btn').forEach(btn => {
@@ -7942,6 +11109,8 @@ function exportData() {
         pomodoroSessions,
         activityLog,
         weeklyStats,
+        distractionLog,
+        microWinStats,
         weakTopicStats,
         chapterTracker,
         doubtTracker,
@@ -7955,10 +11124,13 @@ function exportData() {
         studyMaterials,
         freeNotesLibrary,
         quizScores,
+        mistakeNotebook,
         pastPaperAttempts,
         teacherUpdates,
         smartSettings,
+        studyMood,
         dailyPlan,
+        recoveryPlan,
         authUsers
     };
     
@@ -7992,6 +11164,8 @@ function importData(event) {
             if (data.pomodoroSessions) pomodoroSessions = normalizePomodoroSessions(data.pomodoroSessions);
             if (Array.isArray(data.activityLog)) activityLog = data.activityLog;
             if (data.weeklyStats) weeklyStats = { ...DEFAULT_STATE.weeklyStats, ...data.weeklyStats };
+            if (Array.isArray(data.distractionLog)) distractionLog = normalizeDistractionLog(data.distractionLog);
+            if (data.microWinStats) microWinStats = normalizeMicroWinStats(data.microWinStats);
             if (data.weakTopicStats) weakTopicStats = normalizeWeakTopicStats(data.weakTopicStats);
             if (Array.isArray(data.chapterTracker)) chapterTracker = normalizeChapterTracker(data.chapterTracker);
             if (Array.isArray(data.doubtTracker)) doubtTracker = normalizeDoubtTracker(data.doubtTracker);
@@ -8005,10 +11179,13 @@ function importData(event) {
             if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
             if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
             if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
+            if (Array.isArray(data.mistakeNotebook)) mistakeNotebook = normalizeMistakeNotebook(data.mistakeNotebook);
             if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
             if (Array.isArray(data.teacherUpdates)) teacherUpdates = data.teacherUpdates;
             if (data.smartSettings) smartSettings = normalizeSmartSettings(data.smartSettings);
+            if (data.studyMood) studyMood = normalizeStudyMood(data.studyMood);
             if (data.dailyPlan) dailyPlan = { ...DEFAULT_STATE.dailyPlan, ...data.dailyPlan };
+            if (data.recoveryPlan) recoveryPlan = normalizeRecoveryPlan(data.recoveryPlan);
             if (Array.isArray(data.authUsers)) authUsers = data.authUsers;
             
             saveTasks();
@@ -8022,6 +11199,8 @@ function importData(event) {
                 pomodoroSessions,
                 activityLog,
                 weeklyStats,
+                distractionLog,
+                microWinStats,
                 weakTopicStats,
                 chapterTracker,
                 doubtTracker,
@@ -8035,10 +11214,13 @@ function importData(event) {
                 studyMaterials,
                 freeNotesLibrary,
                 quizScores,
+                mistakeNotebook,
                 pastPaperAttempts,
                 teacherUpdates,
                 smartSettings,
+                studyMood,
                 dailyPlan,
+                recoveryPlan,
                 authUsers
             });
             
@@ -8181,7 +11363,9 @@ function bootstrapAuthenticatedApp() {
     setupPresenceLifecycleListeners();
     setupPWAInstall();
     registerServiceWorker();
+    autoScheduleSpacedRevisionTasks({ silent: true });
     autoReplanMissedTasksOnNewDay();
+    autoGenerateRecoveryPlanIfNeeded();
     smartSettings = normalizeSmartSettings(smartSettings);
     applySmartSettingsEffects();
     renderDashboard();

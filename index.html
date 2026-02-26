@@ -98,7 +98,11 @@
                 <a href="#flashcards"><i class="fas fa-layer-group"></i> Flashcards</a>
             </li>
             <li class="nav-item" data-page="student-quiz-weak" data-nav-role="student">
-                <a href="#quiz"><i class="fas fa-question-circle"></i> Quiz &amp; Weak Topics</a>
+                <a href="#quiz">
+                    <i class="fas fa-question-circle"></i>
+                    <span>Quiz &amp; Weak Topics</span>
+                    <span class="mistake-due-badge" id="sidebarMistakesDueBadge" onclick="openDueMistakesFromBadge(event)">0</span>
+                </a>
             </li>
             <li class="nav-item" data-page="student-timer" data-nav-role="student">
                 <a href="#pomodoro-history"><i class="fas fa-stopwatch"></i> Timer</a>
@@ -154,6 +158,9 @@
                     <i class="fas fa-user-circle"></i>
                     <span id="currentUserName">Guest</span>
                 </div>
+                <button class="action-btn" onclick="logoutUser()">
+                    <i class="fas fa-right-from-bracket"></i> Logout
+                </button>
                 <button class="print-btn" data-ui-role="teacher admin" onclick="showPrintModal()">
                     <i class="fas fa-print"></i> Print
                 </button>
@@ -239,6 +246,39 @@
                 </ul>
             </div>
 
+            <div class="card consistency-rewards">
+                <h3><i class="fas fa-seedling"></i> Micro-Win System</h3>
+                <p><strong id="microWinPoints">0</strong> total habit points</p>
+                <p id="microWinStreak">No-distraction streak: 0</p>
+                <p id="microWinBest">Best no-distraction streak: 0</p>
+                <ul id="microWinHistoryList">
+                    <li class="empty-state">Start focus sessions on time and finish clean Pomodoros to earn points.</li>
+                </ul>
+                <ul id="microWinBadgeList">
+                    <li class="empty-state">Weekly badges will appear here.</li>
+                </ul>
+            </div>
+
+            <div class="card consistency-rewards">
+                <h3><i class="fas fa-user-group"></i> Peer Challenge Mode</h3>
+                <div class="task-options">
+                    <input type="text" id="peerChallengeNameInput" placeholder="Challenge name (default: 7-Day Streak)">
+                    <button class="add-btn" onclick="createPeerChallenge()">
+                        <i class="fas fa-plus"></i> Create 7-Day Challenge
+                    </button>
+                </div>
+                <div class="task-options">
+                    <input type="text" id="peerChallengeJoinCodeInput" placeholder="Enter invite code">
+                    <button class="action-btn" onclick="joinPeerChallenge()">
+                        <i class="fas fa-link"></i> Join by Code
+                    </button>
+                </div>
+                <p id="peerChallengeStatus">Create or join a private invite-code challenge.</p>
+                <ul id="peerChallengeList">
+                    <li class="empty-state">No active peer challenges yet.</li>
+                </ul>
+            </div>
+
             <div class="card quick-actions">
                 <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 <div class="action-buttons">
@@ -273,7 +313,10 @@
             </div>
 
             <div class="card weak-topics">
-                <h3><i class="fas fa-triangle-exclamation"></i> Weak Topic Detection</h3>
+                <h3>
+                    <i class="fas fa-triangle-exclamation"></i> Weak Topic Detection
+                    <span class="mistake-due-badge" id="dashboardMistakesDueBadge" onclick="openDueMistakesFromBadge(event)">0</span>
+                </h3>
                 <ul id="weakTopicList">
                     <li class="empty-state">No weak topics detected yet. Submit quizzes to build insights.</li>
                 </ul>
@@ -295,6 +338,33 @@
 
             <div class="card timer-section">
                 <h3><i class="fas fa-stopwatch"></i> Study Timer</h3>
+                <div class="mood-checkin">
+                    <p id="studyMoodStatus">Energy mood: Normal</p>
+                    <div class="task-options" id="studyMoodButtons">
+                        <button class="action-btn mood-btn" data-mood="light" onclick="setStudyMood('light')">
+                            <i class="fas fa-feather"></i> Light
+                        </button>
+                        <button class="action-btn mood-btn" data-mood="normal" onclick="setStudyMood('normal')">
+                            <i class="fas fa-circle"></i> Normal
+                        </button>
+                        <button class="action-btn mood-btn" data-mood="intense" onclick="setStudyMood('intense')">
+                            <i class="fas fa-bolt"></i> Intense
+                        </button>
+                    </div>
+                </div>
+                <div class="mood-checkin">
+                    <p id="distractionLogStatus">Distraction Log: Tap what pulled your attention.</p>
+                    <div class="task-options">
+                        <button class="action-btn" onclick="logDistractionEvent('phone')"><i class="fas fa-mobile-screen"></i> Phone</button>
+                        <button class="action-btn" onclick="logDistractionEvent('social')"><i class="fas fa-hashtag"></i> Social Media</button>
+                        <button class="action-btn" onclick="logDistractionEvent('noise')"><i class="fas fa-volume-high"></i> Noise</button>
+                        <button class="action-btn" onclick="logDistractionEvent('chat')"><i class="fas fa-comments"></i> Chat</button>
+                        <button class="action-btn" onclick="logDistractionEvent('fatigue')"><i class="fas fa-bed"></i> Fatigue</button>
+                    </div>
+                    <ul id="distractionFixList">
+                        <li class="empty-state">Personalized anti-distraction fixes will appear here.</li>
+                    </ul>
+                </div>
                 <div class="goal-setting">
                     <label for="timerSubjectSelect">Session subject:</label>
                     <select id="timerSubjectSelect">
@@ -329,6 +399,40 @@
                 <p id="burnoutGuardHint" class="burnout-guard-hint">Burnout Guard: Ready</p>
             </div>
 
+            <div class="card subject-add">
+                <h3><i class="fas fa-chalkboard-user"></i> Live Class Mode</h3>
+                <p id="liveClassStatus">Not in class. Tap In Class when lecture starts.</p>
+                <div class="task-options">
+                    <select id="liveClassSubject">
+                        <option value="General">General</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <input type="date" id="liveClassActionDueDate">
+                </div>
+                <div class="input-group">
+                    <textarea id="liveClassQuickNotes" rows="3" placeholder="Quick class notes..."></textarea>
+                </div>
+                <div class="input-group">
+                    <textarea id="liveClassDoubtText" rows="2" placeholder="Any doubt from class..."></textarea>
+                </div>
+                <div class="input-group">
+                    <textarea id="liveClassActionItems" rows="2" placeholder="Action items (one per line), e.g. Solve ex 4.1 Q1-Q5"></textarea>
+                </div>
+                <div class="task-options">
+                    <button class="add-btn" id="liveClassToggleBtn" onclick="toggleLiveClassMode()">
+                        <i class="fas fa-play"></i> In Class
+                    </button>
+                    <button class="action-btn" onclick="saveLiveClassCapture()">
+                        <i class="fas fa-floppy-disk"></i> Save Quick Capture
+                    </button>
+                </div>
+            </div>
+
             <div class="card upcoming-deadlines">
                 <h3><i class="fas fa-exclamation-triangle"></i> Upcoming Deadlines</h3>
                 <ul id="upcomingDeadlines">
@@ -354,10 +458,40 @@
                 <button class="action-btn" onclick="generateLowMotivationMode()">
                     <i class="fas fa-seedling"></i> Low-Motivation Mode
                 </button>
+                <button class="action-btn" onclick="generateRecoveryPlan()">
+                    <i class="fas fa-life-ring"></i> One-Click Recovery Plan
+                </button>
                 <ul id="todayPlanList">
                     <li class="empty-state">No plan generated yet</li>
                 </ul>
+                <p id="todayPlanMoodHint">Workload mode: Normal</p>
+                <p id="recoveryPlanStatus">Recovery status: on track.</p>
+                <div class="task-options">
+                    <select id="recoveryHistoryFilter" onchange="setRecoveryHistoryFilter(this.value)">
+                        <option value="all">All Attempts</option>
+                        <option value="auto">Auto Only</option>
+                        <option value="manual">Manual Only</option>
+                    </select>
+                    <button class="action-btn" onclick="clearRecoveryHistory()">
+                        <i class="fas fa-trash"></i> Clear History
+                    </button>
+                </div>
+                <p id="recoveryHistorySummary">Recovery history: no attempts yet.</p>
+                <ul id="recoveryHistoryList">
+                    <li class="empty-state">Generate a recovery plan to track comeback success.</li>
+                </ul>
                 <div id="todayOnlyTimerActions"></div>
+            </div>
+
+            <div class="card focus-dna">
+                <h3><i class="fas fa-dna"></i> Focus DNA Profile</h3>
+                <p id="focusDNAStatus">Not enough focus sessions yet. Complete a few timer sessions to unlock your profile.</p>
+                <ul id="focusDNAInsightsList">
+                    <li class="empty-state">Your peak study hours, best subjects, and ideal session length will appear here.</li>
+                </ul>
+                <button class="action-btn" onclick="generateTodayPlan()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Generate DNA-Optimized Plan
+                </button>
             </div>
 
             <div class="card question-bank-dashboard">
@@ -455,6 +589,41 @@
                 </button>
             </div>
 
+            <div class="card subject-add">
+                <h3><i class="fas fa-camera"></i> Assignment Scanner (Photo to Task)</h3>
+                <input type="file" id="assignmentPhotoInput" accept="image/*" onchange="scanAssignmentPhoto(event)" style="display:none;">
+                <div class="task-options">
+                    <button class="add-btn" type="button" onclick="openAssignmentPhotoPicker()">
+                        <i class="fas fa-image"></i> Upload Homework Photo
+                    </button>
+                    <button class="action-btn" type="button" onclick="parseAssignmentScannerText()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Parse Text to Task
+                    </button>
+                    <button class="action-btn" type="button" onclick="createTaskFromAssignmentScan()">
+                        <i class="fas fa-plus"></i> Auto-Create Task
+                    </button>
+                </div>
+                <p id="assignmentScannerStatus">Upload an image to extract homework details.</p>
+                <img id="assignmentScannerPreviewImage" alt="Assignment preview" style="display:none; max-width:220px; border-radius:10px;">
+                <div class="input-group">
+                    <textarea id="assignmentScanText" rows="4" placeholder="Extracted text appears here. You can edit before parsing."></textarea>
+                </div>
+                <div class="task-options">
+                    <input type="text" id="assignmentScanTaskTitle" placeholder="Detected task title">
+                    <select id="assignmentScanSubject">
+                        <option value="">Detected subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                    <input type="date" id="assignmentScanDueDate">
+                </div>
+            </div>
+
             <div class="filter-section">
                 <button class="filter-btn active" data-filter="all" onclick="filterTasks('all')">All</button>
                 <button class="filter-btn" data-filter="active" onclick="filterTasks('active')">Active</button>
@@ -532,6 +701,21 @@
             <div class="calendar-legend">
                 <span><i class="fas fa-circle task-dot"></i> Task Due</span>
             </div>
+            <div class="card goal-settings">
+                <h3><i class="fas fa-calendar-check"></i> Smart Spaced Revision Calendar</h3>
+                <p id="spacedRevisionSummary">Auto-schedules revision at D+1, D+3, D+7, D+14 for chapters and mistakes.</p>
+                <div class="task-options">
+                    <button class="add-btn" onclick="runSpacedRevisionScheduler()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Run Auto Scheduler
+                    </button>
+                    <button class="action-btn" onclick="renderSpacedRevisionCalendar()">
+                        <i class="fas fa-rotate-right"></i> Refresh List
+                    </button>
+                </div>
+                <ul id="spacedRevisionList">
+                    <li class="empty-state">No spaced revision tasks yet.</li>
+                </ul>
+            </div>
         </div>
 
 
@@ -575,6 +759,41 @@
                 <button class="add-btn" onclick="generateSubjectDrillCards()">
                     <i class="fas fa-bolt"></i> Generate Drill Cards
                 </button>
+            </div>
+            <div class="card subject-add">
+                <h3><i class="fas fa-microphone-lines"></i> Voice Notes to Flashcards</h3>
+                <div class="task-options voice-note-tools">
+                    <button class="action-btn" type="button" id="voiceFlashStartBtn" onclick="startVoiceFlashcardCapture()">
+                        <i class="fas fa-microphone"></i> Start Voice Notes
+                    </button>
+                    <button class="action-btn" type="button" id="voiceFlashStopBtn" onclick="stopVoiceFlashcardCapture()" disabled>
+                        <i class="fas fa-microphone-slash"></i> Stop
+                    </button>
+                    <span id="voiceFlashStatus" class="voice-note-status">Ready</span>
+                </div>
+                <div class="task-options">
+                    <select id="voiceFlashSubjectSelect">
+                        <option value="General">General</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <input type="text" id="voiceFlashDeckInput" placeholder="Deck name (optional)">
+                </div>
+                <div class="input-group">
+                    <textarea id="voiceFlashTranscriptInput" rows="4" placeholder="Speak short notes like: Photosynthesis is process of making food in plants. Newton's first law means an object stays at rest..."></textarea>
+                </div>
+                <div class="task-options">
+                    <button class="add-btn" type="button" onclick="convertVoiceNotesToFlashcards()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Convert to Flashcards
+                    </button>
+                    <button class="action-btn" type="button" onclick="clearVoiceFlashTranscript()">
+                        <i class="fas fa-eraser"></i> Clear Notes
+                    </button>
+                </div>
             </div>
             <p id="drillCardsStatus" class="drill-cards-status">Create formula/definition drills by subject.</p>
             <div class="flashcard-summary" id="flashcardSummary">
@@ -728,10 +947,18 @@
                         <option value="mixed">Similar</option>
                     </select>
                     <input type="number" id="quizQuestionCount" min="5" max="25" value="5" placeholder="Questions">
+                    <label>
+                        <input type="checkbox" id="adaptiveQuizToggle" checked>
+                        Adaptive Quiz
+                    </label>
                 </div>
                 <button class="add-btn" onclick="generateQuizSession()">
                     <i class="fas fa-bolt"></i> Generate Quiz
                 </button>
+                <button class="action-btn" onclick="generateDueMistakeRetrySession()">
+                    <i class="fas fa-rotate-right"></i> Retry Due Now
+                </button>
+                <p id="quizSessionModeLabel">Mode: Standard Quiz</p>
             </div>
             <div id="quizQuestionsContainer">
                 <div class="empty-state">Generate a quiz to start.</div>
@@ -746,6 +973,20 @@
                 <h3><i class="fas fa-history"></i> Your Quiz History</h3>
                 <ul id="quizHistoryList">
                     <li class="empty-state">No quiz attempts yet</li>
+                </ul>
+            </div>
+            <div class="card exam-list">
+                <h3><i class="fas fa-book-open"></i> Mistake Notebook AI</h3>
+                <div class="task-options">
+                    <select id="mistakeNotebookFilter" onchange="setMistakeNotebookFilter(this.value)">
+                        <option value="due">Due Now</option>
+                        <option value="all">All</option>
+                        <option value="mastered">Mastered</option>
+                    </select>
+                </div>
+                <p id="mistakeNotebookSummary">No mistakes captured yet.</p>
+                <ul id="quizMistakeNotebookList">
+                    <li class="empty-state">Wrong quiz answers will be saved here with retry reminders (2/7/14 days).</li>
                 </ul>
             </div>
             <div class="card exam-add">
@@ -786,6 +1027,42 @@
                 </div>
                 <p id="pastPaperTrendSummary">No past paper attempts yet.</p>
                 <canvas id="pastPaperTrendChart" height="120"></canvas>
+            </div>
+            <div class="card exam-add">
+                <h3><i class="fas fa-hourglass-half"></i> Exam Countdown Engine</h3>
+                <div class="task-options">
+                    <input type="text" id="countdownExamName" placeholder="Exam name (e.g., Midterm Math)">
+                    <select id="countdownExamSubject">
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                    <input type="date" id="countdownExamDate">
+                </div>
+                <div class="task-options">
+                    <input type="number" id="countdownRevisionWaves" min="1" max="6" value="3" placeholder="Revision waves">
+                    <input type="number" id="countdownMockTests" min="0" max="6" value="2" placeholder="Mock tests">
+                    <input type="number" id="countdownBufferDays" min="0" max="7" value="2" placeholder="Buffer days">
+                </div>
+                <div class="task-options">
+                    <button class="action-btn" onclick="previewExamCountdownPlan()">
+                        <i class="fas fa-eye"></i> Preview Backward Plan
+                    </button>
+                    <button class="add-btn" onclick="createExamCountdownPlanTasks()">
+                        <i class="fas fa-list-check"></i> Create Plan Tasks
+                    </button>
+                    <button class="clear-btn" onclick="regenerateExamCountdownPlan()">
+                        <i class="fas fa-arrows-rotate"></i> Regenerate Plan
+                    </button>
+                </div>
+                <p id="countdownEngineSummary">Add exam details to generate revision waves, mock tests, and buffer days.</p>
+                <ul id="countdownEnginePlanList">
+                    <li class="empty-state">No countdown plan generated yet.</li>
+                </ul>
             </div>
         </div>
 
@@ -1035,6 +1312,17 @@
             </div>
 
             <div class="card goal-settings">
+                <h3><i class="fas fa-briefcase"></i> Career Path Teaser</h3>
+                <p id="careerTeaserSummary">Based on your strongest subjects, we suggest careers and roadmap steps.</p>
+                <button class="add-btn" onclick="generateCareerPathTeaser()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Generate Career Teaser
+                </button>
+                <ul id="careerTeaserList">
+                    <li class="empty-state">Generate to see career matches.</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
                 <h3><i class="fas fa-book-open"></i> NCERT / Chapter Checklist</h3>
                 <p id="chapterChecklistCompletionText">Completion: 0% (0/0 chapters)</p>
                 <div class="task-options">
@@ -1069,6 +1357,33 @@
                 </ul>
                 <ul id="chapterTrackerList">
                     <li class="empty-state">No chapters added yet</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-diagram-project"></i> Concept Dependency Map</h3>
+                <p id="conceptDependencySummary">Add chapters first, then connect prerequisites.</p>
+                <div class="task-options">
+                    <select id="conceptDependencySubjectFilter" onchange="setConceptDependencySubjectFilter(this.value)">
+                        <option value="all">All Subjects</option>
+                    </select>
+                </div>
+                <div class="task-options">
+                    <select id="dependencyChapterSelect">
+                        <option value="">Chapter to learn</option>
+                    </select>
+                    <select id="dependencyPrereqSelect">
+                        <option value="">Prerequisite chapter</option>
+                    </select>
+                </div>
+                <button class="add-btn" onclick="addChapterDependency()">
+                    <i class="fas fa-link"></i> Add Prerequisite Link
+                </button>
+                <button class="action-btn" onclick="autoSuggestChapterDependencies()">
+                    <i class="fas fa-wand-magic-sparkles"></i> Auto-Suggest Prerequisites
+                </button>
+                <ul id="conceptDependencyMapList">
+                    <li class="empty-state">No dependency map yet.</li>
                 </ul>
             </div>
 
@@ -1133,6 +1448,14 @@
                 </button>
                 <ul id="doubtTrackerList">
                     <li class="empty-state">No doubts added yet</li>
+                </ul>
+            </div>
+
+            <div class="card goal-settings">
+                <h3><i class="fas fa-triangle-exclamation"></i> Doubt Escalation Queue</h3>
+                <p id="doubtEscalationSummary">No unresolved doubts in queue.</p>
+                <ul id="doubtEscalationList">
+                    <li class="empty-state">Doubts will be auto-prioritized by age, exam relevance, and frequency.</li>
                 </ul>
             </div>
 
