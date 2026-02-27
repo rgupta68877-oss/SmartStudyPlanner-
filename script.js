@@ -5496,7 +5496,7 @@ function quickActionOpenAddTask() {
     navigateTo('tasks');
     const input = document.getElementById('taskInput');
     if (input) input.focus();
-    showQuickActionToast('Quick Action: Add Task', 'Result: Tasks page input is focused on task page.');
+    showQuickActionToast('quick action:add task', 'result:tasks page inpute is focused on task page');
 }
 
 function quickActionStartFocusNow() {
