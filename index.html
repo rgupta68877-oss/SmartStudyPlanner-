@@ -339,17 +339,29 @@
             <div class="card quick-actions">
                 <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 <div class="action-buttons">
-                    <button class="action-btn" onclick="navigateTo('tasks')">
-                        <i class="fas fa-plus"></i> Add Task
+                    <button class="action-btn qa-focus" onclick="quickActionStartFocusNow()">
+                        <span class="qa-chip qa-chip-focus"><i class="fas fa-play"></i> Focus</span>
+                        <i class="fas fa-play"></i> Start Focus Now
                     </button>
-                    <button class="action-btn" onclick="navigateTo('flashcards')">
-                        <i class="fas fa-plus-circle"></i> Add Flashcard
+                    <button class="action-btn qa-task" onclick="quickActionOpenAddTask()">
+                        <span class="qa-chip qa-chip-task"><i class="fas fa-list-check"></i> Tasks</span>
+                        <i class="fas fa-list-check"></i> Add New Task
                     </button>
-                    <button class="action-btn" onclick="navigateTo('student-quiz-weak')">
-                        <i class="fas fa-question-circle"></i> Take Quiz
+                    <button class="action-btn qa-recovery" onclick="quickActionRunRecoveryPlan()">
+                        <span class="qa-chip qa-chip-recovery"><i class="fas fa-life-ring"></i> Recovery</span>
+                        <i class="fas fa-life-ring"></i> Recovery Plan
                     </button>
-                    <button class="action-btn" onclick="navigateTo('goals')">
-                        <i class="fas fa-bullseye"></i> Set Goal
+                    <button class="action-btn qa-revision" onclick="quickActionRunSpacedRevision()">
+                        <span class="qa-chip qa-chip-revision"><i class="fas fa-calendar-check"></i> Revision</span>
+                        <i class="fas fa-calendar-check"></i> Spaced Revision
+                    </button>
+                    <button class="action-btn qa-challenge" onclick="quickActionCreateChallenge()">
+                        <span class="qa-chip qa-chip-social"><i class="fas fa-users"></i> Social</span>
+                        <i class="fas fa-users"></i> Create Challenge
+                    </button>
+                    <button class="action-btn qa-room" onclick="quickActionCreateStudyRoom()">
+                        <span class="qa-chip qa-chip-social"><i class="fas fa-users"></i> Social</span>
+                        <i class="fas fa-people-roof"></i> Create Study Room
                     </button>
                 </div>
             </div>

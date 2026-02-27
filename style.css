@@ -401,6 +401,73 @@ body {
     transform: translateY(-2px);
 }
 
+.quick-actions .action-btn.qa-focus { background: #0f766e; }
+.quick-actions .action-btn.qa-focus:hover { background: #115e59; }
+
+.quick-actions .action-btn.qa-task { background: #1d4ed8; }
+.quick-actions .action-btn.qa-task:hover { background: #1e40af; }
+
+.quick-actions .action-btn.qa-recovery { background: #c2410c; }
+.quick-actions .action-btn.qa-recovery:hover { background: #9a3412; }
+
+.quick-actions .action-btn.qa-revision { background: #7c3aed; }
+.quick-actions .action-btn.qa-revision:hover { background: #6d28d9; }
+
+.quick-actions .action-btn.qa-challenge { background: #be123c; }
+.quick-actions .action-btn.qa-challenge:hover { background: #9f1239; }
+
+.quick-actions .action-btn.qa-room { background: #0369a1; }
+.quick-actions .action-btn.qa-room:hover { background: #075985; }
+
+.quick-actions .action-btn .qa-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    margin-right: 2px;
+}
+
+.quick-actions .action-btn .qa-chip i {
+    font-size: 0.95em;
+}
+
+.quick-actions .action-btn .qa-chip.qa-chip-focus {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+}
+
+.quick-actions .action-btn .qa-chip.qa-chip-task {
+    background: #dbeafe;
+    border-color: #bfdbfe;
+    color: #1e3a8a;
+}
+
+.quick-actions .action-btn .qa-chip.qa-chip-recovery {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #9a3412;
+}
+
+.quick-actions .action-btn .qa-chip.qa-chip-revision {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+    color: #5b21b6;
+}
+
+.quick-actions .action-btn .qa-chip.qa-chip-social {
+    background: #ffe4e6;
+    border-color: #fda4af;
+    color: #9f1239;
+}
+
 /* Recent Activity */
 .recent-activity ul { list-style: none; }
 

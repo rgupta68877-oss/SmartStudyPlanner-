@@ -5410,6 +5410,40 @@ function startLowMotivationFocusSprint() {
     if (!isTimerRunning) startTimer();
 }
 
+function quickActionOpenAddTask() {
+    navigateTo('tasks');
+    const input = document.getElementById('taskInput');
+    if (input) input.focus();
+}
+
+function quickActionStartFocusNow() {
+    navigateTo('dashboard');
+    setTimerMode(25);
+    if (!isTimerRunning) startTimer();
+}
+
+function quickActionRunRecoveryPlan() {
+    navigateTo('dashboard');
+    const success = generateRecoveryPlan('manual');
+    if (success) renderDashboard();
+}
+
+function quickActionRunSpacedRevision() {
+    runSpacedRevisionScheduler();
+    navigateTo('calendar');
+    renderSpacedRevisionCalendar();
+}
+
+function quickActionCreateChallenge() {
+    navigateTo('dashboard');
+    void createPeerChallenge();
+}
+
+function quickActionCreateStudyRoom() {
+    navigateTo('dashboard');
+    void createStudyGroupRoom();
+}
+
 function getUnfinishedPlannedTaskIds(plan) {
     const items = plan && Array.isArray(plan.items) ? plan.items : [];
     return items
