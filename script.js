@@ -1249,6 +1249,7 @@ let pendingExamStrategyPlan = null;
 let peerChallenges = [];
 let studyGroups = [];
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
+let backendLastAuthError = "";
 let firebaseInitPromise = null;
 let firebaseAuth = null;
 let firebaseDb = null;
@@ -1982,6 +1983,7 @@ async function setupFirebaseAuthObserver() {
 }
 
 async function syncRegisterWithBackend(name, email, password, role) {
+    backendLastAuthError = "";
     try {
         let response = await fetch(`${API_BASE_URL}/api/auth/register`, {
             method: 'POST',
@@ -2003,11 +2005,15 @@ async function syncRegisterWithBackend(name, email, password, role) {
             localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
             return true;
         }
-    } catch (_) {}
+        backendLastAuthError = `HTTP ${response.status}: ${data && data.error ? data.error : 'Backend register/login failed'}`;
+    } catch (err) {
+        backendLastAuthError = err && err.message ? err.message : 'Network error while connecting backend';
+    }
     return false;
 }
 
 async function syncLoginWithBackend(email, password, fallbackName = "Student", fallbackRole = "student") {
+    backendLastAuthError = "";
     try {
         let response = await fetch(`${API_BASE_URL}/api/auth/login`, {
             method: 'POST',
@@ -2044,7 +2050,10 @@ async function syncLoginWithBackend(email, password, fallbackName = "Student", f
             localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
             return true;
         }
-    } catch (_) {}
+        backendLastAuthError = `HTTP ${response.status}: ${data && data.error ? data.error : 'Backend auth failed'}`;
+    } catch (err) {
+        backendLastAuthError = err && err.message ? err.message : 'Network error while connecting backend';
+    }
     return false;
 }
 
@@ -3698,7 +3707,8 @@ async function reconnectPeerChallengeSync() {
 
     if (!ok) {
         setPeerChallengeBackendIndicator('disconnected', 'Backend: Login failed');
-        alert('Reconnect failed. Check backend server and password, then try again.');
+        const reason = backendLastAuthError || 'Unknown backend error';
+        alert(`Reconnect failed.\n\nReason: ${reason}\n\nCheck backend server and password, then try again.`);
         return;
     }
 
