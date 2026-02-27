@@ -21,7 +21,14 @@ const API_BASE_URL = (() => {
     const fromMeta = document.querySelector('meta[name="api-base-url"]')?.getAttribute("content") || "";
     const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     const fallbackBase = isLocalHost ? "http://localhost:4000" : window.location.origin;
-    const fromEnv = fromGlobal || fromMeta || fallbackBase;
+    const safeMeta = (() => {
+        const metaValue = String(fromMeta || "").trim();
+        if (!metaValue) return "";
+        // Ignore localhost-only meta config when app is running on a non-local host.
+        if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(metaValue)) return "";
+        return metaValue;
+    })();
+    const fromEnv = fromGlobal || safeMeta || fallbackBase;
     return String(fromEnv).replace(/\/+$/, "");
 })();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
