@@ -5076,9 +5076,10 @@ function renderDailyTop3AdaptiveTasks() {
     const list = document.getElementById('doNextList');
     if (!list) return;
 
+    const now = new Date();
     const weakSubjects = getAdaptiveWeakSubjects(4);
     const ranked = rankTasks(tasks.filter(task => !task.done), {
-        now: new Date(),
+        now,
         weakSubjects,
         exams
     }).slice(0, 3);
@@ -5088,17 +5089,49 @@ function renderDailyTop3AdaptiveTasks() {
     }
 
     list.innerHTML = ranked.map(task => {
-        const hint = getTaskScoreHint(task, { now: new Date(), weakSubjects, exams }, 5);
+        const hint = getTaskScoreHint(task, { now, weakSubjects, exams }, 5);
         const subject = String(task.subject || 'General');
-        const weakTag = weakSubjects.some(name => subjectMatches(subject, name)) ? ' | Weak area boost' : '';
+        const weakTag = weakSubjects.some(name => subjectMatches(subject, name)) ? 'Weak area boost' : '';
+        const dueDays = daysUntil(task.dueDate, now);
+        let dueLabel = 'No due date';
+        let dueClass = '';
+        if (Number.isFinite(dueDays)) {
+            if (dueDays < 0) {
+                dueLabel = `${Math.abs(dueDays)} day(s) overdue`;
+                dueClass = 'overdue';
+            } else if (dueDays === 0) {
+                dueLabel = 'Due today';
+                dueClass = 'today';
+            } else {
+                dueLabel = `Due in ${dueDays} day(s)`;
+            }
+        }
         return `
-        <li>
+        <li class="top3-item">
             <strong>${task.text}</strong>
-            <span title="${escapeHtmlAttribute(hint)}">${subject} | ${task.priority} | Score ${task._score}${weakTag}</span>
-            <button class="task-rank-hint" type="button" onclick="openTaskScoreModal('${encodeURIComponent(task.id)}')" title="${escapeHtmlAttribute(hint)}">Why ranked</button>
+            <span class="top3-meta" title="${escapeHtmlAttribute(hint)}">${subject} | ${task.priority} | Score ${task._score}</span>
+            <span class="task-due ${dueClass}">${dueLabel}</span>
+            <div class="top3-actions">
+                <button class="task-rank-hint" type="button" onclick="openTaskScoreModal('${encodeURIComponent(task.id)}')" title="${escapeHtmlAttribute(hint)}">Why ranked</button>
+                ${weakTag ? `<span class="task-rank-hint" title="This subject is currently weak.">${weakTag}</span>` : ''}
+                <button class="task-rank-hint top3-done-btn" type="button" onclick="completeTaskFromDailyTop3('${encodeURIComponent(task.id)}')">Done</button>
+            </div>
         </li>
     `;
     }).join('');
+}
+
+function completeTaskFromDailyTop3(encodedTaskId) {
+    const taskId = decodeURIComponent(String(encodedTaskId || ''));
+    if (!taskId) return;
+    const index = tasks.findIndex(task => String(task && task.id || '') === taskId);
+    if (index < 0) return;
+    if (tasks[index].done) {
+        renderDailyTop3AdaptiveTasks();
+        return;
+    }
+    toggleTask(index);
+    renderDailyTop3AdaptiveTasks();
 }
 
 function renderDoNext() {

@@ -1039,6 +1039,34 @@ body {
     color: var(--primary-color);
 }
 
+#doNextList .top3-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#doNextList .top3-meta {
+    color: var(--text-light);
+    font-size: 0.92em;
+}
+
+#doNextList .top3-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+#doNextList .top3-done-btn {
+    border-color: #16a34a;
+    color: #166534;
+}
+
+#doNextList .top3-done-btn:hover {
+    border-color: #15803d;
+    color: #14532d;
+}
+
 .score-breakdown-list {
     list-style: none;
     padding: 0;
