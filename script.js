@@ -34,6 +34,7 @@ const API_BASE_URL = (() => {
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
 const FOCUS_SHIELD_SETTINGS_KEY = "focusShieldSettings";
 const LOCAL_PEER_CHALLENGES_KEY = "localPeerChallenges";
+const LOCAL_STUDY_GROUPS_KEY = "localStudyGroups";
 const PRESENCE_CLIENT_ID_KEY = "presenceClientId";
 const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
@@ -3559,6 +3560,82 @@ function saveLocalPeerChallenges(list) {
     peerChallenges = safe;
 }
 
+function normalizeLocalStudyGroupMember(value) {
+    const member = value && typeof value === "object" ? value : {};
+    const checkins = Array.isArray(member.checkins)
+        ? [...new Set(member.checkins.map(d => String(d || "").slice(0, 10)).filter(Boolean))].sort()
+        : [];
+    return {
+        email: normalizeEmail(member.email || ""),
+        name: String(member.name || "").trim() || "Student",
+        role: ["student", "teacher", "admin"].includes(member.role) ? member.role : "student",
+        joinedAt: member.joinedAt || new Date().toISOString(),
+        checkins,
+        currentStreak: Math.max(0, Number(member.currentStreak) || 0),
+        bestStreak: Math.max(0, Number(member.bestStreak) || 0),
+        lastCheckinDate: String(member.lastCheckinDate || "")
+    };
+}
+
+function normalizeLocalStudyGroup(value) {
+    const group = value && typeof value === "object" ? value : {};
+    const durationDays = Math.max(1, Math.min(60, Number(group.durationDays) || 30));
+    const startDate = String(group.startDate || getTodayDateKey()).slice(0, 10);
+    const endDate = String(group.endDate || addDaysISO(startDate, durationDays - 1)).slice(0, 10);
+    const members = Array.isArray(group.members)
+        ? group.members.map(normalizeLocalStudyGroupMember).filter(m => m.email)
+        : [];
+    const goals = Array.isArray(group.goals)
+        ? group.goals.map(goal => ({
+            id: String(goal && goal.id || `group-goal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+            text: String(goal && goal.text || "").trim(),
+            createdBy: normalizeEmail(goal && goal.createdBy || ""),
+            createdByName: String(goal && goal.createdByName || "").trim() || "Student",
+            createdAt: goal && goal.createdAt || new Date().toISOString()
+        })).filter(goal => goal.text).slice(0, 200)
+        : [];
+    const doubts = Array.isArray(group.doubts)
+        ? group.doubts.map(doubt => ({
+            id: String(doubt && doubt.id || `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+            text: String(doubt && doubt.text || "").trim(),
+            subject: String(doubt && doubt.subject || "General").trim() || "General",
+            createdBy: normalizeEmail(doubt && doubt.createdBy || ""),
+            createdByName: String(doubt && doubt.createdByName || "").trim() || "Student",
+            createdAt: doubt && doubt.createdAt || new Date().toISOString()
+        })).filter(doubt => doubt.text).slice(0, 500)
+        : [];
+    const active = getTodayDateKey() <= endDate;
+    return {
+        id: String(group.id || `local-room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        code: String(group.code || randomLocalChallengeCode()).trim().toUpperCase(),
+        name: String(group.name || "Study Room").trim() || "Study Room",
+        durationDays,
+        startDate,
+        endDate,
+        createdBy: normalizeEmail(group.createdBy || ""),
+        createdAt: group.createdAt || new Date().toISOString(),
+        status: active ? "active" : "completed",
+        members,
+        goals,
+        doubts
+    };
+}
+
+function loadLocalStudyGroups() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(LOCAL_STUDY_GROUPS_KEY) || "[]");
+        return Array.isArray(raw) ? raw.map(normalizeLocalStudyGroup).slice(0, 300) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveLocalStudyGroups(groups) {
+    const safe = Array.isArray(groups) ? groups.map(normalizeLocalStudyGroup).slice(0, 300) : [];
+    localStorage.setItem(LOCAL_STUDY_GROUPS_KEY, JSON.stringify(safe));
+    studyGroups = safe;
+}
+
 function setPeerChallengeBackendIndicator(state, message) {
     const indicator = document.getElementById('peerChallengeBackendIndicator');
     if (!indicator) return;
@@ -3938,19 +4015,24 @@ function renderStudyGroupRooms() {
 
     renderStudyGroupRoomSelect();
     if (!backendAdminToken) {
-        statusEl.textContent = 'Study group rooms need backend login token. Login to sync private rooms.';
-        listEl.innerHTML = '<li class="empty-state">No study rooms joined yet.</li>';
-        return;
+        if (!Array.isArray(studyGroups) || studyGroups.length === 0) {
+            studyGroups = loadLocalStudyGroups();
+            renderStudyGroupRoomSelect();
+        }
     }
 
     const activeRooms = (studyGroups || []).filter(room => room && room.status !== 'completed');
     if (activeRooms.length === 0) {
-        statusEl.textContent = 'Create or join a private room to share goals and doubts.';
+        statusEl.textContent = backendAdminToken
+            ? 'Create or join a private room to share goals and doubts.'
+            : 'Local mode active. Create or join a room on this device.';
         listEl.innerHTML = '<li class="empty-state">No study rooms joined yet.</li>';
         return;
     }
 
-    statusEl.textContent = `${activeRooms.length} room(s) active. Share goals, track streaks, and exchange doubts.`;
+    statusEl.textContent = backendAdminToken
+        ? `${activeRooms.length} room(s) active. Share goals, track streaks, and exchange doubts.`
+        : `${activeRooms.length} local room(s) active.`;
     listEl.innerHTML = activeRooms.map(room => {
         const members = Array.isArray(room.members) ? room.members : [];
         const goalsList = Array.isArray(room.goals) ? room.goals.slice(0, 3) : [];
@@ -3983,7 +4065,11 @@ function renderStudyGroupRooms() {
 }
 
 async function loadStudyGroupsFromServer() {
-    if (!backendAdminToken) return;
+    if (!backendAdminToken) {
+        studyGroups = loadLocalStudyGroups();
+        renderStudyGroupRooms();
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/study-groups`, {
             headers: {
@@ -3999,12 +4085,46 @@ async function loadStudyGroupsFromServer() {
 }
 
 async function createStudyGroupRoom() {
-    if (!backendAdminToken) {
-        alert('Please login first to enable private study rooms.');
-        return;
-    }
     const input = document.getElementById('studyGroupNameInput');
     const name = String(input && input.value ? input.value : '').trim() || 'Study Room';
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const room = normalizeLocalStudyGroup({
+            id: `local-room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            code: randomLocalChallengeCode(),
+            name,
+            durationDays: 30,
+            startDate: getTodayDateKey(),
+            endDate: addDaysISO(getTodayDateKey(), 29),
+            createdBy: email,
+            createdAt: new Date().toISOString(),
+            members: [{
+                email,
+                name: user && user.name ? user.name : "Student",
+                role: user && user.role ? user.role : "student",
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }],
+            goals: [],
+            doubts: []
+        });
+        const groups = loadLocalStudyGroups();
+        groups.unshift(room);
+        saveLocalStudyGroups(groups);
+        if (input) input.value = '';
+        renderStudyGroupRooms();
+        addActivity('people-roof', 'Study Room Created (Local)', `${room.name} | Code ${room.code}`);
+        alert(`Room created (local mode). Invite code: ${room.code}`);
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/study-groups`, {
             method: 'POST',
@@ -4026,14 +4146,46 @@ async function createStudyGroupRoom() {
 }
 
 async function joinStudyGroupRoom() {
-    if (!backendAdminToken) {
-        alert('Please login first to join private study rooms.');
-        return;
-    }
     const input = document.getElementById('studyGroupJoinCodeInput');
     const code = String(input && input.value ? input.value : '').trim().toUpperCase();
     if (!code) {
         alert('Enter invite code first.');
+        return;
+    }
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const groups = loadLocalStudyGroups();
+        const idx = groups.findIndex(room => String(room && room.code || "").toUpperCase() === code);
+        if (idx < 0) {
+            alert('Room not found for this invite code (local mode).');
+            return;
+        }
+        const room = normalizeLocalStudyGroup(groups[idx]);
+        const exists = Array.isArray(room.members)
+            && room.members.some(member => normalizeEmail(member && member.email || "") === email);
+        if (!exists) {
+            room.members.push(normalizeLocalStudyGroupMember({
+                email,
+                name: user && user.name ? user.name : "Student",
+                role: user && user.role ? user.role : "student",
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }));
+        }
+        groups[idx] = normalizeLocalStudyGroup(room);
+        saveLocalStudyGroups(groups);
+        if (input) input.value = '';
+        renderStudyGroupRooms();
+        addActivity('link', 'Study Room Joined (Local)', `${room.name} | Code ${code}`);
+        alert(`Joined room (local mode): ${room.name}`);
         return;
     }
     try {
@@ -4062,7 +4214,53 @@ async function checkInStudyGroupRoom(encodedId = '') {
         ? (studyGroups || []).find(item => String(item.id || '') === fromArg)
         : getCurrentStudyGroupRoom();
     const id = String(room && room.id ? room.id : '').trim();
-    if (!id || !backendAdminToken) return;
+    if (!id) return;
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) return;
+        const today = getTodayDateKey();
+        const groups = loadLocalStudyGroups();
+        const idx = groups.findIndex(item => String(item && item.id || "") === id);
+        if (idx < 0) return;
+
+        const localRoom = normalizeLocalStudyGroup(groups[idx]);
+        if (today > localRoom.endDate) {
+            localRoom.status = 'completed';
+            groups[idx] = normalizeLocalStudyGroup(localRoom);
+            saveLocalStudyGroups(groups);
+            renderStudyGroupRooms();
+            alert('Room has ended.');
+            return;
+        }
+
+        const mIdx = (localRoom.members || []).findIndex(member => normalizeEmail(member && member.email || "") === email);
+        if (mIdx < 0) {
+            alert('Join this room first.');
+            return;
+        }
+
+        const member = normalizeLocalStudyGroupMember(localRoom.members[mIdx]);
+        if (!member.checkins.includes(today)) {
+            const previousDate = member.lastCheckinDate || "";
+            if (!previousDate) member.currentStreak = 1;
+            else {
+                const prev = new Date(`${previousDate}T00:00:00.000Z`).getTime();
+                const curr = new Date(`${today}T00:00:00.000Z`).getTime();
+                const gapDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+                member.currentStreak = gapDays === 1 ? member.currentStreak + 1 : 1;
+            }
+            member.bestStreak = Math.max(member.bestStreak, member.currentStreak);
+            member.lastCheckinDate = today;
+            member.checkins = [...member.checkins, today].sort();
+            localRoom.members[mIdx] = member;
+            groups[idx] = normalizeLocalStudyGroup(localRoom);
+            saveLocalStudyGroups(groups);
+            renderStudyGroupRooms();
+            addActivity('fire', 'Study Group Check-In (Local)', `${localRoom.name} | Streak ${member.currentStreak}`);
+        }
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/study-groups/${encodeURIComponent(id)}/checkin`, {
             method: 'POST',
@@ -4083,10 +4281,6 @@ async function checkInStudyGroupRoom(encodedId = '') {
 }
 
 async function postStudyGroupGoal() {
-    if (!backendAdminToken) {
-        alert('Please login first to post shared goals.');
-        return;
-    }
     const room = getCurrentStudyGroupRoom();
     if (!room) {
         alert('Select a room first.');
@@ -4096,6 +4290,41 @@ async function postStudyGroupGoal() {
     const text = String(input && input.value ? input.value : '').trim();
     if (!text) {
         alert('Enter a goal first.');
+        return;
+    }
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const groups = loadLocalStudyGroups();
+        const idx = groups.findIndex(item => String(item && item.id || "") === String(room.id || ""));
+        if (idx < 0) {
+            alert('Room not found.');
+            return;
+        }
+        const localRoom = normalizeLocalStudyGroup(groups[idx]);
+        const isMember = Array.isArray(localRoom.members)
+            && localRoom.members.some(member => normalizeEmail(member && member.email || "") === email);
+        if (!isMember) {
+            alert('Join this room first.');
+            return;
+        }
+        localRoom.goals.unshift({
+            id: `group-goal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            createdBy: email,
+            createdByName: user && user.name ? user.name : "Student",
+            createdAt: new Date().toISOString()
+        });
+        localRoom.goals = localRoom.goals.slice(0, 200);
+        groups[idx] = normalizeLocalStudyGroup(localRoom);
+        saveLocalStudyGroups(groups);
+        if (input) input.value = '';
+        renderStudyGroupRooms();
+        addActivity('bullseye', 'Study Group Goal Shared (Local)', `${localRoom.name}: ${text}`);
         return;
     }
     try {
@@ -4118,10 +4347,6 @@ async function postStudyGroupGoal() {
 }
 
 async function postStudyGroupDoubt() {
-    if (!backendAdminToken) {
-        alert('Please login first to exchange doubts.');
-        return;
-    }
     const room = getCurrentStudyGroupRoom();
     if (!room) {
         alert('Select a room first.');
@@ -4133,6 +4358,42 @@ async function postStudyGroupDoubt() {
     const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
     if (!text) {
         alert('Enter a doubt first.');
+        return;
+    }
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const groups = loadLocalStudyGroups();
+        const idx = groups.findIndex(item => String(item && item.id || "") === String(room.id || ""));
+        if (idx < 0) {
+            alert('Room not found.');
+            return;
+        }
+        const localRoom = normalizeLocalStudyGroup(groups[idx]);
+        const isMember = Array.isArray(localRoom.members)
+            && localRoom.members.some(member => normalizeEmail(member && member.email || "") === email);
+        if (!isMember) {
+            alert('Join this room first.');
+            return;
+        }
+        localRoom.doubts.unshift({
+            id: `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text,
+            subject,
+            createdBy: email,
+            createdByName: user && user.name ? user.name : "Student",
+            createdAt: new Date().toISOString()
+        });
+        localRoom.doubts = localRoom.doubts.slice(0, 500);
+        groups[idx] = normalizeLocalStudyGroup(localRoom);
+        saveLocalStudyGroups(groups);
+        if (doubtInput) doubtInput.value = '';
+        renderStudyGroupRooms();
+        addActivity('circle-question', 'Study Group Doubt Shared (Local)', `${localRoom.name}: ${subject}`);
         return;
     }
     try {
