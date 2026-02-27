@@ -1728,6 +1728,40 @@ body.compact-mode .page-content {
 
 .modal.active { display: flex; }
 
+.quick-action-toast {
+    position: fixed;
+    right: 18px;
+    top: 18px;
+    z-index: 2600;
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-width: 250px;
+    max-width: 360px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transform: translateY(-12px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.quick-action-toast.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.quick-action-toast-title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.quick-action-toast-hint {
+    font-size: 0.9em;
+    color: #cbd5e1;
+}
+
 .modal-content {
     background: var(--card-bg);
     padding: 30px;

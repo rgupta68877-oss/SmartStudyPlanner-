@@ -1233,6 +1233,7 @@ let pomodoroSubjectFilter = "all";
 let reminderIntervalId = null;
 let deferredInstallPrompt = null;
 let serviceWorkerRegistration = null;
+let quickActionToastTimer = null;
 let appBootstrapped = false;
 let progressTrendChartInstance = null;
 let completionSplitChartInstance = null;
@@ -1255,6 +1256,7 @@ let firebaseInitPromise = null;
 let firebaseAuth = null;
 let firebaseDb = null;
 let firebaseAuthObserverAttached = false;
+let suppressFirebaseAuthObserver = false;
 let cloudSyncTimeoutId = null;
 let isHydratingFromCloud = false;
 let cloudStateLoadedForUid = "";
@@ -1956,6 +1958,8 @@ async function setupFirebaseAuthObserver() {
     firebaseAuthObserverAttached = true;
 
     firebaseSdk.onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+        if (suppressFirebaseAuthObserver) return;
+
         if (firebaseUser && firebaseUser.email) {
             if (activeFirebaseUid !== firebaseUser.uid) {
                 resetUserScopedStateToDefaults();
@@ -1964,7 +1968,8 @@ async function setupFirebaseAuthObserver() {
             }
             upsertLocalUser(firebaseUser);
             authSession = { email: normalizeEmail(firebaseUser.email) };
-            saveState({ authUsers, authSession });
+            saveState({ authUsers });
+            saveState({ authSession });
             await loadCurrentUserProfileFromCloud();
             await syncCurrentUserProfileToCloud();
             await loadCloudStateForCurrentUser();
@@ -1975,6 +1980,12 @@ async function setupFirebaseAuthObserver() {
 
         cloudStateLoadedForUid = "";
         activeFirebaseUid = "";
+        // Keep local session if it exists and Firebase emits a transient null state.
+        const hasLocalSession = Boolean(authSession && getCurrentUser());
+        if (hasLocalSession) {
+            if (document.getElementById("page-dashboard")) applyAuthState();
+            return;
+        }
         if (authSession) {
             authSession = null;
             saveState({ authSession });
@@ -2205,6 +2216,7 @@ async function registerUser() {
 
     if (firebaseAuth && firebaseSdk.createUserWithEmailAndPassword) {
         try {
+            suppressFirebaseAuthObserver = true;
             const credential = await firebaseSdk.createUserWithEmailAndPassword(firebaseAuth, email, password);
             if (firebaseSdk.updateProfile) {
                 await firebaseSdk.updateProfile(credential.user, { displayName: name });
@@ -2220,7 +2232,8 @@ async function registerUser() {
                 } catch (_) {}
             }
             authSession = null;
-            saveState({ authUsers, authSession });
+            saveState({ authUsers });
+            saveState({ authSession });
             setAuthMessage("Account created successfully. Please login.");
             showAuthView("login");
             Promise.allSettled([
@@ -2228,8 +2241,12 @@ async function registerUser() {
                 syncRegisterWithBackend(name, email, password, role),
                 syncStateToCloudNow()
             ]);
+            setTimeout(() => {
+                suppressFirebaseAuthObserver = false;
+            }, 0);
             return;
         } catch (err) {
+            suppressFirebaseAuthObserver = false;
             setAuthMessage(getFirebaseAuthErrorMessage(err?.code), true);
             return;
         }
@@ -2255,7 +2272,8 @@ async function registerUser() {
     };
     authUsers.push(user);
     authSession = null;
-    saveState({ authUsers, authSession });
+    saveState({ authUsers });
+    saveState({ authSession });
     setAuthMessage("Account created successfully. Please login.");
     showAuthView("login");
     syncRegisterWithBackend(name, email, password, role);
@@ -2281,7 +2299,8 @@ async function loginUser() {
                 name: credential.user.displayName || ""
             });
             authSession = { email: normalizeEmail(credential.user.email || email) };
-            saveState({ authUsers, authSession });
+            saveState({ authUsers });
+            saveState({ authSession });
             await loadCurrentUserProfileFromCloud();
             await syncCurrentUserProfileToCloud();
             await loadCloudStateForCurrentUser();
@@ -5410,38 +5429,65 @@ function startLowMotivationFocusSprint() {
     if (!isTimerRunning) startTimer();
 }
 
+function showQuickActionToast(title, hint = '') {
+    const toast = document.getElementById('quickActionToast');
+    const titleEl = document.getElementById('quickActionToastTitle');
+    const hintEl = document.getElementById('quickActionToastHint');
+    if (!toast || !titleEl || !hintEl) return;
+
+    titleEl.textContent = String(title || 'Done');
+    hintEl.textContent = String(hint || '');
+    toast.classList.add('active');
+
+    if (quickActionToastTimer) clearTimeout(quickActionToastTimer);
+    quickActionToastTimer = setTimeout(() => {
+        toast.classList.remove('active');
+        quickActionToastTimer = null;
+    }, 2600);
+}
+
 function quickActionOpenAddTask() {
     navigateTo('tasks');
     const input = document.getElementById('taskInput');
     if (input) input.focus();
+    showQuickActionToast('Quick Action: Add Task', 'Result: Tasks page input is focused.');
 }
 
 function quickActionStartFocusNow() {
     navigateTo('dashboard');
     setTimerMode(25);
     if (!isTimerRunning) startTimer();
+    showQuickActionToast('Quick Action: Focus Started', 'Result: Dashboard timer is running.');
 }
 
 function quickActionRunRecoveryPlan() {
     navigateTo('dashboard');
     const success = generateRecoveryPlan('manual');
-    if (success) renderDashboard();
+    if (success) {
+        renderDashboard();
+        showQuickActionToast('Quick Action: Recovery Plan Ready', 'Result: See One-Click Recovery Plan on Dashboard.');
+    } else {
+        showQuickActionToast('Quick Action: Recovery Skipped', 'Result: Add pending tasks first, then retry.');
+    }
 }
 
 function quickActionRunSpacedRevision() {
     runSpacedRevisionScheduler();
     navigateTo('calendar');
     renderSpacedRevisionCalendar();
+    showQuickActionToast('Quick Action: Spaced Revision Run', 'Result: See Smart Spaced Revision list on Calendar.');
 }
 
 function quickActionCreateChallenge() {
     navigateTo('dashboard');
     void createPeerChallenge();
+    showQuickActionToast('Quick Action: Challenge Requested', 'Result: See Peer Challenge Mode section.');
 }
 
 function quickActionCreateStudyRoom() {
     navigateTo('dashboard');
     void createStudyGroupRoom();
+    showQuickActionToast('Quick Action: Study Room Requested', 'Result: See Study Group Rooms section.');
 }
 
 function getUnfinishedPlannedTaskIds(plan) {
