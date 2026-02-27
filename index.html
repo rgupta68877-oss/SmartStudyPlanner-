@@ -275,6 +275,12 @@
                         <i class="fas fa-link"></i> Join by Code
                     </button>
                 </div>
+                <div class="task-options peer-backend-row">
+                    <span id="peerChallengeBackendIndicator" class="peer-backend-indicator disconnected">Backend: Disconnected</span>
+                    <button class="action-btn" type="button" onclick="reconnectPeerChallengeSync()">
+                        <i class="fas fa-rotate-right"></i> Reconnect
+                    </button>
+                </div>
                 <p id="peerChallengeStatus">Please login first to enable invite-code challenges.</p>
                 <ul id="peerChallengeList">
                     <li class="empty-state">No active peer challenges yet.</li>

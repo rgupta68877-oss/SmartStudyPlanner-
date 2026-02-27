@@ -577,6 +577,36 @@ body {
     font-size: 1.05em;
 }
 
+.peer-backend-row {
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.peer-backend-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+.peer-backend-indicator.connected {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.peer-backend-indicator.disconnected {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+.peer-backend-indicator.checking {
+    color: #1e3a8a;
+    background: #dbeafe;
+}
+
 #peerChallengeStatus {
     margin-top: 8px;
     margin-bottom: 10px;
@@ -1780,6 +1810,14 @@ body.focus-shield-lock {
     .peer-join-row .action-btn {
         width: 100%;
         min-width: 100%;
+    }
+
+    .peer-backend-row {
+        flex-wrap: wrap;
+    }
+
+    .peer-backend-row .action-btn {
+        width: 100%;
     }
 
     .goal-setting {

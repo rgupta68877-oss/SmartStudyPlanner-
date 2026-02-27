@@ -33,6 +33,7 @@ const API_BASE_URL = (() => {
 })();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
 const FOCUS_SHIELD_SETTINGS_KEY = "focusShieldSettings";
+const LOCAL_PEER_CHALLENGES_KEY = "localPeerChallenges";
 const PRESENCE_CLIENT_ID_KEY = "presenceClientId";
 const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
@@ -1982,32 +1983,69 @@ async function setupFirebaseAuthObserver() {
 
 async function syncRegisterWithBackend(name, email, password, role) {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        let response = await fetch(`${API_BASE_URL}/api/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, email, password, role })
         });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok && data.token) {
+        let data = await response.json().catch(() => ({}));
+        if (!response.ok && response.status === 409) {
+            // If backend user already exists, try login to obtain JWT token.
+            response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            data = await response.json().catch(() => ({}));
+        }
+        if (response.ok && data && data.token) {
             backendAdminToken = data.token;
             localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+            return true;
         }
     } catch (_) {}
+    return false;
 }
 
-async function syncLoginWithBackend(email, password) {
+async function syncLoginWithBackend(email, password, fallbackName = "Student", fallbackRole = "student") {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        let response = await fetch(`${API_BASE_URL}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok && data.token) {
+        let data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            // Self-heal: if backend account is missing, create it and get token.
+            const registerResponse = await fetch(`${API_BASE_URL}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: String(fallbackName || "Student").trim() || "Student",
+                    email,
+                    password,
+                    role: ["student", "teacher", "admin"].includes(fallbackRole) ? fallbackRole : "student"
+                })
+            });
+            if (registerResponse.ok) {
+                data = await registerResponse.json().catch(() => ({}));
+                response = registerResponse;
+            } else if (registerResponse.status === 409) {
+                response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                data = await response.json().catch(() => ({}));
+            }
+        }
+        if (response.ok && data && data.token) {
             backendAdminToken = data.token;
             localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+            return true;
         }
     } catch (_) {}
+    return false;
 }
 
 function hasAnyFlashcards(flashcardState) {
@@ -2237,7 +2275,13 @@ async function loginUser() {
             await loadCurrentUserProfileFromCloud();
             await syncCurrentUserProfileToCloud();
             await loadCloudStateForCurrentUser();
-            await syncLoginWithBackend(email, password);
+            const localUser = getCurrentUser();
+            await syncLoginWithBackend(
+                email,
+                password,
+                localUser && localUser.name ? localUser.name : (credential.user.displayName || "Student"),
+                localUser && localUser.role ? localUser.role : "student"
+            );
             await loadFlashcardsFromBackend();
             setAuthMessage("Login successful.");
             applyAuthState();
@@ -2262,7 +2306,12 @@ async function loginUser() {
 
     authSession = { email: user.email };
     saveState({ authSession });
-    await syncLoginWithBackend(email, password);
+    await syncLoginWithBackend(
+        email,
+        password,
+        user && user.name ? user.name : "Student",
+        user && user.role ? user.role : "student"
+    );
     await loadFlashcardsFromBackend();
     setAuthMessage("Login successful.");
     applyAuthState();
@@ -3429,25 +3478,120 @@ function getCurrentPeerChallengeParticipant(challenge) {
     return challenge.participants.find(p => normalizeEmail(p && p.email || "") === email) || null;
 }
 
+function randomLocalChallengeCode() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let out = "";
+    for (let i = 0; i < 8; i++) {
+        out += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return out;
+}
+
+function addDaysISO(dateKey, dayCount) {
+    const base = new Date(`${String(dateKey || "").slice(0, 10)}T00:00:00.000Z`);
+    if (Number.isNaN(base.getTime())) return String(dateKey || "").slice(0, 10);
+    base.setUTCDate(base.getUTCDate() + Number(dayCount || 0));
+    return base.toISOString().slice(0, 10);
+}
+
+function normalizeLocalParticipant(value) {
+    const participant = value && typeof value === "object" ? value : {};
+    const checkins = Array.isArray(participant.checkins)
+        ? [...new Set(participant.checkins.map(d => String(d || "").slice(0, 10)).filter(Boolean))].sort()
+        : [];
+    return {
+        email: normalizeEmail(participant.email || ""),
+        name: String(participant.name || "").trim() || "Student",
+        role: ["student", "teacher", "admin"].includes(participant.role) ? participant.role : "student",
+        joinedAt: participant.joinedAt || new Date().toISOString(),
+        checkins,
+        currentStreak: Math.max(0, Number(participant.currentStreak) || 0),
+        bestStreak: Math.max(0, Number(participant.bestStreak) || 0),
+        lastCheckinDate: String(participant.lastCheckinDate || "")
+    };
+}
+
+function normalizeLocalPeerChallenge(value) {
+    const challenge = value && typeof value === "object" ? value : {};
+    const durationDays = Math.max(1, Math.min(30, Number(challenge.durationDays) || 7));
+    const startDate = String(challenge.startDate || getTodayDateKey()).slice(0, 10);
+    const endDate = String(challenge.endDate || addDaysISO(startDate, durationDays - 1)).slice(0, 10);
+    const participants = Array.isArray(challenge.participants)
+        ? challenge.participants.map(normalizeLocalParticipant).filter(p => p.email)
+        : [];
+    const active = getTodayDateKey() <= endDate;
+    return {
+        id: String(challenge.id || `local-challenge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        code: String(challenge.code || randomLocalChallengeCode()).trim().toUpperCase(),
+        name: String(challenge.name || "7-Day Streak Challenge").trim() || "7-Day Streak Challenge",
+        durationDays,
+        startDate,
+        endDate,
+        createdBy: normalizeEmail(challenge.createdBy || ""),
+        createdAt: challenge.createdAt || new Date().toISOString(),
+        status: active ? "active" : "completed",
+        participants
+    };
+}
+
+function loadLocalPeerChallenges() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(LOCAL_PEER_CHALLENGES_KEY) || "[]");
+        const list = Array.isArray(raw) ? raw.map(normalizeLocalPeerChallenge) : [];
+        return list.slice(0, 500);
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveLocalPeerChallenges(list) {
+    const safe = Array.isArray(list) ? list.map(normalizeLocalPeerChallenge).slice(0, 500) : [];
+    localStorage.setItem(LOCAL_PEER_CHALLENGES_KEY, JSON.stringify(safe));
+    peerChallenges = safe;
+}
+
+function setPeerChallengeBackendIndicator(state, message) {
+    const indicator = document.getElementById('peerChallengeBackendIndicator');
+    if (!indicator) return;
+    indicator.classList.remove('connected', 'disconnected', 'checking');
+    const normalized = ['connected', 'disconnected', 'checking'].includes(state) ? state : 'disconnected';
+    indicator.classList.add(normalized);
+    indicator.textContent = message || (
+        normalized === 'connected'
+            ? 'Backend: Connected'
+            : normalized === 'checking'
+                ? 'Backend: Checking...'
+                : 'Backend: Disconnected'
+    );
+}
+
 function renderPeerChallenges() {
     const statusEl = document.getElementById('peerChallengeStatus');
     const listEl = document.getElementById('peerChallengeList');
     if (!statusEl || !listEl) return;
 
     if (!backendAdminToken) {
-        statusEl.textContent = 'Please login first to enable invite-code challenges.';
-        listEl.innerHTML = '<li class="empty-state">No active peer challenges yet.</li>';
-        return;
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: Local mode');
+        if (!Array.isArray(peerChallenges) || peerChallenges.length === 0) {
+            peerChallenges = loadLocalPeerChallenges();
+        }
+    }
+    if (backendAdminToken) {
+        setPeerChallengeBackendIndicator('connected', 'Backend: Token active');
     }
 
     const active = (peerChallenges || []).filter(ch => ch && ch.status !== 'completed');
     if (active.length === 0) {
-        statusEl.textContent = 'Create or join a private invite-code challenge.';
+        statusEl.textContent = backendAdminToken
+            ? 'Create or join a private invite-code challenge.'
+            : 'Local mode active. Create and join challenges on this device.';
         listEl.innerHTML = '<li class="empty-state">No active peer challenges yet.</li>';
         return;
     }
 
-    statusEl.textContent = `${active.length} active challenge(s). Invite your friends with the code.`;
+    statusEl.textContent = backendAdminToken
+        ? `${active.length} active challenge(s). Invite your friends with the code.`
+        : `${active.length} active local challenge(s).`;
     listEl.innerHTML = active.map(challenge => {
         const participant = getCurrentPeerChallengeParticipant(challenge);
         const checkins = Array.isArray(participant && participant.checkins) ? participant.checkins : [];
@@ -3474,28 +3618,133 @@ function renderPeerChallenges() {
 }
 
 async function loadPeerChallengesFromServer() {
-    if (!backendAdminToken) return;
+    if (!backendAdminToken) {
+        peerChallenges = loadLocalPeerChallenges();
+        renderPeerChallenges();
+        return;
+    }
     try {
+        setPeerChallengeBackendIndicator('checking', 'Backend: Syncing...');
         const response = await fetch(`${API_BASE_URL}/api/peer-challenges`, {
             headers: {
                 'Content-Type': 'application/json',
                 ...getBackendAuthHeaders()
             }
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+            if (response.status === 401) {
+                backendAdminToken = "";
+                localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+                setPeerChallengeBackendIndicator('disconnected', 'Backend: Session expired');
+                renderPeerChallenges();
+                return;
+            }
+            setPeerChallengeBackendIndicator('disconnected', 'Backend: Sync failed');
+            return;
+        }
         const data = await response.json().catch(() => []);
         peerChallenges = Array.isArray(data) ? data : [];
+        setPeerChallengeBackendIndicator('connected', 'Backend: Connected');
         renderPeerChallenges();
-    } catch (_) {}
+    } catch (_) {
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: Offline');
+    }
+}
+
+async function reconnectPeerChallengeSync() {
+    setPeerChallengeBackendIndicator('checking', 'Backend: Checking...');
+    if (!navigator.onLine) {
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: No internet');
+        alert('No internet connection. Please reconnect and try again.');
+        return;
+    }
+
+    if (backendAdminToken) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getBackendAuthHeaders()
+                }
+            });
+            if (response.ok) {
+                await loadPeerChallengesFromServer();
+                return;
+            }
+            backendAdminToken = "";
+            localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+        } catch (_) {}
+    }
+
+    const user = getCurrentUser();
+    if (!user || !user.email) {
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: Disconnected');
+        alert('Login to your account first, then press Reconnect.');
+        return;
+    }
+
+    const password = prompt('Enter your login password to reconnect invite-code challenges:');
+    if (!password) {
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: Disconnected');
+        return;
+    }
+
+    const ok = await syncLoginWithBackend(
+        normalizeEmail(user.email),
+        password,
+        user.name || 'Student',
+        user.role || 'student'
+    );
+
+    if (!ok) {
+        setPeerChallengeBackendIndicator('disconnected', 'Backend: Login failed');
+        alert('Reconnect failed. Check backend server and password, then try again.');
+        return;
+    }
+
+    await loadPeerChallengesFromServer();
 }
 
 async function createPeerChallenge() {
-    if (!backendAdminToken) {
-        alert('Please login first to enable invite-code challenges.');
-        return;
-    }
     const input = document.getElementById('peerChallengeNameInput');
     const name = String(input && input.value ? input.value : '').trim() || '7-Day Streak Challenge';
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const role = user && user.role ? user.role : 'student';
+        const challenge = normalizeLocalPeerChallenge({
+            id: `local-challenge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            code: randomLocalChallengeCode(),
+            name,
+            durationDays: 7,
+            startDate: getTodayDateKey(),
+            endDate: addDaysISO(getTodayDateKey(), 6),
+            createdBy: email,
+            createdAt: new Date().toISOString(),
+            participants: [{
+                email,
+                name: user && user.name ? user.name : 'Student',
+                role,
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }]
+        });
+        const all = loadLocalPeerChallenges();
+        all.unshift(challenge);
+        saveLocalPeerChallenges(all);
+        if (input) input.value = '';
+        renderPeerChallenges();
+        addActivity('user-group', 'Peer Challenge Created (Local)', `${name} | Code ${challenge.code}`);
+        alert(`Challenge created (local mode). Invite code: ${challenge.code}`);
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/peer-challenges`, {
             method: 'POST',
@@ -3517,14 +3766,46 @@ async function createPeerChallenge() {
 }
 
 async function joinPeerChallenge() {
-    if (!backendAdminToken) {
-        alert('Please login first to join invite-code challenges.');
-        return;
-    }
     const input = document.getElementById('peerChallengeJoinCodeInput');
     const code = String(input && input.value ? input.value : '').trim().toUpperCase();
     if (!code) {
         alert('Enter invite code first.');
+        return;
+    }
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const all = loadLocalPeerChallenges();
+        const idx = all.findIndex(ch => String(ch && ch.code || "").toUpperCase() === code);
+        if (idx < 0) {
+            alert('Invite code not found in local mode.');
+            return;
+        }
+        const challenge = normalizeLocalPeerChallenge(all[idx]);
+        const exists = Array.isArray(challenge.participants)
+            && challenge.participants.some(p => normalizeEmail(p && p.email || "") === email);
+        if (!exists) {
+            challenge.participants.push(normalizeLocalParticipant({
+                email,
+                name: user && user.name ? user.name : "Student",
+                role: user && user.role ? user.role : "student",
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }));
+        }
+        all[idx] = normalizeLocalPeerChallenge(challenge);
+        saveLocalPeerChallenges(all);
+        if (input) input.value = '';
+        renderPeerChallenges();
+        addActivity('link', 'Peer Challenge Joined (Local)', `${challenge.name || 'Challenge'} | Code ${code}`);
+        alert(`Joined (local mode): ${challenge.name || 'Challenge'}`);
         return;
     }
     try {
@@ -3549,7 +3830,55 @@ async function joinPeerChallenge() {
 
 async function checkInPeerChallenge(encodedId) {
     const id = decodeURIComponent(String(encodedId || ''));
-    if (!id || !backendAdminToken) return;
+    if (!id) return;
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) return;
+        const today = getTodayDateKey();
+        const all = loadLocalPeerChallenges();
+        const idx = all.findIndex(ch => String(ch && ch.id || "") === id);
+        if (idx < 0) {
+            alert('Challenge not found.');
+            return;
+        }
+        const challenge = normalizeLocalPeerChallenge(all[idx]);
+        if (today > challenge.endDate) {
+            challenge.status = 'completed';
+            all[idx] = normalizeLocalPeerChallenge(challenge);
+            saveLocalPeerChallenges(all);
+            renderPeerChallenges();
+            alert('Challenge has ended.');
+            return;
+        }
+        const pIdx = (challenge.participants || []).findIndex(p => normalizeEmail(p && p.email || "") === email);
+        if (pIdx < 0) {
+            alert('Join this challenge first.');
+            return;
+        }
+        const participant = normalizeLocalParticipant(challenge.participants[pIdx]);
+        if (participant.checkins.includes(today)) {
+            renderPeerChallenges();
+            return;
+        }
+        const previousDate = participant.lastCheckinDate || "";
+        if (!previousDate) participant.currentStreak = 1;
+        else {
+            const prev = new Date(`${previousDate}T00:00:00.000Z`).getTime();
+            const curr = new Date(`${today}T00:00:00.000Z`).getTime();
+            const gapDays = Math.round((curr - prev) / (1000 * 60 * 60 * 24));
+            participant.currentStreak = gapDays === 1 ? participant.currentStreak + 1 : 1;
+        }
+        participant.bestStreak = Math.max(participant.bestStreak, participant.currentStreak);
+        participant.lastCheckinDate = today;
+        participant.checkins = [...participant.checkins, today].sort();
+        challenge.participants[pIdx] = participant;
+        all[idx] = normalizeLocalPeerChallenge(challenge);
+        saveLocalPeerChallenges(all);
+        renderPeerChallenges();
+        addActivity('check', 'Peer Challenge Check-In (Local)', `${challenge.name || 'Challenge'} | Streak ${participant.currentStreak}`);
+        return;
+    }
     try {
         const response = await fetch(`${API_BASE_URL}/api/peer-challenges/${encodeURIComponent(id)}/checkin`, {
             method: 'POST',
