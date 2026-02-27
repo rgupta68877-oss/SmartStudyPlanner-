@@ -3272,6 +3272,7 @@ function renderDashboard() {
     renderScholarshipExamAlerts();
     renderDailyTop3AdaptiveTasks();
     renderWeakTopicDetection();
+    renderQuizScoreSnapshot();
     renderMistakeDueBadges();
     renderStudyMoodCheckin();
     renderDistractionPanel();
@@ -3288,6 +3289,49 @@ function renderDashboard() {
     renderRecoveryHistory();
     renderDashboardQuestionBank();
     renderMemoryBoosterSession();
+}
+
+function renderQuizScoreSnapshot() {
+    const summaryEl = document.getElementById('quizSnapshotSummary');
+    const listEl = document.getElementById('quizSnapshotList');
+    if (!summaryEl || !listEl) return;
+
+    const user = getCurrentUser();
+    const userEmail = normalizeEmail(user && user.email || "");
+    const records = (quizScores || [])
+        .filter(score => normalizeEmail(score && score.userEmail || "") === userEmail)
+        .sort((a, b) => Date.parse(b && b.createdAt || 0) - Date.parse(a && a.createdAt || 0));
+
+    if (records.length === 0) {
+        summaryEl.textContent = 'No quiz attempts yet.';
+        listEl.innerHTML = '<li class="empty-state">Take a quiz to see scores here.</li>';
+        return;
+    }
+
+    const avg = Math.round(records.reduce((sum, item) => sum + (Number(item && item.percent) || 0), 0) / records.length);
+    const best = Math.max(...records.map(item => Number(item && item.percent) || 0));
+    const latest = Number(records[0] && records[0].percent) || 0;
+    const previous = Number(records[1] && records[1].percent);
+    const trend = Number.isFinite(previous)
+        ? (latest > previous ? 'Improving' : latest < previous ? 'Needs boost' : 'Stable')
+        : 'Start your streak';
+
+    summaryEl.textContent = `Avg ${avg}% | Best ${best}% | Latest ${latest}% | Trend: ${trend}`;
+
+    listEl.innerHTML = records.slice(0, 5).map(item => {
+        const subject = String(item && item.subject || 'Any');
+        const percent = Number(item && item.percent) || 0;
+        const score = Number(item && item.score) || 0;
+        const total = Math.max(1, Number(item && item.total) || 1);
+        const dateLabel = formatDate(item && item.createdAt ? item.createdAt : '');
+        return `
+            <li>
+                <strong>${subject}</strong>
+                <span>${score}/${total} (${percent}%)</span>
+                <span class="activity-time">${dateLabel}</span>
+            </li>
+        `;
+    }).join('');
 }
 
 function getDateKeyUTC(value) {
