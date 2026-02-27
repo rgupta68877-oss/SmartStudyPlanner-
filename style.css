@@ -377,8 +377,8 @@ body {
 /* Quick Actions */
 .action-buttons {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
 }
 
 .action-btn {
@@ -418,6 +418,25 @@ body {
 
 .quick-actions .action-btn.qa-room { background: #0369a1; }
 .quick-actions .action-btn.qa-room:hover { background: #075985; }
+
+.quick-actions .action-btn {
+    min-height: 110px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-direction: column;
+    text-align: left;
+    padding: 12px 14px;
+    gap: 12px;
+}
+
+.quick-actions .action-btn .qa-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.02em;
+    font-weight: 600;
+    line-height: 1.2;
+}
 
 .quick-actions .action-btn .qa-chip {
     display: inline-flex;
@@ -466,6 +485,12 @@ body {
     background: #ffe4e6;
     border-color: #fda4af;
     color: #9f1239;
+}
+
+@media (max-width: 768px) {
+    .action-buttons {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Recent Activity */
