@@ -5074,6 +5074,7 @@ function getAdaptiveWeakSubjects(limit = 4) {
 
 function renderDailyTop3AdaptiveTasks() {
     const list = document.getElementById('doNextList');
+    const refreshStatus = document.getElementById('dailyTop3RefreshStatus');
     if (!list) return;
 
     const now = new Date();
@@ -5085,6 +5086,7 @@ function renderDailyTop3AdaptiveTasks() {
     }).slice(0, 3);
     if (ranked.length === 0) {
         list.innerHTML = '<li class="empty-state">No active tasks to prioritize</li>';
+        if (refreshStatus) refreshStatus.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
         return;
     }
 
@@ -5119,6 +5121,7 @@ function renderDailyTop3AdaptiveTasks() {
         </li>
     `;
     }).join('');
+    if (refreshStatus) refreshStatus.textContent = `Last refresh: ${new Date().toLocaleTimeString()}`;
 }
 
 function completeTaskFromDailyTop3(encodedTaskId) {
@@ -5132,6 +5135,16 @@ function completeTaskFromDailyTop3(encodedTaskId) {
     }
     toggleTask(index);
     renderDailyTop3AdaptiveTasks();
+}
+
+function refreshDailyTop3AdaptiveTasks() {
+    try {
+        renderDailyTop3AdaptiveTasks();
+    } catch (error) {
+        const refreshStatus = document.getElementById('dailyTop3RefreshStatus');
+        if (refreshStatus) refreshStatus.textContent = 'Last refresh: failed';
+        alert(`Top 3 refresh failed: ${error && error.message ? error.message : 'Unknown error'}`);
+    }
 }
 
 function renderDoNext() {
