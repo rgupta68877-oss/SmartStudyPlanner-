@@ -584,6 +584,17 @@ body {
 
 #peerChallengeList {
     margin-top: 6px;
+    padding-left: 0;
+    list-style: none;
+}
+
+#peerChallengeList li {
+    list-style: none;
+}
+
+#peerChallengeList .empty-state {
+    padding: 18px 0 0;
+    text-align: center;
 }
 
 /* Upcoming Deadlines */

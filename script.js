@@ -3428,7 +3428,7 @@ function renderPeerChallenges() {
     if (!statusEl || !listEl) return;
 
     if (!backendAdminToken) {
-        statusEl.textContent = 'Peer challenges need backend login token. Login to enable invite-code sync.';
+        statusEl.textContent = 'Please login first to enable invite-code challenges.';
         listEl.innerHTML = '<li class="empty-state">No active peer challenges yet.</li>';
         return;
     }
