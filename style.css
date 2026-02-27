@@ -532,6 +532,10 @@ body {
     margin-bottom: 12px;
 }
 
+.peer-challenge-panel h3 {
+    margin-bottom: 10px;
+}
+
 .peer-challenge-panel input[type="text"] {
     padding: 11px 12px;
     border: 1px solid #9ca3af;
@@ -550,6 +554,7 @@ body {
     width: 100%;
     border-radius: 16px;
     font-size: 1.1em;
+    min-height: 80px;
     padding: 16px;
 }
 
@@ -573,7 +578,7 @@ body {
 }
 
 #peerChallengeStatus {
-    margin-top: 4px;
+    margin-top: 8px;
     margin-bottom: 10px;
 }
 
