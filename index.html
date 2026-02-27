@@ -259,21 +259,23 @@
                 </ul>
             </div>
 
-            <div class="card consistency-rewards">
-                <h3><i class="fas fa-user-group"></i> Peer Challenge Mode</h3>
-                <div class="task-options">
-                    <input type="text" id="peerChallengeNameInput" placeholder="Challenge name (default: 7-Day Streak)">
+            <div class="card consistency-rewards peer-challenge-panel">
+                <h3><i class="fas fa-users"></i> Peer Challenge Mode</h3>
+                <div class="task-options peer-create-name-row">
+                    <input type="text" id="peerChallengeNameInput" placeholder="Challenge name (default: 7-Day Challenge)">
+                </div>
+                <div class="task-options peer-create-btn-row">
                     <button class="add-btn" onclick="createPeerChallenge()">
                         <i class="fas fa-plus"></i> Create 7-Day Challenge
                     </button>
                 </div>
-                <div class="task-options">
+                <div class="task-options peer-join-row">
                     <input type="text" id="peerChallengeJoinCodeInput" placeholder="Enter invite code">
                     <button class="action-btn" onclick="joinPeerChallenge()">
                         <i class="fas fa-link"></i> Join by Code
                     </button>
                 </div>
-                <p id="peerChallengeStatus">Create or join a private invite-code challenge.</p>
+                <p id="peerChallengeStatus">Peer challenges need backend login token. Login to enable invite-code sync.</p>
                 <ul id="peerChallengeList">
                     <li class="empty-state">No active peer challenges yet.</li>
                 </ul>

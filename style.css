@@ -528,6 +528,59 @@ body {
     color: var(--text-light);
 }
 
+.peer-challenge-panel .task-options {
+    margin-bottom: 12px;
+}
+
+.peer-challenge-panel input[type="text"] {
+    padding: 11px 12px;
+    border: 1px solid #9ca3af;
+    border-radius: 6px;
+    background: #ffffff;
+    color: var(--text-color);
+    font-size: 1.04em;
+}
+
+.peer-create-name-row input[type="text"] {
+    width: 280px;
+    max-width: 100%;
+}
+
+.peer-create-btn-row .add-btn {
+    width: 100%;
+    border-radius: 16px;
+    font-size: 1.1em;
+    padding: 16px;
+}
+
+.peer-join-row {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 14px;
+}
+
+.peer-join-row input[type="text"] {
+    flex: 1;
+    min-width: 220px;
+    min-height: 48px;
+}
+
+.peer-join-row .action-btn {
+    min-width: 200px;
+    min-height: 48px;
+    border-radius: 16px;
+    font-size: 1.05em;
+}
+
+#peerChallengeStatus {
+    margin-top: 4px;
+    margin-bottom: 10px;
+}
+
+#peerChallengeList {
+    margin-top: 6px;
+}
+
 /* Upcoming Deadlines */
 .upcoming-deadlines li {
     display: flex;
@@ -1695,6 +1748,21 @@ body.focus-shield-lock {
     .task-options input[type="date"],
     .task-options input[type="number"],
     .task-options input[type="text"] {
+        min-width: 100%;
+    }
+
+    .peer-create-name-row input[type="text"] {
+        width: 100%;
+    }
+
+    .peer-join-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .peer-join-row input[type="text"],
+    .peer-join-row .action-btn {
+        width: 100%;
         min-width: 100%;
     }
 
