@@ -445,6 +445,38 @@
                     <button class="mode-btn" onclick="setTimerMode(5)" data-minutes="5">Short Break</button>
                     <button class="mode-btn" onclick="setTimerMode(15)" data-minutes="15">Long Break</button>
                 </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="focusShieldEnableCheck" onchange="setFocusShieldEnabled(this.checked)">
+                        Enable Focus Shield
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="focusShieldStrictCheck" onchange="setFocusShieldStrict(this.checked)">
+                        Strict lock-screen reminder
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label for="focusShieldStrictCooldown">Strict cooldown:</label>
+                    <select id="focusShieldStrictCooldown" onchange="setFocusShieldStrictCooldown(this.value)">
+                        <option value="5">5 seconds</option>
+                        <option value="10" selected>10 seconds</option>
+                        <option value="15">15 seconds</option>
+                        <option value="20">20 seconds</option>
+                        <option value="30">30 seconds</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="focusShieldGentleCooldown">Gentle cooldown:</label>
+                    <select id="focusShieldGentleCooldown" onchange="setFocusShieldGentleCooldown(this.value)">
+                        <option value="1">1 second</option>
+                        <option value="2">2 seconds</option>
+                        <option value="3" selected>3 seconds</option>
+                        <option value="5">5 seconds</option>
+                    </select>
+                </div>
+                <p id="focusShieldStatus">Focus Shield: Off</p>
                 <p id="burnoutGuardHint" class="burnout-guard-hint">Burnout Guard: Ready</p>
             </div>
 
@@ -1851,6 +1883,21 @@
         <ul id="taskScoreBreakdownList" class="score-breakdown-list">
             <li class="empty-state">No score data available</li>
         </ul>
+    </div>
+</div>
+
+<!-- Focus Shield Modal -->
+<div class="modal focus-shield-modal" id="focusShieldModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Focus Shield Active</h3>
+        </div>
+        <p id="focusShieldModalText">You left study mode during focus session. Return and continue.</p>
+        <div class="print-options">
+            <button class="action-btn" id="focusShieldResumeBtn" onclick="resumeFromFocusShield()">
+                <i class="fas fa-lock-open"></i> Resume Focus
+            </button>
+        </div>
     </div>
 </div>
 

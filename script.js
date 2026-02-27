@@ -25,6 +25,7 @@ const API_BASE_URL = (() => {
     return String(fromEnv).replace(/\/+$/, "");
 })();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
+const FOCUS_SHIELD_SETTINGS_KEY = "focusShieldSettings";
 const PRESENCE_CLIENT_ID_KEY = "presenceClientId";
 const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
@@ -1195,6 +1196,26 @@ let timerModeMinutes = 25;
 let timerModeSetAt = Date.now();
 let timerCurrentSessionPaused = false;
 let timerCurrentSessionStartOnTimeAwarded = false;
+let focusShieldSettings = (() => {
+    try {
+        const raw = JSON.parse(localStorage.getItem(FOCUS_SHIELD_SETTINGS_KEY) || "{}");
+        const strictCooldownSeconds = Number(raw && raw.strictCooldownSeconds);
+        const gentleCooldownSeconds = Number(raw && raw.gentleCooldownSeconds);
+        return {
+            enabled: Boolean(raw && raw.enabled),
+            strict: Boolean(raw && raw.strict),
+            strictCooldownSeconds: [5, 10, 15, 20, 30].includes(strictCooldownSeconds) ? strictCooldownSeconds : 10,
+            gentleCooldownSeconds: [1, 2, 3, 5].includes(gentleCooldownSeconds) ? gentleCooldownSeconds : 3
+        };
+    } catch (_) {
+        return { enabled: false, strict: true, strictCooldownSeconds: 10, gentleCooldownSeconds: 3 };
+    }
+})();
+let focusShieldPendingViolation = false;
+let focusShieldLastHiddenAt = "";
+let focusShieldCooldownTimer = null;
+let focusShieldListenersAttached = false;
+let focusShieldUnlockReady = false;
 const BURNOUT_GUARD_MINUTES = 90;
 const BURNOUT_GUARD_FOCUS_SESSIONS = 3;
 let pendingReflectionRequired = false;
@@ -3126,6 +3147,7 @@ function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
 function renderDashboard() {
     renderTimerSubjectOptions();
     renderBurnoutGuardHint();
+    renderFocusShieldStatus();
     const completed = tasks.filter(t => t.done).length;
     document.getElementById('totalTasks').textContent = tasks.length;
     document.getElementById('completedTasks').textContent = completed;
@@ -11699,6 +11721,176 @@ function renderBurnoutGuardHint() {
     hint.style.color = '';
 }
 
+function persistFocusShieldSettings() {
+    localStorage.setItem(FOCUS_SHIELD_SETTINGS_KEY, JSON.stringify({
+        enabled: Boolean(focusShieldSettings.enabled),
+        strict: Boolean(focusShieldSettings.strict),
+        strictCooldownSeconds: Number(focusShieldSettings.strictCooldownSeconds) || 10,
+        gentleCooldownSeconds: Number(focusShieldSettings.gentleCooldownSeconds) || 3
+    }));
+}
+
+function renderFocusShieldStatus() {
+    const enableCheck = document.getElementById('focusShieldEnableCheck');
+    const strictCheck = document.getElementById('focusShieldStrictCheck');
+    const strictCooldownSelect = document.getElementById('focusShieldStrictCooldown');
+    const gentleCooldownSelect = document.getElementById('focusShieldGentleCooldown');
+    const statusEl = document.getElementById('focusShieldStatus');
+    if (enableCheck) enableCheck.checked = Boolean(focusShieldSettings.enabled);
+    if (strictCheck) strictCheck.checked = Boolean(focusShieldSettings.strict);
+    if (strictCooldownSelect) strictCooldownSelect.value = String(Number(focusShieldSettings.strictCooldownSeconds) || 10);
+    if (gentleCooldownSelect) gentleCooldownSelect.value = String(Number(focusShieldSettings.gentleCooldownSeconds) || 3);
+    if (!statusEl) return;
+
+    if (!focusShieldSettings.enabled) {
+        statusEl.textContent = 'Focus Shield: Off';
+        return;
+    }
+    statusEl.textContent = focusShieldSettings.strict
+        ? `Focus Shield: Strict mode on (${Number(focusShieldSettings.strictCooldownSeconds) || 10}s lock after switching apps).`
+        : `Focus Shield: Gentle mode on (${Number(focusShieldSettings.gentleCooldownSeconds) || 3}s reminder lock).`;
+}
+
+function setFocusShieldEnabled(checked) {
+    focusShieldSettings.enabled = Boolean(checked);
+    if (!focusShieldSettings.enabled) {
+        focusShieldPendingViolation = false;
+        closeFocusShieldModal();
+    }
+    persistFocusShieldSettings();
+    renderFocusShieldStatus();
+}
+
+function setFocusShieldStrict(checked) {
+    focusShieldSettings.strict = Boolean(checked);
+    persistFocusShieldSettings();
+    renderFocusShieldStatus();
+}
+
+function setFocusShieldStrictCooldown(value) {
+    const seconds = Number(value);
+    focusShieldSettings.strictCooldownSeconds = [5, 10, 15, 20, 30].includes(seconds) ? seconds : 10;
+    persistFocusShieldSettings();
+    renderFocusShieldStatus();
+}
+
+function setFocusShieldGentleCooldown(value) {
+    const seconds = Number(value);
+    focusShieldSettings.gentleCooldownSeconds = [1, 2, 3, 5].includes(seconds) ? seconds : 3;
+    persistFocusShieldSettings();
+    renderFocusShieldStatus();
+}
+
+function isFocusSessionRunning() {
+    return Boolean(isTimerRunning) && getTimerModeLabel(timerModeMinutes) === 'Focus';
+}
+
+function isFocusShieldWatchActive() {
+    return Boolean(focusShieldSettings.enabled) && isFocusSessionRunning();
+}
+
+function closeFocusShieldModal() {
+    const modal = document.getElementById('focusShieldModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.classList.remove('strict');
+    document.body.classList.remove('focus-shield-lock');
+    if (focusShieldCooldownTimer) {
+        clearInterval(focusShieldCooldownTimer);
+        focusShieldCooldownTimer = null;
+    }
+    focusShieldUnlockReady = false;
+}
+
+function resumeFromFocusShield() {
+    if (!focusShieldUnlockReady) return;
+    closeFocusShieldModal();
+    focusShieldPendingViolation = false;
+    renderFocusShieldStatus();
+}
+
+function openFocusShieldModal() {
+    const modal = document.getElementById('focusShieldModal');
+    const text = document.getElementById('focusShieldModalText');
+    const button = document.getElementById('focusShieldResumeBtn');
+    if (!modal || !text || !button) return;
+
+    const cooldownSeconds = focusShieldSettings.strict
+        ? (Number(focusShieldSettings.strictCooldownSeconds) || 10)
+        : (Number(focusShieldSettings.gentleCooldownSeconds) || 3);
+    let left = cooldownSeconds;
+    focusShieldUnlockReady = false;
+    modal.classList.toggle('strict', Boolean(focusShieldSettings.strict));
+    document.body.classList.add('focus-shield-lock');
+    text.textContent = focusShieldSettings.strict
+        ? 'Strict Focus Shield: return to study only. Unlock starts after cooldown.'
+        : 'Focus Shield reminder: return to study mode and continue your session.';
+    button.disabled = true;
+    button.innerHTML = `<i class="fas fa-hourglass-half"></i> Resume in ${left}s`;
+    modal.classList.add('active');
+
+    if (focusShieldCooldownTimer) clearInterval(focusShieldCooldownTimer);
+    focusShieldCooldownTimer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+            clearInterval(focusShieldCooldownTimer);
+            focusShieldCooldownTimer = null;
+            button.disabled = false;
+            focusShieldUnlockReady = true;
+            button.innerHTML = '<i class="fas fa-lock-open"></i> Resume Focus';
+            return;
+        }
+        button.innerHTML = `<i class="fas fa-hourglass-half"></i> Resume in ${left}s`;
+    }, 1000);
+}
+
+function handleFocusShieldVisibilityChange() {
+    if (!focusShieldSettings.enabled) return;
+
+    if (document.visibilityState === 'hidden') {
+        if (isFocusShieldWatchActive()) {
+            focusShieldPendingViolation = true;
+            focusShieldLastHiddenAt = new Date().toISOString();
+            timerCurrentSessionPaused = true;
+        }
+        return;
+    }
+
+    if (document.visibilityState === 'visible' && focusShieldPendingViolation && isFocusShieldWatchActive()) {
+        openFocusShieldModal();
+        addActivity('shield-halved', 'Focus Shield Triggered', 'Returned after leaving active focus session');
+    }
+}
+
+function setupFocusShieldListeners() {
+    if (focusShieldListenersAttached) return;
+    focusShieldListenersAttached = true;
+    const modal = document.getElementById('focusShieldModal');
+    document.addEventListener('visibilitychange', handleFocusShieldVisibilityChange);
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        if (!modal || !modal.classList.contains('active')) return;
+        event.preventDefault();
+    });
+    if (modal) {
+        modal.addEventListener('click', (event) => {
+            if (event.target !== modal) return;
+            if (!focusShieldUnlockReady) {
+                const text = document.getElementById('focusShieldModalText');
+                if (text) text.textContent = 'Complete cooldown, then press Resume Focus.';
+            }
+        });
+    }
+    window.addEventListener('blur', () => {
+        if (!focusShieldSettings.enabled) return;
+        if (isFocusShieldWatchActive()) {
+            focusShieldPendingViolation = true;
+            focusShieldLastHiddenAt = new Date().toISOString();
+            timerCurrentSessionPaused = true;
+        }
+    });
+}
+
 function promptBurnoutGuardBreak(contextLabel) {
     const stats = getConsecutiveFocusStats();
     if (!isBurnoutRisk(stats)) {
@@ -11752,6 +11944,9 @@ function startTimer() {
     }
 
     isTimerRunning = true;
+    focusShieldPendingViolation = false;
+    closeFocusShieldModal();
+    renderFocusShieldStatus();
     document.getElementById('startBtn').disabled = true;
     document.getElementById('pauseBtn').disabled = false;
     
@@ -11825,13 +12020,17 @@ function pauseTimer() {
     if (getTimerModeLabel(timerModeMinutes) === 'Focus') {
         timerCurrentSessionPaused = true;
     }
+    closeFocusShieldModal();
+    renderFocusShieldStatus();
     document.getElementById('startBtn').disabled = false;
     document.getElementById('pauseBtn').disabled = true;
 }
 
 function resetTimer() {
     pauseTimer();
+    focusShieldPendingViolation = false;
     setTimerMode(timerModeMinutes || 25);
+    renderFocusShieldStatus();
 }
 
 function setTimerMode(minutes) {
@@ -12184,6 +12383,7 @@ function bootstrapAuthenticatedApp() {
     autoGenerateRecoveryPlanIfNeeded();
     smartSettings = normalizeSmartSettings(smartSettings);
     applySmartSettingsEffects();
+    setupFocusShieldListeners();
     renderDashboard();
     renderTasks();
     renderCalendar();

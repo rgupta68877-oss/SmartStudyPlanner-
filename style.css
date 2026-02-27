@@ -1606,6 +1606,32 @@ body.compact-mode .page-content {
     gap: 10px;
 }
 
+body.focus-shield-lock {
+    overflow: hidden;
+}
+
+.focus-shield-modal {
+    z-index: 2200;
+    background: rgba(5, 10, 20, 0.82);
+    backdrop-filter: blur(3px);
+}
+
+.focus-shield-modal .modal-content {
+    max-width: 640px;
+    text-align: center;
+    border: 2px solid rgba(20, 184, 166, 0.55);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+}
+
+.focus-shield-modal.strict .modal-content {
+    animation: focusShieldPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes focusShieldPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.01); }
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
