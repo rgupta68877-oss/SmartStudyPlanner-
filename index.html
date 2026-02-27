@@ -279,6 +279,55 @@
                 </ul>
             </div>
 
+            <div class="card consistency-rewards">
+                <h3><i class="fas fa-people-roof"></i> Study Group Rooms</h3>
+                <div class="task-options">
+                    <input type="text" id="studyGroupNameInput" placeholder="Room name (default: Study Room)">
+                    <button class="add-btn" onclick="createStudyGroupRoom()">
+                        <i class="fas fa-plus"></i> Create Room
+                    </button>
+                </div>
+                <div class="task-options">
+                    <input type="text" id="studyGroupJoinCodeInput" placeholder="Enter invite code">
+                    <button class="action-btn" onclick="joinStudyGroupRoom()">
+                        <i class="fas fa-link"></i> Join Room
+                    </button>
+                </div>
+                <div class="task-options">
+                    <select id="studyGroupRoomSelect">
+                        <option value="">Select room</option>
+                    </select>
+                    <button class="action-btn" onclick="checkInStudyGroupRoom()">
+                        <i class="fas fa-fire"></i> Check In (Streak)
+                    </button>
+                </div>
+                <div class="task-options">
+                    <input type="text" id="studyGroupGoalInput" placeholder="Shared goal (e.g., Finish Chapter 3 by Friday)">
+                    <button class="action-btn" onclick="postStudyGroupGoal()">
+                        <i class="fas fa-bullseye"></i> Share Goal
+                    </button>
+                </div>
+                <div class="task-options">
+                    <input type="text" id="studyGroupDoubtInput" placeholder="Post doubt to group">
+                    <select id="studyGroupDoubtSubject">
+                        <option value="General">General</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                    </select>
+                    <button class="action-btn" onclick="postStudyGroupDoubt()">
+                        <i class="fas fa-circle-question"></i> Ask Doubt
+                    </button>
+                </div>
+                <p id="studyGroupStatus">Create or join a private room to share goals and doubts.</p>
+                <ul id="studyGroupList">
+                    <li class="empty-state">No study rooms joined yet.</li>
+                </ul>
+            </div>
+
             <div class="card quick-actions">
                 <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
                 <div class="action-buttons">
@@ -437,6 +486,34 @@
                 <h3><i class="fas fa-exclamation-triangle"></i> Upcoming Deadlines</h3>
                 <ul id="upcomingDeadlines">
                     <li class="empty-state">No upcoming deadlines</li>
+                </ul>
+            </div>
+
+            <div class="card upcoming-deadlines">
+                <h3><i class="fas fa-bell"></i> Scholarship / Exam Alerts</h3>
+                <div class="task-options">
+                    <select id="alertClassFilter" onchange="renderScholarshipExamAlerts()">
+                        <option value="7">Class 7</option>
+                        <option value="8">Class 8</option>
+                        <option value="9">Class 9</option>
+                        <option value="10" selected>Class 10</option>
+                        <option value="11">Class 11</option>
+                        <option value="12">Class 12</option>
+                    </select>
+                    <select id="alertSubjectFilter" onchange="renderScholarshipExamAlerts()">
+                        <option value="Any">Any Subject</option>
+                        <option value="Math">Math</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="History">History</option>
+                        <option value="Geography">Geography</option>
+                        <option value="Programming">Programming</option>
+                        <option value="General">General</option>
+                    </select>
+                </div>
+                <p id="alertMatchSummary">Select class and subject to view matching scholarship/exam alerts.</p>
+                <ul id="alertMatchList">
+                    <li class="empty-state">No alert match yet.</li>
                 </ul>
             </div>
 
@@ -1029,6 +1106,28 @@
                 <canvas id="pastPaperTrendChart" height="120"></canvas>
             </div>
             <div class="card exam-add">
+                <h3><i class="fas fa-chess-clock"></i> Exam Strategy Simulator</h3>
+                <div class="task-options">
+                    <input type="number" id="examStrategyDurationInput" min="30" max="360" step="5" value="120" placeholder="Exam duration (min)">
+                    <input type="number" id="examStrategyReviewBufferInput" min="0" max="30" step="1" value="10" placeholder="Review buffer (min)">
+                </div>
+                <div class="input-group">
+                    <textarea id="examStrategySectionsInput" rows="4" placeholder="Enter sections, one per line. Example:&#10;MCQ:40&#10;Short Answer:35&#10;Long Answer:25"></textarea>
+                </div>
+                <div class="task-options">
+                    <button class="action-btn" onclick="simulateExamStrategy()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Simulate Strategy
+                    </button>
+                    <button class="add-btn" onclick="createExamStrategyPracticeTasks()">
+                        <i class="fas fa-list-check"></i> Create Practice Tasks
+                    </button>
+                </div>
+                <p id="examStrategySummary">Enter exam duration and sections to generate a time-split strategy.</p>
+                <ul id="examStrategyPlanList">
+                    <li class="empty-state">No exam strategy generated yet.</li>
+                </ul>
+            </div>
+            <div class="card exam-add">
                 <h3><i class="fas fa-hourglass-half"></i> Exam Countdown Engine</h3>
                 <div class="task-options">
                     <input type="text" id="countdownExamName" placeholder="Exam name (e.g., Midterm Math)">
@@ -1062,6 +1161,30 @@
                 <p id="countdownEngineSummary">Add exam details to generate revision waves, mock tests, and buffer days.</p>
                 <ul id="countdownEnginePlanList">
                     <li class="empty-state">No countdown plan generated yet.</li>
+                </ul>
+            </div>
+            <div class="card exam-add">
+                <h3><i class="fas fa-pen-ruler"></i> AI Answer Evaluator</h3>
+                <div class="input-group">
+                    <input type="text" id="answerEvalQuestionInput" placeholder="Question prompt (e.g., Explain photosynthesis)">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="answerEvalKeywordsInput" placeholder="Expected keywords (comma separated)">
+                </div>
+                <div class="input-group">
+                    <textarea id="answerEvalStudentAnswerInput" rows="6" placeholder="Write your answer here..."></textarea>
+                </div>
+                <div class="task-options">
+                    <button class="add-btn" onclick="evaluateStudentAnswer()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Evaluate Answer
+                    </button>
+                    <button class="action-btn" onclick="clearAnswerEvaluationForm()">
+                        <i class="fas fa-eraser"></i> Clear
+                    </button>
+                </div>
+                <p id="answerEvalSummary">Submit an answer to get structure/content score and improvement points.</p>
+                <ul id="answerEvalFeedbackList">
+                    <li class="empty-state">No evaluation yet.</li>
                 </ul>
             </div>
         </div>

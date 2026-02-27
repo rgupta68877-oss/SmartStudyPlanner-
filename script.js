@@ -1216,7 +1216,9 @@ let analyticsTrendSubject = "all";
 let lastAISuggestionPlan = null;
 let pendingAICreationPreview = null;
 let pendingExamCountdownPlan = null;
+let pendingExamStrategyPlan = null;
 let peerChallenges = [];
+let studyGroups = [];
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
 let firebaseInitPromise = null;
 let firebaseAuth = null;
@@ -3160,6 +3162,7 @@ function renderDashboard() {
     
     // Upcoming deadlines
     renderUpcomingDeadlines();
+    renderScholarshipExamAlerts();
     renderDailyTop3AdaptiveTasks();
     renderWeakTopicDetection();
     renderMistakeDueBadges();
@@ -3169,7 +3172,9 @@ function renderDashboard() {
     renderFocusDNAProfile();
     renderMicroWinStats();
     renderPeerChallenges();
+    renderStudyGroupRooms();
     loadPeerChallengesFromServer();
+    loadStudyGroupsFromServer();
     renderFlashcardsDueToday();
     renderTodayPlan();
     renderRecoveryPlanStatus();
@@ -3532,6 +3537,252 @@ async function checkInPeerChallenge(encodedId) {
         addActivity('check', 'Peer Challenge Check-In', `${data.name || 'Challenge'} | Streak ${streak}`);
     } catch (err) {
         alert(`Check-in failed: ${err.message}`);
+    }
+}
+
+function renderStudyGroupRoomSelect() {
+    const select = document.getElementById('studyGroupRoomSelect');
+    if (!select) return;
+    const options = (studyGroups || []).map(room => `<option value="${escapeHtmlAttribute(room.id || '')}">${escapeHtml(room.name || 'Study Room')} (${escapeHtml(room.code || '-')})</option>`);
+    const current = select.value;
+    select.innerHTML = `<option value="">Select room</option>${options.join('')}`;
+    if ((studyGroups || []).some(room => room.id === current)) select.value = current;
+}
+
+function getCurrentStudyGroupRoom() {
+    const select = document.getElementById('studyGroupRoomSelect');
+    const selectedId = String(select && select.value ? select.value : '').trim();
+    if (!selectedId) return null;
+    return (studyGroups || []).find(room => String(room.id || '') === selectedId) || null;
+}
+
+function getCurrentStudyGroupMember(room) {
+    const user = getCurrentUser();
+    if (!user || !room || !Array.isArray(room.members)) return null;
+    const email = normalizeEmail(user.email || '');
+    return room.members.find(member => normalizeEmail(member && member.email || '') === email) || null;
+}
+
+function renderStudyGroupRooms() {
+    const statusEl = document.getElementById('studyGroupStatus');
+    const listEl = document.getElementById('studyGroupList');
+    if (!statusEl || !listEl) return;
+
+    renderStudyGroupRoomSelect();
+    if (!backendAdminToken) {
+        statusEl.textContent = 'Study group rooms need backend login token. Login to sync private rooms.';
+        listEl.innerHTML = '<li class="empty-state">No study rooms joined yet.</li>';
+        return;
+    }
+
+    const activeRooms = (studyGroups || []).filter(room => room && room.status !== 'completed');
+    if (activeRooms.length === 0) {
+        statusEl.textContent = 'Create or join a private room to share goals and doubts.';
+        listEl.innerHTML = '<li class="empty-state">No study rooms joined yet.</li>';
+        return;
+    }
+
+    statusEl.textContent = `${activeRooms.length} room(s) active. Share goals, track streaks, and exchange doubts.`;
+    listEl.innerHTML = activeRooms.map(room => {
+        const members = Array.isArray(room.members) ? room.members : [];
+        const goalsList = Array.isArray(room.goals) ? room.goals.slice(0, 3) : [];
+        const doubtsList = Array.isArray(room.doubts) ? room.doubts.slice(0, 3) : [];
+        const streakBoard = [...members]
+            .sort((a, b) => Number(b.currentStreak || 0) - Number(a.currentStreak || 0))
+            .slice(0, 3)
+            .map(member => `${member.name || 'Student'} (${Number(member.currentStreak || 0)})`)
+            .join(', ') || 'No streak check-ins yet';
+        const me = getCurrentStudyGroupMember(room);
+        const checkedToday = Boolean(me && Array.isArray(me.checkins) && me.checkins.includes(getTodayDateKey()));
+        return `
+            <li>
+                <strong>${escapeHtml(room.name || 'Study Room')}</strong>
+                <span>Code: ${escapeHtml(room.code || '-')} | Members: ${members.length}</span>
+                <div class="assignment-meta">
+                    <span>Streak board: ${escapeHtml(streakBoard)}</span>
+                    <span class="task-due">${escapeHtml(room.startDate || '')} to ${escapeHtml(room.endDate || '')}</span>
+                </div>
+                <p><strong>Shared goals:</strong> ${goalsList.length > 0 ? goalsList.map(goal => escapeHtml(goal.text || '')).join(' | ') : 'No goals yet'}</p>
+                <p><strong>Doubt exchange:</strong> ${doubtsList.length > 0 ? doubtsList.map(doubt => `${escapeHtml(doubt.subject || 'General')}: ${escapeHtml(doubt.text || '')}`).join(' | ') : 'No doubts yet'}</p>
+                <div class="task-options">
+                    <button class="action-btn" onclick="checkInStudyGroupRoom('${encodeURIComponent(room.id || '')}')" ${checkedToday ? 'disabled' : ''}>
+                        <i class="fas fa-fire"></i> ${checkedToday ? 'Checked In Today' : 'Check In'}
+                    </button>
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+async function loadStudyGroupsFromServer() {
+    if (!backendAdminToken) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups`, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            }
+        });
+        if (!response.ok) return;
+        const data = await response.json().catch(() => []);
+        studyGroups = Array.isArray(data) ? data : [];
+        renderStudyGroupRooms();
+    } catch (_) {}
+}
+
+async function createStudyGroupRoom() {
+    if (!backendAdminToken) {
+        alert('Please login first to enable private study rooms.');
+        return;
+    }
+    const input = document.getElementById('studyGroupNameInput');
+    const name = String(input && input.value ? input.value : '').trim() || 'Study Room';
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ name, durationDays: 30 })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to create study room');
+        if (input) input.value = '';
+        await loadStudyGroupsFromServer();
+        addActivity('people-roof', 'Study Room Created', `${name} | Code ${data.code || ''}`);
+        alert(`Room created. Invite code: ${data.code || ''}`);
+    } catch (err) {
+        alert(`Create failed: ${err.message}`);
+    }
+}
+
+async function joinStudyGroupRoom() {
+    if (!backendAdminToken) {
+        alert('Please login first to join private study rooms.');
+        return;
+    }
+    const input = document.getElementById('studyGroupJoinCodeInput');
+    const code = String(input && input.value ? input.value : '').trim().toUpperCase();
+    if (!code) {
+        alert('Enter invite code first.');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to join study room');
+        if (input) input.value = '';
+        await loadStudyGroupsFromServer();
+        addActivity('link', 'Study Room Joined', `${data.name || 'Study Room'} | Code ${code}`);
+        alert(`Joined: ${data.name || 'Study Room'}`);
+    } catch (err) {
+        alert(`Join failed: ${err.message}`);
+    }
+}
+
+async function checkInStudyGroupRoom(encodedId = '') {
+    const fromArg = decodeURIComponent(String(encodedId || ''));
+    const room = fromArg
+        ? (studyGroups || []).find(item => String(item.id || '') === fromArg)
+        : getCurrentStudyGroupRoom();
+    const id = String(room && room.id ? room.id : '').trim();
+    if (!id || !backendAdminToken) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/${encodeURIComponent(id)}/checkin`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to check in');
+        await loadStudyGroupsFromServer();
+        const me = getCurrentStudyGroupMember(data);
+        const streak = Number(me && me.currentStreak || 0);
+        addActivity('fire', 'Study Group Check-In', `${data.name || 'Study Room'} | Streak ${streak}`);
+    } catch (err) {
+        alert(`Check-in failed: ${err.message}`);
+    }
+}
+
+async function postStudyGroupGoal() {
+    if (!backendAdminToken) {
+        alert('Please login first to post shared goals.');
+        return;
+    }
+    const room = getCurrentStudyGroupRoom();
+    if (!room) {
+        alert('Select a room first.');
+        return;
+    }
+    const input = document.getElementById('studyGroupGoalInput');
+    const text = String(input && input.value ? input.value : '').trim();
+    if (!text) {
+        alert('Enter a goal first.');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/${encodeURIComponent(room.id)}/goals`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ text })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to post goal');
+        if (input) input.value = '';
+        await loadStudyGroupsFromServer();
+        addActivity('bullseye', 'Study Group Goal Shared', `${data.name || room.name}: ${text}`);
+    } catch (err) {
+        alert(`Share goal failed: ${err.message}`);
+    }
+}
+
+async function postStudyGroupDoubt() {
+    if (!backendAdminToken) {
+        alert('Please login first to exchange doubts.');
+        return;
+    }
+    const room = getCurrentStudyGroupRoom();
+    if (!room) {
+        alert('Select a room first.');
+        return;
+    }
+    const doubtInput = document.getElementById('studyGroupDoubtInput');
+    const subjectInput = document.getElementById('studyGroupDoubtSubject');
+    const text = String(doubtInput && doubtInput.value ? doubtInput.value : '').trim();
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
+    if (!text) {
+        alert('Enter a doubt first.');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/${encodeURIComponent(room.id)}/doubts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ text, subject })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to post doubt');
+        if (doubtInput) doubtInput.value = '';
+        await loadStudyGroupsFromServer();
+        addActivity('circle-question', 'Study Group Doubt Shared', `${data.name || room.name}: ${subject}`);
+    } catch (err) {
+        alert(`Post doubt failed: ${err.message}`);
     }
 }
 
@@ -3949,6 +4200,222 @@ function renderUpcomingDeadlines() {
             <span class="deadline-days">${u.days === 0 ? 'Today' : u.days === 1 ? 'Tomorrow' : `In ${u.days} days`}</span>
         </li>
     `).join('');
+}
+
+const SCHOLARSHIP_EXAM_ALERTS = [
+    {
+        id: 'alert-ntse-stage',
+        type: 'Exam',
+        title: 'NTSE Stage Practice Window',
+        classMin: 10,
+        classMax: 10,
+        subjects: ['Math', 'Science', 'English'],
+        deadlineMonthDay: '04-15',
+        prepChecklist: [
+            'Revise mental ability sample paper (timed).',
+            'Solve one previous year NTSE paper.',
+            'Prepare formula and concept quick sheets.'
+        ]
+    },
+    {
+        id: 'alert-olympiad-stem',
+        type: 'Scholarship',
+        title: 'STEM Olympiad Scholarship',
+        classMin: 8,
+        classMax: 12,
+        subjects: ['Math', 'Science'],
+        deadlineMonthDay: '05-10',
+        prepChecklist: [
+            'Complete 3 chapter-level mock sets.',
+            'Review weak-topic error log from quizzes.',
+            'Run 60-minute simulation with section split.'
+        ]
+    },
+    {
+        id: 'alert-kvpy-foundation',
+        type: 'Scholarship',
+        title: 'Research Aptitude Scholarship (Foundation)',
+        classMin: 11,
+        classMax: 12,
+        subjects: ['Science', 'Math'],
+        deadlineMonthDay: '06-05',
+        prepChecklist: [
+            'Build concept map for Physics/Chemistry/Biology.',
+            'Practice mixed aptitude questions daily.',
+            'Take one full timed mock and analyze mistakes.'
+        ]
+    },
+    {
+        id: 'alert-language-merit',
+        type: 'Scholarship',
+        title: 'Language Merit Scholarship',
+        classMin: 7,
+        classMax: 12,
+        subjects: ['English'],
+        deadlineMonthDay: '04-30',
+        prepChecklist: [
+            'Practice reading comprehension passages.',
+            'Write two structured long answers each week.',
+            'Improve grammar accuracy with mini-tests.'
+        ]
+    },
+    {
+        id: 'alert-board-prep',
+        type: 'Exam',
+        title: 'Board Exam Preparation Alert',
+        classMin: 10,
+        classMax: 12,
+        subjects: ['General', 'Math', 'Science', 'English', 'History', 'Geography'],
+        deadlineMonthDay: '11-30',
+        prepChecklist: [
+            'Finalize chapter completion tracker.',
+            'Start spaced revision on weak chapters.',
+            'Take one subject-wise mock every week.'
+        ]
+    },
+    {
+        id: 'alert-coding-talent',
+        type: 'Scholarship',
+        title: 'Coding Talent Grant',
+        classMin: 8,
+        classMax: 12,
+        subjects: ['Programming', 'Math'],
+        deadlineMonthDay: '07-20',
+        prepChecklist: [
+            'Solve 20 topic-wise coding problems.',
+            'Build one mini project for portfolio.',
+            'Review algorithm complexity fundamentals.'
+        ]
+    }
+];
+
+function resolveAlertDeadline(deadlineMonthDay, now = new Date()) {
+    const raw = String(deadlineMonthDay || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const match = raw.match(/^(\d{1,2})-(\d{1,2})$/);
+    if (!match) return '';
+
+    const month = Math.max(1, Math.min(12, Number(match[1])));
+    const day = Math.max(1, Math.min(31, Number(match[2])));
+    const currentYear = now.getFullYear();
+    const thisYear = new Date(currentYear, month - 1, day);
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    if (thisYear >= today) return thisYear.toISOString().slice(0, 10);
+    const nextYear = new Date(currentYear + 1, month - 1, day);
+    return nextYear.toISOString().slice(0, 10);
+}
+
+function getAlertDaysLeft(dateStr, now = new Date()) {
+    const due = new Date(dateStr);
+    if (Number.isNaN(due.getTime())) return Number.POSITIVE_INFINITY;
+    const startNow = new Date(now);
+    startNow.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    return Math.ceil((due - startNow) / (24 * 60 * 60 * 1000));
+}
+
+function getScholarshipAlertMatches() {
+    const classFilter = Number(document.getElementById('alertClassFilter')?.value || 10);
+    const subjectFilter = String(document.getElementById('alertSubjectFilter')?.value || 'Any').trim() || 'Any';
+    const now = new Date();
+
+    return SCHOLARSHIP_EXAM_ALERTS
+        .filter(item => classFilter >= item.classMin && classFilter <= item.classMax)
+        .filter(item => {
+            if (subjectFilter === 'Any') return true;
+            return (item.subjects || []).some(subject => subjectMatches(subject, subjectFilter));
+        })
+        .map(item => {
+            const deadline = resolveAlertDeadline(item.deadlineMonthDay, now);
+            const daysLeft = getAlertDaysLeft(deadline, now);
+            return { ...item, deadline, daysLeft };
+        })
+        .sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+function renderScholarshipExamAlerts() {
+    const summaryEl = document.getElementById('alertMatchSummary');
+    const listEl = document.getElementById('alertMatchList');
+    if (!summaryEl || !listEl) return;
+
+    scholarshipAlertMatches = getScholarshipAlertMatches();
+    if (scholarshipAlertMatches.length === 0) {
+        summaryEl.textContent = 'No matching scholarship/exam alerts for this class/subject yet.';
+        listEl.innerHTML = '<li class="empty-state">No alert match yet.</li>';
+        return;
+    }
+
+    summaryEl.textContent = `${scholarshipAlertMatches.length} matching alert(s) sorted by deadline.`;
+    listEl.innerHTML = scholarshipAlertMatches.map(item => `
+        <li>
+            <span class="deadline-type">${escapeHtml(item.type)}</span>
+            <strong>${escapeHtml(item.title)}</strong>
+            <span class="deadline-days">Deadline: ${escapeHtml(item.deadline)} (${item.daysLeft <= 0 ? 'Today' : `in ${item.daysLeft} days`})</span>
+            <p>Class ${item.classMin}${item.classMax !== item.classMin ? `-${item.classMax}` : ''} | ${escapeHtml((item.subjects || []).join(', '))}</p>
+            <p>Prep checklist: ${escapeHtml((item.prepChecklist || []).join(' | '))}</p>
+            <button class="action-btn" onclick="createAlertPrepChecklistTasks('${item.id}')">
+                <i class="fas fa-list-check"></i> Add Prep Checklist Tasks
+            </button>
+        </li>
+    `).join('');
+}
+
+function createAlertPrepChecklistTasks(alertId) {
+    const match = scholarshipAlertMatches.find(item => item.id === alertId) || SCHOLARSHIP_EXAM_ALERTS.find(item => item.id === alertId);
+    if (!match) {
+        alert('Alert not found.');
+        return;
+    }
+
+    const checklist = Array.isArray(match.prepChecklist) ? match.prepChecklist : [];
+    if (checklist.length === 0) {
+        alert('No prep checklist available for this alert.');
+        return;
+    }
+
+    const subject = (match.subjects && match.subjects[0]) ? match.subjects[0] : 'General';
+    const deadline = resolveAlertDeadline(match.deadline || match.deadlineMonthDay || '');
+    const today = new Date();
+    const deadlineDate = deadline ? new Date(deadline) : new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000));
+    const totalDays = Math.max(1, Math.ceil((deadlineDate - today) / (24 * 60 * 60 * 1000)));
+    const stepGap = Math.max(1, Math.floor(totalDays / checklist.length));
+
+    let created = 0;
+    checklist.forEach((step, idx) => {
+        const due = new Date(today);
+        const offset = Math.min(totalDays, (idx + 1) * stepGap);
+        due.setDate(due.getDate() + offset);
+        const dueDate = due.toISOString().slice(0, 10);
+        const text = `Alert Prep: ${match.title} - ${step}`;
+        const exists = tasks.some(task => String(task.text || '').trim() === text && String(task.dueDate || '') === dueDate);
+        if (exists) return;
+        tasks.push(normalizeTask({
+            text,
+            subject,
+            priority: 'high',
+            difficulty: 'medium',
+            examWeight: 4,
+            estimatedHours: 1,
+            dueDate,
+            done: false,
+            createdAt: new Date().toISOString()
+        }));
+        created += 1;
+    });
+
+    if (created === 0) {
+        alert('Checklist tasks already exist.');
+        return;
+    }
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    renderCalendar();
+    addActivity('bell', 'Scholarship/Exam Checklist Added', `${match.title}: ${created} task(s)`);
+    alert(`${created} prep checklist task(s) added.`);
 }
 
 function getAdaptiveWeakSubjects(limit = 4) {
@@ -4742,6 +5209,7 @@ let liveClassSession = {
 let assignmentScannerImageDataUrl = "";
 let assignmentScannerParsedPreview = null;
 let assignmentScannerWorkerPromise = null;
+let scholarshipAlertMatches = [];
 
 function saveTasks() {
     tasks = normalizeTasks(tasks);
@@ -8738,6 +9206,345 @@ function renderPastPaperTrend() {
     });
 }
 
+function parseExamStrategySections(rawText) {
+    const lines = String(rawText || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0) {
+        return [
+            { name: 'Section A (MCQ)', weight: 40 },
+            { name: 'Section B (Short)', weight: 35 },
+            { name: 'Section C (Long)', weight: 25 }
+        ];
+    }
+
+    const sections = lines.map((line, idx) => {
+        const parts = line.split(':');
+        if (parts.length >= 2) {
+            const name = String(parts[0] || '').trim() || `Section ${idx + 1}`;
+            const weight = Number(String(parts.slice(1).join(':')).replace(/[^\d.]/g, ''));
+            return { name, weight: Number.isFinite(weight) && weight > 0 ? weight : 0 };
+        }
+        return { name: line, weight: 0 };
+    }).filter(item => item.name);
+
+    const hasWeights = sections.some(item => item.weight > 0);
+    if (!hasWeights) {
+        const equal = Math.max(1, Math.round(100 / sections.length));
+        return sections.map(item => ({ ...item, weight: equal }));
+    }
+    return sections.map(item => ({ ...item, weight: item.weight > 0 ? item.weight : 1 }));
+}
+
+function buildExamStrategyPlan(values) {
+    const duration = Math.max(30, Math.min(360, Number(values.durationMinutes) || 120));
+    const reviewBuffer = Math.max(0, Math.min(30, Number(values.reviewBufferMinutes) || 10));
+    const sections = parseExamStrategySections(values.sectionsText);
+    if (sections.length === 0) {
+        return { error: 'Add at least one section.' };
+    }
+
+    const answerWindow = Math.max(20, duration - reviewBuffer);
+    const totalWeight = sections.reduce((sum, item) => sum + (Number(item.weight) || 0), 0) || sections.length;
+    const withMinutes = sections.map(section => {
+        const raw = (answerWindow * (Number(section.weight) || 0)) / totalWeight;
+        return {
+            name: section.name,
+            weight: section.weight,
+            allocatedMinutes: Math.max(5, Math.floor(raw))
+        };
+    });
+
+    let used = withMinutes.reduce((sum, item) => sum + item.allocatedMinutes, 0);
+    let left = Math.max(0, answerWindow - used);
+    let idx = 0;
+    while (left > 0 && withMinutes.length > 0) {
+        withMinutes[idx % withMinutes.length].allocatedMinutes += 1;
+        left -= 1;
+        idx += 1;
+    }
+
+    const running = [];
+    let cursor = 0;
+    withMinutes.forEach(section => {
+        const start = cursor;
+        const end = cursor + section.allocatedMinutes;
+        cursor = end;
+        running.push({
+            ...section,
+            startMinute: start,
+            endMinute: end
+        });
+    });
+
+    const practiceItems = withMinutes.map((section, i) => ({
+        dayOffset: i,
+        text: `Exam Strategy Drill: ${section.name}`,
+        allocatedMinutes: Math.max(20, Math.round(section.allocatedMinutes * 1.2))
+    }));
+
+    return {
+        duration,
+        reviewBuffer,
+        answerWindow,
+        sections: running,
+        practiceItems
+    };
+}
+
+function formatStrategyMinuteRange(startMinute, endMinute) {
+    return `${String(startMinute).padStart(2, '0')}-${String(endMinute).padStart(2, '0')} min`;
+}
+
+function renderExamStrategyPlan(plan) {
+    const summaryEl = document.getElementById('examStrategySummary');
+    const listEl = document.getElementById('examStrategyPlanList');
+    if (!summaryEl || !listEl) return;
+
+    if (!plan || !Array.isArray(plan.sections) || plan.sections.length === 0) {
+        summaryEl.textContent = 'Enter exam duration and sections to generate a time-split strategy.';
+        listEl.innerHTML = '<li class="empty-state">No exam strategy generated yet.</li>';
+        return;
+    }
+
+    summaryEl.textContent = `Total ${plan.duration} min | Answering ${plan.answerWindow} min | Final review ${plan.reviewBuffer} min`;
+    const sectionRows = plan.sections.map(section => `
+        <li>
+            <strong>${escapeHtml(section.name)}</strong>
+            <span>${formatStrategyMinuteRange(section.startMinute, section.endMinute)} | ${section.allocatedMinutes} min | Weight ${Math.round(section.weight)}%</span>
+        </li>
+    `).join('');
+    const reviewRow = `<li><strong>Final Review</strong><span>${plan.reviewBuffer} min reserved for checking.</span></li>`;
+    const practiceRows = plan.practiceItems.map((item, idx) => `
+        <li>
+            <strong>Practice Day ${idx + 1}</strong>
+            <span>${escapeHtml(item.text)} (${item.allocatedMinutes} min timed drill)</span>
+        </li>
+    `).join('');
+    listEl.innerHTML = `${sectionRows}${reviewRow}${practiceRows}`;
+}
+
+function simulateExamStrategy() {
+    const durationMinutes = Number(document.getElementById('examStrategyDurationInput')?.value || 120);
+    const reviewBufferMinutes = Number(document.getElementById('examStrategyReviewBufferInput')?.value || 10);
+    const sectionsText = String(document.getElementById('examStrategySectionsInput')?.value || '');
+    const plan = buildExamStrategyPlan({ durationMinutes, reviewBufferMinutes, sectionsText });
+    if (plan.error) {
+        alert(plan.error);
+        pendingExamStrategyPlan = null;
+        renderExamStrategyPlan(null);
+        return;
+    }
+    pendingExamStrategyPlan = plan;
+    renderExamStrategyPlan(plan);
+}
+
+function createExamStrategyPracticeTasks() {
+    if (!pendingExamStrategyPlan) {
+        simulateExamStrategy();
+        if (!pendingExamStrategyPlan) return;
+    }
+    const plan = pendingExamStrategyPlan;
+    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'General';
+    let created = 0;
+
+    plan.practiceItems.forEach(item => {
+        const due = new Date();
+        due.setDate(due.getDate() + item.dayOffset + 1);
+        const dueDate = due.toISOString().slice(0, 10);
+        const title = `${item.text} (${subject})`;
+        const exists = tasks.some(task =>
+            String(task.text || '').trim() === title &&
+            String(task.dueDate || '') === dueDate
+        );
+        if (exists) return;
+        tasks.push(normalizeTask({
+            text: title,
+            subject,
+            priority: 'high',
+            difficulty: 'medium',
+            examWeight: 4,
+            estimatedHours: Math.max(0.5, Math.round((item.allocatedMinutes / 60) * 10) / 10),
+            dueDate,
+            done: false,
+            createdAt: new Date().toISOString()
+        }));
+        created += 1;
+    });
+
+    if (created === 0) {
+        alert('Practice tasks already exist for this strategy.');
+        return;
+    }
+
+    saveTasks();
+    renderTasks();
+    renderDashboard();
+    renderCalendar();
+    addActivity('chess-clock', 'Exam Strategy Tasks Created', `${created} timed drill task(s) added`);
+    alert(`${created} exam strategy practice task(s) created.`);
+}
+
+function tokenizeAnswerText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .map(t => t.trim())
+        .filter(Boolean);
+}
+
+function evaluateAnswerStructure(answerText) {
+    const text = String(answerText || '').trim();
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const words = tokenizeAnswerText(text);
+    const hasIntroCue = /(introduction|in summary|overall|firstly|to begin|definition)/i.test(text);
+    const hasConclusionCue = /(therefore|thus|in conclusion|finally|to conclude|hence)/i.test(text);
+    const hasParagraphFlow = lines.length >= 3;
+
+    let score = 0;
+    if (words.length >= 60) score += 35;
+    else if (words.length >= 35) score += 25;
+    else if (words.length >= 20) score += 15;
+    else score += 8;
+    if (hasParagraphFlow) score += 25;
+    if (hasIntroCue) score += 20;
+    if (hasConclusionCue) score += 20;
+
+    return {
+        score: Math.max(0, Math.min(100, Math.round(score))),
+        words: words.length,
+        hasParagraphFlow,
+        hasIntroCue,
+        hasConclusionCue
+    };
+}
+
+function evaluateAnswerContent(answerText, keywordText) {
+    const answerTokens = new Set(tokenizeAnswerText(answerText));
+    const keywords = String(keywordText || '')
+        .split(',')
+        .map(k => k.trim().toLowerCase())
+        .filter(Boolean);
+    if (keywords.length === 0) {
+        return {
+            score: 70,
+            matchedCount: 0,
+            totalKeywords: 0,
+            missedKeywords: []
+        };
+    }
+
+    let matchedCount = 0;
+    const missedKeywords = [];
+    keywords.forEach(keyword => {
+        const parts = keyword.split(/\s+/).filter(Boolean);
+        const matched = parts.every(part => answerTokens.has(part));
+        if (matched) matchedCount += 1;
+        else missedKeywords.push(keyword);
+    });
+    const coverage = matchedCount / keywords.length;
+    const score = Math.round(coverage * 100);
+    return {
+        score: Math.max(0, Math.min(100, score)),
+        matchedCount,
+        totalKeywords: keywords.length,
+        missedKeywords
+    };
+}
+
+function evaluateAnswerClarity(answerText) {
+    const text = String(answerText || '').trim();
+    const words = tokenizeAnswerText(text);
+    const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+    if (words.length === 0) return { score: 0, avgSentenceLength: 0 };
+
+    const avgSentenceLength = sentences.length > 0
+        ? Math.round((words.length / sentences.length) * 10) / 10
+        : words.length;
+    let score = 65;
+    if (avgSentenceLength >= 8 && avgSentenceLength <= 22) score += 20;
+    if (/\b(for example|because|therefore|thus|hence|as a result)\b/i.test(text)) score += 10;
+    if (/\b(very very|thing|stuff)\b/i.test(text)) score -= 10;
+    return {
+        score: Math.max(0, Math.min(100, Math.round(score))),
+        avgSentenceLength
+    };
+}
+
+function buildAnswerImprovementPoints(structure, content, clarity) {
+    const points = [];
+    if (structure.words < 35) {
+        points.push(`Increase depth: current answer has ${structure.words} words, target at least 50-80 words.`);
+    }
+    if (!structure.hasParagraphFlow) {
+        points.push('Use 3 short paragraphs: intro, explanation, and conclusion.');
+    }
+    if (!structure.hasConclusionCue) {
+        points.push('Add a conclusion line starting with "Therefore" or "In conclusion".');
+    }
+    if (content.totalKeywords > 0 && content.missedKeywords.length > 0) {
+        points.push(`Cover missing key terms: ${content.missedKeywords.slice(0, 5).join(', ')}.`);
+    }
+    if (clarity.avgSentenceLength > 24) {
+        points.push('Split long sentences into smaller clear statements.');
+    }
+    if (points.length === 0) {
+        points.push('Strong answer. Next step: add one example and one diagram/flow reference for full marks.');
+    }
+    return points;
+}
+
+function renderAnswerEvaluationResult(result) {
+    const summaryEl = document.getElementById('answerEvalSummary');
+    const listEl = document.getElementById('answerEvalFeedbackList');
+    if (!summaryEl || !listEl) return;
+
+    if (!result) {
+        summaryEl.textContent = 'Submit an answer to get structure/content score and improvement points.';
+        listEl.innerHTML = '<li class="empty-state">No evaluation yet.</li>';
+        return;
+    }
+
+    summaryEl.textContent = `Overall ${result.overall}/100 | Structure ${result.structure.score} | Content ${result.content.score} | Clarity ${result.clarity.score}`;
+    const lines = [
+        `Keyword coverage: ${result.content.matchedCount}/${result.content.totalKeywords}${result.content.totalKeywords === 0 ? ' (no keyword list provided)' : ''}`,
+        `Word count: ${result.structure.words} | Avg sentence length: ${result.clarity.avgSentenceLength}`,
+        ...result.improvementPoints
+    ];
+    listEl.innerHTML = lines.map(line => `<li>${escapeHtml(line)}</li>`).join('');
+}
+
+function evaluateStudentAnswer() {
+    const question = String(document.getElementById('answerEvalQuestionInput')?.value || '').trim();
+    const keywords = String(document.getElementById('answerEvalKeywordsInput')?.value || '').trim();
+    const answer = String(document.getElementById('answerEvalStudentAnswerInput')?.value || '').trim();
+    if (!answer) {
+        alert('Write your answer first.');
+        return;
+    }
+
+    const structure = evaluateAnswerStructure(answer);
+    const content = evaluateAnswerContent(answer, keywords);
+    const clarity = evaluateAnswerClarity(answer);
+    const overall = Math.round((structure.score * 0.35) + (content.score * 0.45) + (clarity.score * 0.20));
+    const improvementPoints = buildAnswerImprovementPoints(structure, content, clarity);
+
+    const result = { question, structure, content, clarity, overall, improvementPoints };
+    renderAnswerEvaluationResult(result);
+    addActivity('pen-ruler', 'Answer Evaluated', `${question || 'Custom answer'} | ${overall}%`);
+}
+
+function clearAnswerEvaluationForm() {
+    const ids = ['answerEvalQuestionInput', 'answerEvalKeywordsInput', 'answerEvalStudentAnswerInput'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    renderAnswerEvaluationResult(null);
+}
+
 function getExamCountdownFormValues() {
     const examName = String(document.getElementById('countdownExamName')?.value || '').trim();
     const subject = String(document.getElementById('countdownExamSubject')?.value || 'General').trim() || 'General';
@@ -8985,6 +9792,10 @@ function regenerateExamCountdownPlan() {
 function renderQuizPage() {
     renderQuizQuestions();
     updateQuizSessionModeLabel();
+    const sectionsInput = document.getElementById('examStrategySectionsInput');
+    if (sectionsInput && !sectionsInput.value.trim()) {
+        sectionsInput.value = 'MCQ:40\nShort Answer:35\nLong Answer:25';
+    }
     const countdownDateInput = document.getElementById('countdownExamDate');
     if (countdownDateInput && !countdownDateInput.value) {
         const nextMonth = new Date();
@@ -8999,6 +9810,11 @@ function renderQuizPage() {
     renderPastPaperTrend();
     renderMistakeNotebook();
     renderMistakeDueBadges();
+    if (pendingExamStrategyPlan) {
+        renderExamStrategyPlan(pendingExamStrategyPlan);
+    } else {
+        renderExamStrategyPlan(null);
+    }
     if (pendingExamCountdownPlan) {
         renderExamCountdownPlanPreview(pendingExamCountdownPlan);
     } else {

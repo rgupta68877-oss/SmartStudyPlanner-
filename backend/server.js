@@ -22,6 +22,7 @@ const SCORES_FILE = path.join(DATA_DIR, "quiz-scores.json");
 const FLASHCARDS_FILE = path.join(DATA_DIR, "flashcards.json");
 const SHARED_NOTES_FILE = path.join(DATA_DIR, "shared-notes.json");
 const PEER_CHALLENGES_FILE = path.join(DATA_DIR, "peer-challenges.json");
+const STUDY_GROUPS_FILE = path.join(DATA_DIR, "study-groups.json");
 const PRESENCE_TTL_MS = Math.max(30_000, Number(process.env.PRESENCE_TTL_MS || 60_000));
 const presenceByClientId = new Map();
 
@@ -124,6 +125,88 @@ function getPeerChallenges() {
 function savePeerChallenges(challenges) {
     const safe = Array.isArray(challenges) ? challenges.map(normalizePeerChallenge) : [];
     writeJson(PEER_CHALLENGES_FILE, safe.slice(0, 500));
+}
+
+function normalizeStudyGroupMember(value) {
+    const member = value && typeof value === "object" ? value : {};
+    const checkins = Array.isArray(member.checkins)
+        ? [...new Set(member.checkins.map((d) => String(d || "").slice(0, 10)).filter(Boolean))].sort()
+        : [];
+    return {
+        email: String(member.email || "").trim().toLowerCase(),
+        name: String(member.name || "").trim() || "Student",
+        role: ["student", "teacher", "admin"].includes(member.role) ? member.role : "student",
+        joinedAt: member.joinedAt || new Date().toISOString(),
+        checkins,
+        currentStreak: Math.max(0, Number(member.currentStreak) || 0),
+        bestStreak: Math.max(0, Number(member.bestStreak) || 0),
+        lastCheckinDate: String(member.lastCheckinDate || "")
+    };
+}
+
+function normalizeStudyGroupGoal(value) {
+    const goal = value && typeof value === "object" ? value : {};
+    return {
+        id: String(goal.id || `group-goal-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        text: String(goal.text || "").trim(),
+        createdBy: String(goal.createdBy || "").trim().toLowerCase(),
+        createdByName: String(goal.createdByName || "").trim() || "Student",
+        createdAt: goal.createdAt || new Date().toISOString()
+    };
+}
+
+function normalizeStudyGroupDoubt(value) {
+    const doubt = value && typeof value === "object" ? value : {};
+    return {
+        id: String(doubt.id || `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        text: String(doubt.text || "").trim(),
+        subject: String(doubt.subject || "General").trim() || "General",
+        createdBy: String(doubt.createdBy || "").trim().toLowerCase(),
+        createdByName: String(doubt.createdByName || "").trim() || "Student",
+        createdAt: doubt.createdAt || new Date().toISOString()
+    };
+}
+
+function normalizeStudyGroup(value) {
+    const group = value && typeof value === "object" ? value : {};
+    const durationDays = Math.max(1, Math.min(60, Number(group.durationDays) || 30));
+    const startDate = String(group.startDate || getTodayKeyUTC()).slice(0, 10);
+    const endDate = String(group.endDate || addDays(startDate, durationDays - 1)).slice(0, 10);
+    const members = Array.isArray(group.members)
+        ? group.members.map(normalizeStudyGroupMember).filter((m) => m.email)
+        : [];
+    const goals = Array.isArray(group.goals)
+        ? group.goals.map(normalizeStudyGroupGoal).filter((g) => g.text).slice(0, 200)
+        : [];
+    const doubts = Array.isArray(group.doubts)
+        ? group.doubts.map(normalizeStudyGroupDoubt).filter((d) => d.text).slice(0, 500)
+        : [];
+    const today = getTodayKeyUTC();
+    const active = today <= endDate;
+    return {
+        id: String(group.id || `room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        code: String(group.code || randomChallengeCode()).trim().toUpperCase(),
+        name: String(group.name || "Study Room").trim() || "Study Room",
+        durationDays,
+        startDate,
+        endDate,
+        createdBy: String(group.createdBy || "").trim().toLowerCase(),
+        createdAt: group.createdAt || new Date().toISOString(),
+        status: active ? "active" : "completed",
+        members,
+        goals,
+        doubts
+    };
+}
+
+function getStudyGroups() {
+    const raw = readJson(STUDY_GROUPS_FILE, []);
+    return Array.isArray(raw) ? raw.map(normalizeStudyGroup) : [];
+}
+
+function saveStudyGroups(groups) {
+    const safe = Array.isArray(groups) ? groups.map(normalizeStudyGroup) : [];
+    writeJson(STUDY_GROUPS_FILE, safe.slice(0, 300));
 }
 
 function issueToken(user) {
@@ -639,6 +722,204 @@ app.post("/api/peer-challenges/:id/checkin", authenticateJWT, (req, res) => {
     challenges[idx] = normalizePeerChallenge(challenge);
     savePeerChallenges(challenges);
     return res.json(challenges[idx]);
+});
+
+app.get("/api/study-groups", authenticateJWT, (req, res) => {
+    const email = String(req.user?.email || "").trim().toLowerCase();
+    const groups = getStudyGroups();
+    const mine = groups.filter((group) =>
+        Array.isArray(group.members) &&
+        group.members.some((member) => member.email === email)
+    );
+    return res.json(mine);
+});
+
+app.post("/api/study-groups", authenticateJWT, (req, res) => {
+    const name = String(req.body?.name || "").trim() || "Study Room";
+    const durationDays = Math.max(1, Math.min(60, Number(req.body?.durationDays) || 30));
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+
+    const groups = getStudyGroups();
+    const usedCodes = new Set(groups.map((g) => String(g.code || "").toUpperCase()));
+    let code = randomChallengeCode();
+    let attempts = 0;
+    while (usedCodes.has(code) && attempts < 10) {
+        code = randomChallengeCode();
+        attempts += 1;
+    }
+
+    const startDate = getTodayKeyUTC();
+    const room = normalizeStudyGroup({
+        id: `room-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        code,
+        name,
+        durationDays,
+        startDate,
+        endDate: addDays(startDate, durationDays - 1),
+        createdBy: userEmail,
+        createdAt: new Date().toISOString(),
+        members: [
+            {
+                email: userEmail,
+                name: userName,
+                role: userRole,
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            }
+        ],
+        goals: [],
+        doubts: []
+    });
+
+    groups.unshift(room);
+    saveStudyGroups(groups);
+    return res.status(201).json(room);
+});
+
+app.post("/api/study-groups/join", authenticateJWT, (req, res) => {
+    const code = String(req.body?.code || "").trim().toUpperCase();
+    if (!code) {
+        return res.status(400).json({ error: "Invite code is required" });
+    }
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+    const groups = getStudyGroups();
+    const idx = groups.findIndex((group) => String(group.code || "").toUpperCase() === code);
+    if (idx < 0) {
+        return res.status(404).json({ error: "Study group not found for invite code" });
+    }
+
+    const group = groups[idx];
+    if (group.status !== "active") {
+        return res.status(400).json({ error: "Study group has ended" });
+    }
+
+    const exists = group.members.some((member) => member.email === userEmail);
+    if (!exists) {
+        group.members.push(
+            normalizeStudyGroupMember({
+                email: userEmail,
+                name: userName,
+                role: userRole,
+                joinedAt: new Date().toISOString(),
+                checkins: [],
+                currentStreak: 0,
+                bestStreak: 0,
+                lastCheckinDate: ""
+            })
+        );
+        groups[idx] = normalizeStudyGroup(group);
+        saveStudyGroups(groups);
+    }
+
+    return res.json(groups[idx]);
+});
+
+app.post("/api/study-groups/:id/checkin", authenticateJWT, (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(400).json({ error: "Study group id is required" });
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const today = getTodayKeyUTC();
+    const groups = getStudyGroups();
+    const idx = groups.findIndex((group) => group.id === id);
+    if (idx < 0) return res.status(404).json({ error: "Study group not found" });
+
+    const group = groups[idx];
+    if (today > group.endDate) {
+        group.status = "completed";
+        groups[idx] = normalizeStudyGroup(group);
+        saveStudyGroups(groups);
+        return res.status(400).json({ error: "Study group has ended" });
+    }
+
+    const mIdx = group.members.findIndex((member) => member.email === userEmail);
+    if (mIdx < 0) return res.status(403).json({ error: "Join this study group first" });
+
+    const member = normalizeStudyGroupMember(group.members[mIdx]);
+    if (member.checkins.includes(today)) {
+        groups[idx] = normalizeStudyGroup(group);
+        return res.json(groups[idx]);
+    }
+
+    const previousDate = member.lastCheckinDate || "";
+    const gap = previousDate ? daysBetween(previousDate, today) : 0;
+    if (!previousDate) member.currentStreak = 1;
+    else if (gap === 1) member.currentStreak += 1;
+    else member.currentStreak = 1;
+    member.bestStreak = Math.max(member.bestStreak, member.currentStreak);
+    member.lastCheckinDate = today;
+    member.checkins = [...member.checkins, today].sort();
+
+    group.members[mIdx] = member;
+    groups[idx] = normalizeStudyGroup(group);
+    saveStudyGroups(groups);
+    return res.json(groups[idx]);
+});
+
+app.post("/api/study-groups/:id/goals", authenticateJWT, (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    const text = String(req.body?.text || "").trim();
+    if (!id) return res.status(400).json({ error: "Study group id is required" });
+    if (!text) return res.status(400).json({ error: "Goal text is required" });
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const groups = getStudyGroups();
+    const idx = groups.findIndex((group) => group.id === id);
+    if (idx < 0) return res.status(404).json({ error: "Study group not found" });
+
+    const group = groups[idx];
+    const isMember = group.members.some((member) => member.email === userEmail);
+    if (!isMember) return res.status(403).json({ error: "Join this study group first" });
+
+    group.goals.unshift(normalizeStudyGroupGoal({
+        text,
+        createdBy: userEmail,
+        createdByName: userName,
+        createdAt: new Date().toISOString()
+    }));
+    group.goals = group.goals.slice(0, 200);
+    groups[idx] = normalizeStudyGroup(group);
+    saveStudyGroups(groups);
+    return res.json(groups[idx]);
+});
+
+app.post("/api/study-groups/:id/doubts", authenticateJWT, (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    const text = String(req.body?.text || "").trim();
+    const subject = String(req.body?.subject || "General").trim() || "General";
+    if (!id) return res.status(400).json({ error: "Study group id is required" });
+    if (!text) return res.status(400).json({ error: "Doubt text is required" });
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Student");
+    const groups = getStudyGroups();
+    const idx = groups.findIndex((group) => group.id === id);
+    if (idx < 0) return res.status(404).json({ error: "Study group not found" });
+
+    const group = groups[idx];
+    const isMember = group.members.some((member) => member.email === userEmail);
+    if (!isMember) return res.status(403).json({ error: "Join this study group first" });
+
+    group.doubts.unshift(normalizeStudyGroupDoubt({
+        text,
+        subject,
+        createdBy: userEmail,
+        createdByName: userName,
+        createdAt: new Date().toISOString()
+    }));
+    group.doubts = group.doubts.slice(0, 500);
+    groups[idx] = normalizeStudyGroup(group);
+    saveStudyGroups(groups);
+    return res.json(groups[idx]);
 });
 
 app.listen(PORT, () => {
