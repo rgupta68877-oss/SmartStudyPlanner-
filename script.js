@@ -40,20 +40,20 @@ const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
     {
         id: "mat-1",
-        title: "Algebra Formula Sheet",
-        subject: "Math",
+        title: "Discrete Math Quick Sheet",
+        subject: "Discrete Mathematics",
         type: "Cheat Sheet",
         url: "",
-        description: "Quick reference formulas for linear equations, identities, and factorization.",
+        description: "Quick reference for logic, sets, relations, and counting principles.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
     {
         id: "mat-2",
-        title: "Newton's Laws Summary",
-        subject: "Science",
+        title: "DBMS SQL Revision Notes",
+        subject: "DBMS",
         type: "Notes",
         url: "",
-        description: "Short explanations and daily-life examples of the 3 laws of motion.",
+        description: "Compact SQL and normalization summary for quick exam revision.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
     {
@@ -428,6 +428,16 @@ const UNIFIED_BSC_SUBJECTS = [
     "Web Development"
 ];
 
+const LEGACY_SUBJECT_ALIASES = Object.freeze({
+    math: "Discrete Mathematics",
+    maths: "Discrete Mathematics",
+    mathematics: "Discrete Mathematics",
+    science: "DBMS",
+    english: "Software Engineering",
+    history: "Computer Networks",
+    geography: "Computer Architecture"
+});
+
 const BSC_CS_SEMESTER_SUBJECT_MAP = {
     "Sem 1": ["Programming", "Python", "Discrete Mathematics"],
     "Sem 2": ["Data Structures", "DBMS", "Web Development"],
@@ -447,6 +457,22 @@ const BSC_CS_SUBJECT_SEMESTERS = Object.entries(BSC_CS_SEMESTER_SUBJECT_MAP).red
 
 function getSemestersForSubject(subject) {
     return BSC_CS_SUBJECT_SEMESTERS[String(subject || "").trim()] || [];
+}
+
+function normalizeUnifiedSubject(subject, fallback = "General", options = {}) {
+    const allowGeneral = options.allowGeneral !== false;
+    const raw = String(subject || "").trim();
+    if (!raw) return fallback;
+
+    const lower = raw.toLowerCase();
+    const bscMatch = UNIFIED_BSC_SUBJECTS.find(name => name.toLowerCase() === lower);
+    if (bscMatch) return bscMatch;
+
+    if (lower === "general") return allowGeneral ? "General" : (fallback || "Programming");
+
+    if (LEGACY_SUBJECT_ALIASES[lower]) return LEGACY_SUBJECT_ALIASES[lower];
+
+    return raw;
 }
 
 function pickSemesterForSubject(subject, seed = 0) {
@@ -662,29 +688,29 @@ for (let i = DEFAULT_FREE_NOTES_LIBRARY.length - 1; i >= 0; i--) {
 const DEFAULT_RESOURCES_LIBRARY = [
     {
         id: "res-1",
-        title: "Maths Practice Hub",
-        url: "https://www.khanacademy.org/math",
+        title: "Python Official Docs",
+        url: "https://docs.python.org/3/",
         type: "Website",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
     {
         id: "res-2",
-        title: "Science Learning Hub",
-        url: "https://www.khanacademy.org/science",
+        title: "DBMS SQL Tutorial",
+        url: "https://www.w3schools.com/sql/",
         type: "Website",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
     {
         id: "res-3",
-        title: "English Grammar & Writing",
-        url: "https://owl.purdue.edu/owl/general_writing/index.html",
+        title: "Data Structures Guide",
+        url: "https://www.geeksforgeeks.org/data-structures/",
         type: "Website",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
     {
         id: "res-4",
-        title: "History Timeline Resource",
-        url: "https://www.britannica.com/topic/history",
+        title: "Computer Networks Notes",
+        url: "https://www.cloudflare.com/learning/network-layer/what-is-a-computer-network/",
         type: "Website",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -864,7 +890,11 @@ function normalizeSmartSettings(settings) {
         ...DEFAULT_SMART_SETTINGS,
         ...normalized,
         weakSubjects: Array.isArray(normalized.weakSubjects)
-            ? normalized.weakSubjects.map(s => String(s || "").trim()).filter(Boolean)
+            ? [...new Set(
+                normalized.weakSubjects
+                    .map(s => normalizeUnifiedSubject(s, "Programming", { allowGeneral: false }))
+                    .filter(Boolean)
+            )]
             : [],
         remindersEnabled: Boolean(normalized.remindersEnabled),
         reminderLeadDays: Number.isFinite(reminderLeadDays) ? Math.min(7, Math.max(0, Math.round(reminderLeadDays))) : 1,
@@ -885,7 +915,7 @@ function normalizeTask(task) {
     return {
         id: normalized.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         text: String(normalized.text || normalized.title || "").trim(),
-        subject: normalized.subject || "",
+        subject: normalizeUnifiedSubject(normalized.subject || "", "General", { allowGeneral: true }),
         priority: ["low", "medium", "high"].includes(normalized.priority) ? normalized.priority : "medium",
         dueDate: normalized.dueDate || "",
         done,
@@ -927,7 +957,7 @@ function normalizeDistractionLog(value) {
             return {
                 id: normalized.id || `distraction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 type,
-                subject: String(normalized.subject || "General").trim() || "General",
+                subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
                 createdAt: normalized.createdAt || new Date().toISOString()
             };
         })
@@ -988,7 +1018,7 @@ function normalizePomodoroSession(session) {
     return {
         minutes: Number.isFinite(parsedMinutes) && parsedMinutes > 0 ? Math.round(parsedMinutes) : 25,
         type: safeType,
-        subject: String(normalized.subject || "General").trim() || "General",
+        subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
         date: normalized.date || new Date().toISOString()
     };
 }
@@ -1009,7 +1039,7 @@ function normalizeGoalRoadmap(value) {
         ...DEFAULT_STATE.goalRoadmap,
         ...normalized,
         rawText: String(normalized.rawText || ""),
-        subject: String(normalized.subject || ""),
+        subject: normalizeUnifiedSubject(normalized.subject || "", "General", { allowGeneral: true }),
         targetPercent: Number.isFinite(targetPercent) ? Math.max(0, Math.min(100, Math.round(targetPercent))) : 0,
         baselinePercent: Number.isFinite(baselinePercent) ? Math.max(0, Math.min(100, Math.round(baselinePercent))) : 0,
         weeklyHours: Number.isFinite(weeklyHours) ? Math.max(0, Math.round(weeklyHours * 10) / 10) : 0,
@@ -1029,7 +1059,7 @@ function normalizeWeakTopicStats(value) {
     const normalized = {};
     Object.entries(value).forEach(([key, item]) => {
         const topic = String((item && item.topic) || "").trim();
-        const subject = String((item && item.subject) || "General").trim() || "General";
+        const subject = normalizeUnifiedSubject((item && item.subject) || "General", "General", { allowGeneral: true });
         const attempts = Number(item && item.attempts);
         const wrong = Number(item && item.wrong);
         if (!topic) return;
@@ -1056,7 +1086,7 @@ function normalizeChapterTracker(value) {
                 : [];
             return {
                 id: normalized.id || `chapter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                subject: String(normalized.subject || "General").trim() || "General",
+                subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
                 chapter: String(normalized.chapter || "").trim(),
                 status: ["not-started", "in-progress", "done"].includes(status) ? status : "not-started",
                 testScore: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
@@ -1075,7 +1105,7 @@ function normalizeDoubtTracker(value) {
             const status = String(normalized.status || "unresolved");
             return {
                 id: normalized.id || `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                subject: String(normalized.subject || "General").trim() || "General",
+                subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
                 chapter: String(normalized.chapter || "General").trim() || "General",
                 text: String(normalized.text || "").trim(),
                 status: status === "resolved" ? "resolved" : "unresolved",
@@ -1094,7 +1124,7 @@ function normalizeReflectionEntries(value) {
             const minutes = Number(normalized.minutes);
             return {
                 id: normalized.id || `reflection-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                subject: String(normalized.subject || "General").trim() || "General",
+                subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
                 learned: String(normalized.learned || "").trim(),
                 confusing: String(normalized.confusing || "").trim(),
                 minutes: Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0,
@@ -1113,7 +1143,7 @@ function normalizePastPaperAttempts(value) {
             const total = Number(normalized.total);
             const percent = Number(normalized.percent);
             const durationMinutes = Number(normalized.durationMinutes);
-            const subject = String(normalized.subject || "General").trim() || "General";
+            const subject = normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true });
             if (!Number.isFinite(obtained) || !Number.isFinite(total) || total <= 0) return null;
             return {
                 id: normalized.id || `paper-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1137,7 +1167,7 @@ function normalizeMistakeNotebook(value) {
         .map(item => {
             const normalized = item && typeof item === "object" ? item : {};
             const question = String(normalized.question || "").trim();
-            const subject = String(normalized.subject || "General").trim() || "General";
+            const subject = normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true });
             const difficulty = String(normalized.difficulty || "mixed").trim() || "mixed";
             const correctAnswer = String(normalized.correctAnswer || "").trim();
             const selectedAnswer = String(normalized.selectedAnswer || "").trim();
@@ -1195,6 +1225,7 @@ function normalizeFlashcardCard(card) {
         id: normalized.id || `fc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         front,
         back,
+        subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
         createdAt,
         lastReviewedAt: normalized.lastReviewedAt || "",
         nextReviewAt: Number.isFinite(parsedNext) ? new Date(parsedNext).toISOString() : new Date().toISOString(),
@@ -1428,6 +1459,7 @@ let firebaseInitPromise = null;
 let firebaseAuth = null;
 let firebaseDb = null;
 let firebaseAuthObserverAttached = false;
+let firebaseAuthStateResolved = false;
 let suppressFirebaseAuthObserver = false;
 let cloudSyncTimeoutId = null;
 let isHydratingFromCloud = false;
@@ -1570,6 +1602,7 @@ function applyRoleBasedUIVisibility() {
         const allowedRoles = rolesAttr.split(/\s+/).filter(Boolean);
         el.style.display = allowedRoles.includes(role) ? "" : "none";
     });
+    syncQuizSourceModeAccess();
 }
 
 function navigateTo(page) {
@@ -2095,11 +2128,11 @@ async function ensureFirebaseServices() {
         if (!window.firebaseApp) {
             return null;
         }
-        try {
-            const [authModule, firestoreModule] = await Promise.all([
-                import("https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js"),
-                import("https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js")
-            ]);
+    try {
+        const [authModule, firestoreModule] = await Promise.all([
+            import("https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js"),
+            import("https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js")
+        ]);
 
             firebaseAuth = authModule.getAuth(window.firebaseApp);
             firebaseDb = firestoreModule.getFirestore(window.firebaseApp);
@@ -2108,9 +2141,10 @@ async function ensureFirebaseServices() {
             firebaseSdk.signInWithEmailAndPassword = authModule.signInWithEmailAndPassword;
             firebaseSdk.sendPasswordResetEmail = authModule.sendPasswordResetEmail;
             firebaseSdk.signOut = authModule.signOut;
-            firebaseSdk.updateProfile = authModule.updateProfile;
-            firebaseSdk.onAuthStateChanged = authModule.onAuthStateChanged;
-            firebaseSdk.doc = firestoreModule.doc;
+        firebaseSdk.updateProfile = authModule.updateProfile;
+        firebaseSdk.onAuthStateChanged = authModule.onAuthStateChanged;
+        firebaseAuthStateResolved = false;
+        firebaseSdk.doc = firestoreModule.doc;
             firebaseSdk.getDoc = firestoreModule.getDoc;
             firebaseSdk.setDoc = firestoreModule.setDoc;
             firebaseSdk.serverTimestamp = firestoreModule.serverTimestamp;
@@ -2131,6 +2165,7 @@ async function setupFirebaseAuthObserver() {
 
     firebaseSdk.onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
         if (suppressFirebaseAuthObserver) return;
+        firebaseAuthStateResolved = true;
 
         if (firebaseUser && firebaseUser.email) {
             if (activeFirebaseUid !== firebaseUser.uid) {
@@ -2400,6 +2435,16 @@ async function verifyBackendAuthToken() {
 function applyAuthState() {
     const appContainer = document.getElementById("appContainer");
     const authContainer = document.getElementById("authContainer");
+
+    // Avoid login/logout flicker: wait until Firebase resolves initial auth state.
+    // Otherwise stale local session can briefly show app and then be force-logged-out.
+    if (firebaseAuth && firebaseAuthObserverAttached && !firebaseAuthStateResolved) {
+        if (appContainer) appContainer.style.display = "none";
+        if (authContainer) authContainer.style.display = "flex";
+        setAuthMessage("Checking session...");
+        return;
+    }
+
     const user = getCurrentUser();
 
     if (user) {
@@ -2413,7 +2458,6 @@ function applyAuthState() {
         bootstrapAuthenticatedApp();
         startPresenceTracking();
         renderProfile();
-        navigateTo("dashboard");
     } else {
         stopPresenceTracking();
         updateOnlineStudentsVisibility();
@@ -2891,8 +2935,8 @@ function difficultyWeight(level) {
 }
 
 function subjectMatches(taskSubject, examSubject) {
-    const taskValue = String(taskSubject || "").trim().toLowerCase();
-    const examValue = String(examSubject || "").trim().toLowerCase();
+    const taskValue = normalizeUnifiedSubject(taskSubject || "", "", { allowGeneral: true }).toLowerCase();
+    const examValue = normalizeUnifiedSubject(examSubject || "", "", { allowGeneral: true }).toLowerCase();
     if (!taskValue || !examValue) return false;
     return taskValue === examValue;
 }
@@ -6328,6 +6372,7 @@ function updateSelectedTaskCount() {
 }
 
 function renderTasks() {
+    syncUnifiedSubjectOptions();
     const taskList = document.getElementById("taskList");
     taskList.innerHTML = "";
     
@@ -6686,12 +6731,17 @@ function parseDueDateFromAssignmentText(text) {
 function inferSubjectFromAssignmentText(text) {
     const lower = String(text || '').toLowerCase();
     const subjectKeywords = [
-        { subject: 'Math', keys: ['math', 'algebra', 'geometry', 'trigonometry', 'calculus'] },
-        { subject: 'Science', keys: ['science', 'physics', 'chemistry', 'biology'] },
-        { subject: 'English', keys: ['english', 'grammar', 'essay', 'literature', 'comprehension'] },
-        { subject: 'History', keys: ['history', 'civilization', 'ancient', 'medieval', 'freedom movement'] },
-        { subject: 'Geography', keys: ['geography', 'map', 'climate', 'resources', 'latitude', 'longitude'] },
-        { subject: 'Programming', keys: ['programming', 'coding', 'javascript', 'python', 'algorithm', 'computer'] }
+        { subject: 'Programming', keys: ['programming', 'coding', 'algorithm', 'computer fundamentals', 'logic'] },
+        { subject: 'Python', keys: ['python', 'py', 'pandas', 'numpy', 'jupyter'] },
+        { subject: 'Data Structures', keys: ['data structure', 'array', 'linked list', 'stack', 'queue', 'tree', 'graph'] },
+        { subject: 'DBMS', keys: ['dbms', 'database', 'sql', 'normalization', 'er diagram', 'transaction'] },
+        { subject: 'Operating Systems', keys: ['operating system', 'os', 'process', 'thread', 'scheduling', 'deadlock', 'memory management'] },
+        { subject: 'Computer Networks', keys: ['network', 'tcp', 'ip', 'osi', 'routing', 'subnet', 'dns', 'http'] },
+        { subject: 'OOP', keys: ['oop', 'class', 'object', 'inheritance', 'polymorphism', 'encapsulation'] },
+        { subject: 'Discrete Mathematics', keys: ['discrete', 'logic', 'set theory', 'relation', 'function', 'graph theory', 'combinatorics'] },
+        { subject: 'Computer Architecture', keys: ['architecture', 'cpu', 'register', 'instruction cycle', 'cache', 'memory hierarchy'] },
+        { subject: 'Software Engineering', keys: ['software engineering', 'sdlc', 'requirement', 'testing', 'agile', 'uml'] },
+        { subject: 'Web Development', keys: ['web', 'html', 'css', 'javascript', 'dom', 'frontend', 'backend'] }
     ];
     for (const group of subjectKeywords) {
         if (group.keys.some(key => lower.includes(key))) return group.subject;
@@ -7514,6 +7564,7 @@ function reviewCurrentFlashcard(rating) {
 }
 
 function renderFlashcards() {
+    syncUnifiedSubjectOptions();
     const deckSelect = document.getElementById('flashcardDeck');
     const deckSelectModal = document.getElementById('flashcardDeckSelect');
     const decks = Object.keys(flashcards);
@@ -7675,7 +7726,7 @@ function setDrillCardsStatus(message, tone = "neutral") {
 }
 
 function generateSubjectDrillCards() {
-    const subject = document.getElementById('drillSubjectSelect')?.value || 'Math';
+    const subject = document.getElementById('drillSubjectSelect')?.value || 'Programming';
     const drillType = document.getElementById('drillTypeSelect')?.value || 'mixed';
     const requestedCount = Math.max(3, Math.min(20, Number(document.getElementById('drillCountSelect')?.value || 10)));
 
@@ -9485,75 +9536,42 @@ function renderAchievements() {
 
 // ==================== QUIZ ====================
 const quizQuestionBank = [
-    { subject: "Math", difficulty: "easy", question: "What is 8 + 5?", options: ["11", "12", "13", "14"], answerIndex: 2 },
-    { subject: "Math", difficulty: "easy", question: "What is 15 - 7?", options: ["6", "7", "8", "9"], answerIndex: 2 },
-    { subject: "Math", difficulty: "easy", question: "What is 6 x 4?", options: ["20", "22", "24", "26"], answerIndex: 2 },
-    { subject: "Math", difficulty: "easy", question: "What is 36 / 6?", options: ["5", "6", "7", "8"], answerIndex: 1 },
-    { subject: "Math", difficulty: "easy", question: "What is half of 20?", options: ["8", "9", "10", "12"], answerIndex: 2 },
-    { subject: "English", difficulty: "easy", question: "Choose the correct spelling.", options: ["Recieve", "Receive", "Receeve", "Receve"], answerIndex: 1 },
-    { subject: "English", difficulty: "easy", question: "Which is a noun?", options: ["Quickly", "Beautiful", "Happiness", "Run"], answerIndex: 2 },
-    { subject: "English", difficulty: "easy", question: "Choose the antonym of hot.", options: ["Warm", "Cold", "Heat", "Boiling"], answerIndex: 1 },
-    { subject: "English", difficulty: "easy", question: "What is the plural of child?", options: ["Childs", "Children", "Childes", "Childrens"], answerIndex: 1 },
-    { subject: "English", difficulty: "easy", question: "Choose the correct sentence.", options: ["i like apples.", "I like apples.", "I like Apples.", "i Like apples."], answerIndex: 1 },
-    { subject: "Programming", difficulty: "easy", question: "What does HTML stand for?", options: ["Hyper Text Markup Language", "High Text Machine Language", "Home Tool Markup Language", "Hyperlinks Text Machine Language"], answerIndex: 0 },
-    { subject: "Programming", difficulty: "easy", question: "Which symbol is used for JavaScript single-line comments?", options: ["<!-- -->", "//", "##", "**"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "easy", question: "What does CSS stand for?", options: ["Computer Style Sheets", "Colorful Style Sheets", "Cascading Style Sheets", "Creative Style System"], answerIndex: 2 },
-    { subject: "Programming", difficulty: "easy", question: "Which language runs in the browser?", options: ["Python", "Java", "JavaScript", "C++"], answerIndex: 2 },
-    { subject: "Programming", difficulty: "easy", question: "Which symbol is used to assign a value in JS?", options: ["==", "=", "===", ":"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "easy", question: "What is the capital city of France?", options: ["Berlin", "Madrid", "Paris", "Rome"], answerIndex: 2 },
-    { subject: "Geography", difficulty: "easy", question: "Which is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Arctic", "Pacific"], answerIndex: 3 },
-    { subject: "Geography", difficulty: "easy", question: "Which continent is Brazil in?", options: ["Africa", "Europe", "South America", "Asia"], answerIndex: 2 },
-    { subject: "Geography", difficulty: "easy", question: "Which river flows through Egypt?", options: ["Amazon", "Yangtze", "Nile", "Danube"], answerIndex: 2 },
-    { subject: "Geography", difficulty: "easy", question: "Which is the largest hot desert?", options: ["Gobi", "Kalahari", "Sahara", "Atacama"], answerIndex: 2 },
+    { subject: "Programming", difficulty: "easy", question: "Which keyword defines a function in JavaScript?", options: ["func", "define", "function", "method"], answerIndex: 2 },
+    { subject: "Python", difficulty: "easy", question: "Which symbol starts a comment in Python?", options: ["//", "#", "/*", "--"], answerIndex: 1 },
+    { subject: "Data Structures", difficulty: "easy", question: "Which data structure follows FIFO?", options: ["Stack", "Queue", "Tree", "Graph"], answerIndex: 1 },
+    { subject: "DBMS", difficulty: "easy", question: "Which SQL statement is used to fetch data?", options: ["GET", "FETCH", "SELECT", "READ"], answerIndex: 2 },
+    { subject: "Operating Systems", difficulty: "easy", question: "Which is not an OS?", options: ["Linux", "Windows", "Oracle", "macOS"], answerIndex: 2 },
+    { subject: "Computer Networks", difficulty: "easy", question: "What does IP stand for?", options: ["Internet Protocol", "Internal Port", "Input Process", "Interconnect Path"], answerIndex: 0 },
+    { subject: "OOP", difficulty: "easy", question: "Which concept hides internal implementation details?", options: ["Inheritance", "Polymorphism", "Abstraction", "Overloading"], answerIndex: 2 },
+    { subject: "Discrete Mathematics", difficulty: "easy", question: "A statement that is either true or false is called?", options: ["Predicate", "Proposition", "Axiom", "Relation"], answerIndex: 1 },
+    { subject: "Computer Architecture", difficulty: "easy", question: "CPU stands for?", options: ["Central Processing Unit", "Control Program Unit", "Computer Primary Unit", "Central Program Utility"], answerIndex: 0 },
+    { subject: "Software Engineering", difficulty: "easy", question: "What does SDLC stand for?", options: ["Software Development Life Cycle", "System Design Logic Code", "Software Data Link Chain", "System Debug Life Cycle"], answerIndex: 0 },
+    { subject: "Web Development", difficulty: "easy", question: "Which HTML tag creates a hyperlink?", options: ["<link>", "<a>", "<href>", "<url>"], answerIndex: 1 },
 
-    { subject: "Math", difficulty: "medium", question: "Solve: 3x = 21. x = ?", options: ["6", "7", "8", "9"], answerIndex: 1 },
-    { subject: "Math", difficulty: "medium", question: "What is 2^3 + 4?", options: ["10", "11", "12", "13"], answerIndex: 2 },
-    { subject: "Math", difficulty: "medium", question: "Find 25% of 200.", options: ["25", "40", "50", "60"], answerIndex: 2 },
-    { subject: "Math", difficulty: "medium", question: "If a triangle angles are 50 and 60, third angle is?", options: ["60", "65", "70", "75"], answerIndex: 2 },
-    { subject: "Math", difficulty: "medium", question: "What is the area of rectangle 8 x 5?", options: ["13", "30", "40", "45"], answerIndex: 2 },
-    { subject: "English", difficulty: "medium", question: "Which sentence is in past tense?", options: ["She writes daily.", "She wrote daily.", "She will write daily.", "She is writing daily."], answerIndex: 1 },
-    { subject: "English", difficulty: "medium", question: "Pick the correctly punctuated sentence.", options: ["Lets eat grandma.", "Let's eat, grandma.", "Lets, eat grandma.", "Let's eat grandma"], answerIndex: 1 },
-    { subject: "English", difficulty: "medium", question: "Choose the adverb.", options: ["Happy", "Quickly", "Blue", "Book"], answerIndex: 1 },
-    { subject: "English", difficulty: "medium", question: "Which is a synonym of begin?", options: ["End", "Start", "Stop", "Close"], answerIndex: 1 },
-    { subject: "English", difficulty: "medium", question: "Which sentence uses a conjunction?", options: ["The sky is blue.", "I ran and she walked.", "Open the door.", "He is tall."], answerIndex: 1 },
-    { subject: "Programming", difficulty: "medium", question: "Which method converts JSON text to object?", options: ["JSON.stringify()", "JSON.parse()", "JSON.convert()", "JSON.objectify()"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "medium", question: "Which keyword declares a constant in JavaScript?", options: ["var", "let", "const", "static"], answerIndex: 2 },
-    { subject: "Programming", difficulty: "medium", question: "Which loop is best for arrays in JS?", options: ["do...until", "for...of", "repeat", "goto"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "medium", question: "What does DOM stand for?", options: ["Data Object Model", "Document Object Model", "Digital Ordinance Model", "Document Oriented Module"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "medium", question: "Which array method adds item to end?", options: ["pop()", "shift()", "push()", "slice()"], answerIndex: 2 },
-    { subject: "Geography", difficulty: "medium", question: "Mount Everest is on Nepal border with?", options: ["Bhutan", "Tibet", "India", "Pakistan"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "medium", question: "Sahara Desert is in which continent?", options: ["Asia", "Africa", "Australia", "South America"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "medium", question: "Prime Meridian passes through which place?", options: ["Greenwich", "Paris", "Rome", "New York"], answerIndex: 0 },
-    { subject: "Geography", difficulty: "medium", question: "Which country has the most population?", options: ["USA", "India", "Brazil", "Russia"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "medium", question: "Which line divides Earth into hemispheres?", options: ["Tropic of Cancer", "Prime Meridian", "Equator", "Date Line"], answerIndex: 2 },
+    { subject: "Programming", difficulty: "medium", question: "Which method converts object to JSON string?", options: ["JSON.parse()", "JSON.convert()", "JSON.stringify()", "JSON.object()"], answerIndex: 2 },
+    { subject: "Python", difficulty: "medium", question: "What is output of len([1,2,3])?", options: ["2", "3", "4", "Error"], answerIndex: 1 },
+    { subject: "Data Structures", difficulty: "medium", question: "Which traversal is Left-Root-Right?", options: ["Preorder", "Inorder", "Postorder", "Levelorder"], answerIndex: 1 },
+    { subject: "DBMS", difficulty: "medium", question: "Which normal form removes partial dependency?", options: ["1NF", "2NF", "3NF", "BCNF"], answerIndex: 1 },
+    { subject: "Operating Systems", difficulty: "medium", question: "Round Robin uses which scheduling factor?", options: ["Priority only", "Time quantum", "Shortest job", "Deadline"], answerIndex: 1 },
+    { subject: "Computer Networks", difficulty: "medium", question: "Which layer handles end-to-end delivery?", options: ["Network", "Transport", "Data Link", "Physical"], answerIndex: 1 },
+    { subject: "OOP", difficulty: "medium", question: "Method overriding is resolved at?", options: ["Compile time", "Run time", "Link time", "Load time"], answerIndex: 1 },
+    { subject: "Discrete Mathematics", difficulty: "medium", question: "How many subsets does a set of 3 elements have?", options: ["6", "8", "9", "12"], answerIndex: 1 },
+    { subject: "Computer Architecture", difficulty: "medium", question: "Which memory is fastest?", options: ["RAM", "Cache", "SSD", "HDD"], answerIndex: 1 },
+    { subject: "Software Engineering", difficulty: "medium", question: "Which testing checks combined modules?", options: ["Unit testing", "Integration testing", "Acceptance testing", "Regression testing"], answerIndex: 1 },
+    { subject: "Web Development", difficulty: "medium", question: "Which CSS property controls box internal spacing?", options: ["margin", "padding", "border", "gap"], answerIndex: 1 },
 
-    { subject: "Math", difficulty: "hard", question: "If y = 2x + 3, what is y when x = 5?", options: ["11", "12", "13", "14"], answerIndex: 2 },
-    { subject: "Math", difficulty: "hard", question: "Roots of x^2 - 5x + 6 = 0 are?", options: ["1 and 6", "2 and 3", "-2 and -3", "3 and 4"], answerIndex: 1 },
-    { subject: "Math", difficulty: "hard", question: "Derivative of x^2 is?", options: ["x", "2x", "x^2", "2"], answerIndex: 1 },
-    { subject: "Math", difficulty: "hard", question: "If sin A = 1, A equals?", options: ["0 deg", "30 deg", "60 deg", "90 deg"], answerIndex: 3 },
-    { subject: "Math", difficulty: "hard", question: "What is the value of pi (approx)?", options: ["2.14", "3.14", "4.13", "3.41"], answerIndex: 1 },
-    { subject: "English", difficulty: "hard", question: "What is the synonym of abundant?", options: ["Scarce", "Plentiful", "Tiny", "Narrow"], answerIndex: 1 },
-    { subject: "English", difficulty: "hard", question: "Identify the literary device: 'Time is a thief.'", options: ["Alliteration", "Metaphor", "Hyperbole", "Irony"], answerIndex: 1 },
-    { subject: "English", difficulty: "hard", question: "Choose the passive voice sentence.", options: ["The chef cooked dinner.", "Dinner was cooked by the chef.", "The chef is cooking dinner.", "Cook dinner now."], answerIndex: 1 },
-    { subject: "English", difficulty: "hard", question: "Choose the correct reported speech: He said, 'I am tired.'", options: ["He said he is tired.", "He said he was tired.", "He says he was tired.", "He told I am tired."], answerIndex: 1 },
-    { subject: "English", difficulty: "hard", question: "What is the antonym of 'transparent'?", options: ["Clear", "Opaque", "Visible", "Bright"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "hard", question: "What is typeof null in JavaScript?", options: ["null", "object", "undefined", "boolean"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "hard", question: "What is a closure in JavaScript?", options: ["A CSS style", "A function with preserved outer scope", "A loop keyword", "An HTML tag"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "hard", question: "Which method is immutable for arrays?", options: ["splice()", "push()", "slice()", "pop()"], answerIndex: 2 },
-    { subject: "Programming", difficulty: "hard", question: "Which complexity is binary search?", options: ["O(n)", "O(log n)", "O(n^2)", "O(1)"], answerIndex: 1 },
-    { subject: "Programming", difficulty: "hard", question: "In async JS, which waits for Promise result?", options: ["yield", "await", "defer", "pause"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "hard", question: "Which line roughly follows 180 deg longitude?", options: ["Prime Meridian", "Equator", "International Date Line", "Tropic of Capricorn"], answerIndex: 2 },
-    { subject: "Geography", difficulty: "hard", question: "Which country has no natural rivers?", options: ["Egypt", "Saudi Arabia", "India", "Brazil"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "hard", question: "Which current causes mild climate in Western Europe?", options: ["Labrador Current", "Gulf Stream", "Canary Current", "Benguela Current"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "hard", question: "Ring of Fire is around which ocean?", options: ["Atlantic", "Pacific", "Indian", "Arctic"], answerIndex: 1 },
-    { subject: "Geography", difficulty: "hard", question: "Which country is both in Europe and Asia?", options: ["Spain", "Turkey", "Portugal", "Norway"], answerIndex: 1 }
+    { subject: "Programming", difficulty: "hard", question: "Average-case time complexity of quicksort is?", options: ["O(n)", "O(log n)", "O(n log n)", "O(n^2)"], answerIndex: 2 },
+    { subject: "Python", difficulty: "hard", question: "Which keyword is used to create a generator function?", options: ["return", "yield", "gen", "lambda"], answerIndex: 1 },
+    { subject: "Data Structures", difficulty: "hard", question: "Which structure is used in BFS?", options: ["Stack", "Queue", "Heap", "Deque only"], answerIndex: 1 },
+    { subject: "DBMS", difficulty: "hard", question: "ACID property ensuring all-or-nothing is?", options: ["Consistency", "Isolation", "Durability", "Atomicity"], answerIndex: 3 },
+    { subject: "Operating Systems", difficulty: "hard", question: "Which is necessary for deadlock?", options: ["Mutual exclusion", "Preemption", "Dynamic priority", "Time slicing"], answerIndex: 0 },
+    { subject: "Computer Networks", difficulty: "hard", question: "Which protocol is connection-oriented?", options: ["UDP", "IP", "TCP", "ICMP"], answerIndex: 2 },
+    { subject: "OOP", difficulty: "hard", question: "Which principle enables one interface, many implementations?", options: ["Encapsulation", "Polymorphism", "Aggregation", "Composition"], answerIndex: 1 },
+    { subject: "Discrete Mathematics", difficulty: "hard", question: "For a tree with n vertices, number of edges is?", options: ["n", "n+1", "n-1", "2n"], answerIndex: 2 },
+    { subject: "Computer Architecture", difficulty: "hard", question: "Pipelining primarily improves?", options: ["Latency of one instruction", "Throughput", "Clock frequency only", "Memory size"], answerIndex: 1 },
+    { subject: "Software Engineering", difficulty: "hard", question: "Which model emphasizes iterative sprints?", options: ["Waterfall", "V-Model", "Agile", "Big Bang"], answerIndex: 2 },
+    { subject: "Web Development", difficulty: "hard", question: "Which HTTP status means resource not found?", options: ["200", "301", "404", "500"], answerIndex: 2 }
 ];
-
-for (let i = quizQuestionBank.length - 1; i >= 0; i--) {
-    if (quizQuestionBank[i].subject === "Geography") {
-        quizQuestionBank.splice(i, 1);
-    }
-}
 
 const QUIZ_SUBJECTS = [
     "Programming",
@@ -9572,11 +9590,8 @@ const QUIZ_DIFFICULTIES = ["easy", "medium", "hard"];
 const QUIZ_MIN_PER_SUBJECT_DIFFICULTY = 25;
 
 const autoQuestionTopics = {
-    Math: ["fractions", "percentages", "algebra", "geometry", "ratio", "number patterns", "equations", "integers", "probability", "measurement"],
-    Science: ["matter", "atoms", "force", "energy", "cells", "ecosystem", "electricity", "acids and bases", "motion", "reactions"],
-    English: ["grammar", "vocabulary", "tenses", "punctuation", "synonyms", "antonyms", "reading comprehension", "sentence structure", "parts of speech", "spelling"],
     Programming: ["variables", "loops", "functions", "arrays", "objects", "debugging", "algorithms", "conditionals", "syntax", "data types"],
-    History: ["ancient civilizations", "medieval period", "freedom movements", "world wars", "constitutions", "timelines", "sources", "reforms", "leaders", "historical interpretation"],
+    Python: ["syntax", "data structures", "functions", "modules", "file handling", "exceptions", "OOP in python", "iterators", "libraries", "testing"],
     "Data Structures": ["arrays", "linked lists", "stacks", "queues", "trees", "graphs", "hashing", "sorting", "searching", "time complexity"],
     DBMS: ["ER models", "keys", "normalization", "joins", "transactions", "indexing", "SQL", "constraints", "views", "ACID properties"],
     "Operating Systems": ["processes", "threads", "scheduling", "deadlocks", "memory management", "file systems", "semaphores", "paging", "virtual memory", "IPC"],
@@ -9585,10 +9600,19 @@ const autoQuestionTopics = {
     "Discrete Mathematics": ["logic", "sets", "relations", "functions", "counting", "graph theory", "trees", "proofs", "combinatorics", "recurrence"],
     "Computer Architecture": ["number systems", "instruction cycle", "CPU", "registers", "memory hierarchy", "cache", "pipelining", "ALU", "IO", "assembly basics"],
     "Software Engineering": ["SDLC", "requirements", "design", "testing", "agile", "version control", "risk analysis", "estimation", "maintenance", "quality assurance"],
-    "Web Development": ["HTML", "CSS", "JavaScript", "DOM", "responsive design", "forms", "APIs", "frontend architecture", "validation", "deployment"],
-    Python: ["syntax", "data structures", "functions", "modules", "file handling", "exceptions", "OOP in python", "iterators", "libraries", "testing"]
+    "Web Development": ["HTML", "CSS", "JavaScript", "DOM", "responsive design", "forms", "APIs", "frontend architecture", "validation", "deployment"]
 };
 const INTERNAL_EXAM_MIN_QUIZ_QUESTIONS = 100;
+
+for (let i = quizQuestionBank.length - 1; i >= 0; i--) {
+    const item = quizQuestionBank[i];
+    if (!item || typeof item !== "object") {
+        quizQuestionBank.splice(i, 1);
+        continue;
+    }
+    const mappedSubject = normalizeUnifiedSubject(item.subject || "", "Programming", { allowGeneral: false });
+    item.subject = QUIZ_SUBJECTS.includes(mappedSubject) ? mappedSubject : "Programming";
+}
 
 function createAutoQuizQuestion(subject, difficulty, idx) {
     const topics = autoQuestionTopics[subject] || ["general knowledge"];
@@ -9674,15 +9698,128 @@ function updateQuizSessionModeLabel() {
         label.textContent = `Mode: Retry Due Now (${currentQuizSession.length} questions)`;
         return;
     }
+    const sourceMode = getQuizSourceMode();
+    const sourceLabel = sourceMode === 'question-bank' ? 'Question Bank' : 'Notes + Question Bank';
     label.textContent = currentQuizAdaptiveEnabled
-        ? 'Mode: Adaptive Quiz (weak boosted, mastered reduced)'
-        : 'Mode: Standard Quiz';
+        ? `Mode: Adaptive Quiz (${sourceLabel}; weak boosted, mastered reduced)`
+        : `Mode: Standard Quiz (${sourceLabel})`;
 }
 
 function isAdaptiveQuizEnabled() {
     const toggle = document.getElementById('adaptiveQuizToggle');
     if (!toggle) return true;
     return Boolean(toggle.checked);
+}
+
+function getQuizSourceMode() {
+    if (canAccessAdmin()) return 'both';
+    return 'question-bank';
+}
+
+function syncQuizSourceModeAccess() {
+    const select = document.getElementById('quizSourceMode');
+    if (!select) return;
+    if (canAccessAdmin()) {
+        select.value = 'both';
+        select.disabled = true;
+    } else {
+        select.value = 'question-bank';
+        select.disabled = true;
+    }
+}
+
+function isQuestionBankNote(note) {
+    if (!note || typeof note !== 'object') return false;
+    const title = String(note.title || '').toLowerCase();
+    const id = String(note.id || '').toLowerCase();
+    const content = String(note.content || '').toLowerCase();
+    return title.includes('question bank')
+        || title.includes('qbank')
+        || id.includes('qbank')
+        || content.includes('question bank');
+}
+
+function extractPromptsFromNote(note, limit = 20) {
+    const content = String(note && note.content ? note.content : '').trim();
+    if (!content) return [];
+    const lines = content
+        .split('\n')
+        .map(line => String(line || '').trim())
+        .filter(Boolean)
+        .map(line => line.replace(/^[-*]\s*/, '').replace(/^q\d+[\).\s:-]*/i, '').trim())
+        .filter(Boolean);
+
+    const prompts = [];
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        if (
+            /[?]$/.test(line)
+            || /^(explain|define|write|differentiate|solve|describe|compare|what|which|how)\b/i.test(line)
+        ) {
+            prompts.push(line);
+        } else if (lower.includes('unit ') || lower.includes('topic') || lower.includes('core')) {
+            prompts.push(`Explain ${line}.`);
+        }
+        if (prompts.length >= limit) break;
+    }
+    return prompts;
+}
+
+function createNoteDrivenQuizQuestion(note, prompt, idx, selectedDifficulty = 'mixed') {
+    const rawSubject = normalizeUnifiedSubject(note && note.subject ? note.subject : "Programming", "Programming", { allowGeneral: false });
+    const subject = QUIZ_SUBJECTS.includes(rawSubject) ? rawSubject : "Programming";
+    const topicPool = autoQuestionTopics[subject] || ["core concept", "application", "analysis", "problem solving"];
+    const d = selectedDifficulty === 'mixed'
+        ? QUIZ_DIFFICULTIES[idx % QUIZ_DIFFICULTIES.length]
+        : selectedDifficulty;
+    const main = topicPool[idx % topicPool.length];
+    const alt1 = topicPool[(idx + 1) % topicPool.length];
+    const alt2 = topicPool[(idx + 2) % topicPool.length];
+    const alt3 = topicPool[(idx + 3) % topicPool.length];
+    const safePrompt = String(prompt || '').trim().replace(/\s+/g, ' ');
+    const stem = safePrompt.length > 160 ? `${safePrompt.slice(0, 157)}...` : safePrompt;
+    return {
+        subject,
+        semester: pickSemesterForSubject(subject, idx),
+        difficulty: d,
+        question: `${note && note.title ? note.title : 'Notes'}: ${stem}`,
+        options: [
+            `${main} concept`,
+            `${alt1} concept`,
+            `${alt2} concept`,
+            `${alt3} concept`
+        ],
+        answerIndex: 0,
+        source: 'notes'
+    };
+}
+
+function buildNoteDrivenQuestionPool(filters) {
+    const subject = String(filters && filters.subject ? filters.subject : 'Any');
+    const semester = String(filters && filters.semester ? filters.semester : 'Any');
+    const difficulty = String(filters && filters.difficulty ? filters.difficulty : 'mixed');
+
+    const notes = mergeFreeNotesForView().filter(note => {
+        const mapped = normalizeUnifiedSubject(note && note.subject ? note.subject : '', 'Programming', { allowGeneral: false });
+        const subjectMatch = subject === 'Any' || mapped === subject;
+        const semesterMatch = semester === 'Any' || pickSemesterForSubject(mapped, 0) === semester;
+        return subjectMatch && semesterMatch;
+    });
+
+    const preferred = notes.filter(isQuestionBankNote);
+    const fallback = notes.filter(note => !isQuestionBankNote(note));
+    const ordered = [...preferred, ...fallback];
+
+    const result = [];
+    let seed = 0;
+    ordered.forEach(note => {
+        const prompts = extractPromptsFromNote(note, isQuestionBankNote(note) ? 24 : 12);
+        prompts.forEach(prompt => {
+            result.push(createNoteDrivenQuizQuestion(note, prompt, seed, difficulty));
+            seed += 1;
+        });
+    });
+    return result;
 }
 
 function getAdaptiveTopicBuckets() {
@@ -10072,23 +10209,41 @@ function updateMistakeReviewById(id, isCorrect) {
     return true;
 }
 
-function generateQuizSession() {
+async function generateQuizSession() {
     const subject = document.getElementById('quizSubject')?.value || 'Any';
     const semester = document.getElementById('quizSemester')?.value || 'Any';
     const difficulty = document.getElementById('quizDifficulty')?.value || 'mixed';
+    const sourceMode = getQuizSourceMode();
     const requestedCount = Math.max(5, Math.min(100, Number(document.getElementById('quizQuestionCount')?.value || 5)));
 
+    await fetchSharedFreeNotes();
+
     const matchesDifficulty = (q) => difficulty === 'mixed' || q.difficulty === difficulty;
-    let pool = quizQuestionBank.filter(q => matchesDifficulty(q));
+    let questionBankPool = quizQuestionBank.filter(q => matchesDifficulty(q));
     if (subject !== 'Any') {
-        pool = pool.filter(q => q.subject === subject);
+        questionBankPool = questionBankPool.filter(q => q.subject === subject);
     }
     if (semester !== 'Any') {
-        pool = pool.filter(q => String(q.semester || '').trim() === semester);
+        questionBankPool = questionBankPool.filter(q => String(q.semester || '').trim() === semester);
+    }
+
+    let pool = [];
+    if (sourceMode === 'question-bank') {
+        pool = questionBankPool;
+    } else {
+        const notePool = buildNoteDrivenQuestionPool({ subject, semester, difficulty });
+        const merged = [...questionBankPool, ...notePool];
+        const seen = new Set();
+        pool = merged.filter(item => {
+            const key = `${String(item.subject || '').trim()}|${String(item.difficulty || '').trim()}|${String(item.question || '').trim()}`;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     }
 
     if (pool.length === 0) {
-        alert('No questions available for selected subject/semester filters.');
+        alert('No questions available for selected source/subject/semester filters.');
         return;
     }
 
@@ -10787,10 +10942,36 @@ function createExternalQuestionBankContent(examName, subject, questionCount = 10
     return lines.join("\n");
 }
 
-function generateExamContentByType() {
+async function publishGeneratedNotePack(note) {
+    if (!note || typeof note !== "object") return false;
+    if (!canManageSharedNotes()) return false;
+    if (!isBackendFetchAllowed()) return false;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/shared-notes`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify(note)
+        });
+        if (!response.ok) return false;
+        const saved = await response.json().catch(() => null);
+        if (saved && saved.id) {
+            const idx = sharedFreeNotes.findIndex(item => item && item.id === saved.id);
+            if (idx >= 0) sharedFreeNotes[idx] = saved;
+            else sharedFreeNotes.unshift(saved);
+            sharedFreeNotesLoaded = true;
+            return true;
+        }
+    } catch (_) {}
+    return false;
+}
+
+async function generateExamContentByType() {
     const values = getExamCountdownFormValues();
     const examName = String(values.examName || "").trim();
-    const subject = String(values.subject || "General").trim() || "General";
+    const subject = normalizeUnifiedSubject(values.subject || "Programming", "Programming", { allowGeneral: false });
     const examType = values.examType === "external" ? "external" : "internal";
 
     if (!examName) {
@@ -10837,13 +11018,20 @@ function generateExamContentByType() {
         createdAt: nowIso
     };
 
-    upsertFreeNote(notesPack);
-    upsertFreeNote(questionBankPack);
+    const notesShared = await publishGeneratedNotePack(notesPack);
+    const qbankShared = await publishGeneratedNotePack(questionBankPack);
+
+    if (!notesShared) upsertFreeNote(notesPack);
+    if (!qbankShared) upsertFreeNote(questionBankPack);
     freeNotesLibrary = sanitizeFreeNotesLibrary(freeNotesLibrary);
     saveState({ freeNotesLibrary });
     renderFreeNotes();
     addActivity('book-open', 'External Exam Notes + QBank Created', `${examName} (${subject})`);
-    alert(`External pack created: Notes + 100-question bank for ${examName}. Open Notes Library to view.`);
+    if (notesShared || qbankShared) {
+        alert(`External pack created and shared to students: Notes + 100-question bank for ${examName}.`);
+    } else {
+        alert(`External pack created locally: Notes + 100-question bank for ${examName}. Open Notes Library to view.`);
+    }
 }
 
 function buildExamCountdownPlan(values) {
@@ -11449,11 +11637,14 @@ function setSubjectSelectOptions(selectId, options = {}) {
     const includeAll = Boolean(options.includeAll);
     const includeGeneral = Boolean(options.includeGeneral);
     const includeBreak = Boolean(options.includeBreak);
+    const includeEmpty = Boolean(options.includeEmpty);
+    const emptyLabel = String(options.emptyLabel || "Select Subject");
     const preferred = String(options.preferred || "").trim();
     const currentValue = String(select.value || "").trim();
 
     const subjectOptions = [...UNIFIED_BSC_SUBJECTS];
     const html = [];
+    if (includeEmpty) html.push(`<option value="">${emptyLabel}</option>`);
     if (includeAny) html.push('<option value="Any">Any Subject</option>');
     if (includeAll) html.push('<option value="all">All Subjects</option>');
     if (includeGeneral) html.push('<option value="General">General</option>');
@@ -11477,6 +11668,14 @@ function setSubjectSelectOptions(selectId, options = {}) {
 
 function syncUnifiedSubjectOptions() {
     setSubjectSelectOptions('quizSubject', { includeAny: true, preferred: 'Any' });
+    setSubjectSelectOptions('subjectSelect', { includeEmpty: true, emptyLabel: 'Select Subject', preferred: '' });
+    setSubjectSelectOptions('assignmentScanSubject', { includeEmpty: true, emptyLabel: 'Detected subject', preferred: '' });
+    setSubjectSelectOptions('dashboardQuestionSubject', { includeAny: true, preferred: 'Any' });
+    setSubjectSelectOptions('memoryBoosterSubject', { includeAny: true, preferred: 'Any' });
+    setSubjectSelectOptions('drillSubjectSelect', { preferred: 'Programming' });
+    setSubjectSelectOptions('voiceFlashSubjectSelect', { includeGeneral: true, preferred: 'General' });
+    setSubjectSelectOptions('revisionTemplateSubject', { preferred: 'Programming' });
+    setSubjectSelectOptions('sprintRevisionSubject', { preferred: 'Programming' });
     setSubjectSelectOptions('countdownExamSubject', { preferred: 'Programming' });
     setSubjectSelectOptions('freeNoteSubjectInput', { preferred: 'Programming' });
     setSubjectSelectOptions('freeNotesFilterSubject', { includeAll: true, preferred: 'all' });
@@ -11581,7 +11780,7 @@ function getKnownGoalSubjects() {
     const fromSubjects = Array.isArray(subjects) ? subjects.map(item => String((item && item.name) || "").trim()).filter(Boolean) : [];
     const fromTasks = tasks.map(task => String(task.subject || "").trim()).filter(Boolean);
     const fromQuiz = quizScores.map(score => String(score.subject || "").trim()).filter(Boolean);
-    const defaults = ["Math", "Science", "English", "History", "Geography", "Programming", "General"];
+    const defaults = [...UNIFIED_BSC_SUBJECTS, "General"];
     return [...new Set([...defaults, ...fromSubjects, ...fromTasks, ...fromQuiz])];
 }
 
@@ -11743,7 +11942,7 @@ function generateGoalRoadmap() {
     const rawText = input ? input.value : '';
     const parsed = parseGoalStatement(rawText);
     if (!parsed || !parsed.subject || !parsed.targetPercent) {
-        alert('Use a clear statement like: "I need 85% in Math".');
+        alert('Use a clear statement like: "I need 85% in Programming".');
         return;
     }
 
@@ -11801,116 +12000,135 @@ function createTasksFromGoalRoadmap() {
 }
 
 const CAREER_PATH_LIBRARY = {
-    Math: [
-        {
-            name: "Data Scientist",
-            roadmap: [
-                "Master algebra, statistics, and probability.",
-                "Practice Python + data analysis projects weekly.",
-                "Learn machine learning basics and model evaluation.",
-                "Build 3 portfolio projects and prepare interviews."
-            ]
-        },
-        {
-            name: "Mechanical/Software Engineer",
-            roadmap: [
-                "Strengthen core math problem solving.",
-                "Practice numerical reasoning and coding basics.",
-                "Study entrance-level physics integration.",
-                "Take timed mocks and track weak chapters."
-            ]
-        }
-    ],
-    Science: [
-        {
-            name: "Doctor (MBBS Path)",
-            roadmap: [
-                "Build NCERT mastery in Biology and Chemistry.",
-                "Practice concept-to-application MCQs daily.",
-                "Use spaced revision for high-yield chapters.",
-                "Take full-length mocks and fix error log weekly."
-            ]
-        },
-        {
-            name: "Biotech / Research Scientist",
-            roadmap: [
-                "Strengthen Biology fundamentals and lab concepts.",
-                "Learn scientific reading and note-making.",
-                "Practice data interpretation and experiment design.",
-                "Join projects/olympiad-style science practice."
-            ]
-        }
-    ],
-    English: [
-        {
-            name: "Law / Civil Services (Language Edge)",
-            roadmap: [
-                "Improve grammar precision and comprehension speed.",
-                "Practice analytical writing 3 times per week.",
-                "Build current-affairs vocabulary notebook.",
-                "Take timed reading + essay drills."
-            ]
-        },
-        {
-            name: "Journalism / Content Strategy",
-            roadmap: [
-                "Train summary writing and headline framing.",
-                "Practice research-backed article writing.",
-                "Develop editing and clarity skills.",
-                "Publish small portfolio pieces consistently."
-            ]
-        }
-    ],
-    History: [
-        {
-            name: "Civil Services / Policy Studies",
-            roadmap: [
-                "Create timeline-first chapter notes.",
-                "Practice cause-effect answer structure.",
-                "Revise maps/events with weekly tests.",
-                "Write short and long answers under time limit."
-            ]
-        }
-    ],
-    Geography: [
-        {
-            name: "GIS Analyst / Urban Planner",
-            roadmap: [
-                "Strengthen map-work and physical geography basics.",
-                "Practice data tables, climate and resource analysis.",
-                "Learn GIS fundamentals from beginner resources.",
-                "Build mini location-analysis projects."
-            ]
-        }
-    ],
     Programming: [
         {
             name: "Software Engineer",
             roadmap: [
-                "Master variables, loops, functions, and debugging.",
-                "Solve coding problems by topic each week.",
-                "Build 2-3 small apps with clean code.",
-                "Prepare DSA basics and interview-style questions."
+                "Master control flow, functions, and clean coding style.",
+                "Solve problem sets weekly and maintain a bug journal.",
+                "Build 2 mini projects and 1 full-stack project.",
+                "Prepare coding interview patterns and revision notes."
             ]
-        },
+        }
+    ],
+    Python: [
         {
-            name: "AI/ML Engineer",
+            name: "Automation / Python Developer",
             roadmap: [
-                "Strengthen Python + math for ML.",
-                "Learn data preprocessing and model basics.",
-                "Train on small datasets and evaluate results.",
-                "Create a practical ML mini-project portfolio."
+                "Strengthen Python basics and standard library usage.",
+                "Practice file handling, API calls, and scripting tasks.",
+                "Build automation tools and CLI mini apps.",
+                "Learn testing and package your projects."
+            ]
+        }
+    ],
+    "Data Structures": [
+        {
+            name: "Backend Engineer",
+            roadmap: [
+                "Master arrays, linked lists, stacks, queues, trees, and graphs.",
+                "Practice complexity analysis for each solution.",
+                "Solve medium/hard DSA sheets consistently.",
+                "Apply structures in real project features."
+            ]
+        }
+    ],
+    DBMS: [
+        {
+            name: "Database Developer / Analyst",
+            roadmap: [
+                "Master ER modeling, keys, normalization, and SQL joins.",
+                "Practice query optimization and indexing tasks.",
+                "Design schema for sample apps and add constraints.",
+                "Learn transaction control and backup basics."
+            ]
+        }
+    ],
+    "Operating Systems": [
+        {
+            name: "Systems Engineer",
+            roadmap: [
+                "Strengthen processes, scheduling, memory, and file systems.",
+                "Practice deadlock/synchronization problem-solving.",
+                "Study Linux commands and shell scripting basics.",
+                "Map OS concepts to interview-style questions."
+            ]
+        }
+    ],
+    "Computer Networks": [
+        {
+            name: "Network / Cloud Engineer",
+            roadmap: [
+                "Master OSI, TCP/IP, subnetting, routing, and switching.",
+                "Practice packet flow and protocol troubleshooting.",
+                "Learn DNS, HTTP, TLS, and basic cloud networking.",
+                "Build a small networking lab simulation."
+            ]
+        }
+    ],
+    OOP: [
+        {
+            name: "Application Developer",
+            roadmap: [
+                "Master classes, inheritance, polymorphism, and abstraction.",
+                "Implement OOP designs in Java/C++/Python projects.",
+                "Practice design patterns for common scenarios.",
+                "Refactor existing codebases using SOLID principles."
+            ]
+        }
+    ],
+    "Discrete Mathematics": [
+        {
+            name: "Algorithm Engineer",
+            roadmap: [
+                "Strengthen logic, sets, relations, and combinatorics.",
+                "Practice proofs and graph theory applications.",
+                "Connect recurrence and counting to DSA problems.",
+                "Use discrete concepts in optimization tasks."
+            ]
+        }
+    ],
+    "Computer Architecture": [
+        {
+            name: "Embedded / Hardware-Software Engineer",
+            roadmap: [
+                "Master CPU organization and instruction cycle.",
+                "Understand memory hierarchy and performance bottlenecks.",
+                "Practice number systems and low-level operations.",
+                "Build simple microcontroller or simulation projects."
+            ]
+        }
+    ],
+    "Software Engineering": [
+        {
+            name: "Software Project Engineer",
+            roadmap: [
+                "Master SDLC, requirement analysis, and UML modeling.",
+                "Practice test planning and QA workflows.",
+                "Use agile boards and sprint-based project delivery.",
+                "Create documentation and version-control discipline."
+            ]
+        }
+    ],
+    "Web Development": [
+        {
+            name: "Frontend / Full-Stack Developer",
+            roadmap: [
+                "Master HTML, CSS, JavaScript, and responsive layout.",
+                "Build UI modules and integrate REST APIs.",
+                "Practice form validation and state management.",
+                "Deploy portfolio projects with production checklist."
             ]
         }
     ],
     General: [
         {
-            name: "Multi-Skill Academic Path",
+            name: "BSc CS Core Path",
             roadmap: [
-                "Stabilize core subjects with daily study rhythm.",
-                "Identify top 2 strengths and 1 weak area.",
-                "Use weekly quizzes and chapter checklists.",
-                "Choose specialization after 6-8 weeks of data."
+                "Stabilize 2 core subjects and 1 weak subject weekly.",
+                "Track quiz accuracy, task completion, and focus hours.",
+                "Use revision + mock cycle every weekend.",
+                "Pick specialization after 6-8 weeks of performance data."
             ]
         }
     ]
@@ -12127,7 +12345,7 @@ function toggleChapterChecklistDone(id, checked) {
 }
 
 function getChapterFilterSubjects() {
-    const defaults = ['Math', 'Science', 'English', 'History', 'Geography', 'Programming', 'General'];
+    const defaults = [...UNIFIED_BSC_SUBJECTS, 'General'];
     const fromTracker = chapterTracker.map(item => String(item.subject || '').trim()).filter(Boolean);
     return [...new Set([...defaults, ...fromTracker])];
 }
@@ -12483,116 +12701,17 @@ function deleteChapterTrackerEntry(id) {
     renderChapterTracker();
 }
 
-function getRevisionTemplatePreset(grade, subject) {
-    const presets = {
-        "7": {
-            Math: [
-                "Integers and fractions fundamentals",
-                "Algebra basics and simple equations",
-                "Geometry fundamentals and constructions",
-                "Weekly mixed worksheet and chapter test"
-            ],
-            Science: [
-                "Nutrition in plants and animals",
-                "Heat and temperature concepts",
-                "Acids, bases and salts basics",
-                "Weekly practical-based revision and test"
-            ],
-            English: [
-                "Reading comprehension and vocabulary",
-                "Grammar practice (tenses, modals, prepositions)",
-                "Writing skills (paragraph, letter, story)",
-                "Weekly literature recap and test"
-            ],
-            History: [
-                "Early medieval world overview",
-                "Regional kingdoms and culture",
-                "Social change and trade",
-                "Weekly map-work and chapter test"
-            ]
-        },
-        "8": {
-            Math: [
-                "Rational numbers and linear equations",
-                "Understanding quadrilaterals and mensuration",
-                "Data handling and probability basics",
-                "Weekly mixed practice and chapter test"
-            ],
-            Science: [
-                "Crop production and microorganisms",
-                "Force, friction and pressure",
-                "Metals and non-metals",
-                "Weekly concept recap and test"
-            ],
-            English: [
-                "Comprehension and inference practice",
-                "Grammar consolidation (voice, reported speech)",
-                "Writing tasks (article, notice, email)",
-                "Weekly literature revision and test"
-            ],
-            History: [
-                "Colonial period foundations",
-                "Social and political changes",
-                "National movement key events",
-                "Weekly timeline revision and test"
-            ]
-        },
-        "9": {
-            Math: [
-                "Number systems and polynomials",
-                "Linear equations and coordinate geometry",
-                "Triangles and circles basics",
-                "Weekly mixed NCERT exercise and test"
-            ],
-            Science: [
-                "Matter, atoms and cells",
-                "Motion and force laws",
-                "Tissues and life processes basics",
-                "Weekly numericals + diagram test"
-            ],
-            English: [
-                "Reading passages and question strategy",
-                "Grammar and editing practice",
-                "Writing section formats",
-                "Weekly literature chapter test"
-            ],
-            History: [
-                "French Revolution and Nazism overview",
-                "Indian history themes and sources",
-                "Democracy and institutions recap",
-                "Weekly long-answer practice and test"
-            ]
-        },
-        "10": {
-            Math: [
-                "Real numbers, polynomials and pair of equations",
-                "Quadratic equations, AP and coordinate geometry",
-                "Triangles, circles and trigonometry",
-                "Weekly full syllabus mixed mock test"
-            ],
-            Science: [
-                "Chemical reactions, acids-bases-salts",
-                "Life processes and heredity",
-                "Electricity and magnetic effects",
-                "Weekly board-style mixed test and error log"
-            ],
-            English: [
-                "Reading and unseen passage strategy",
-                "Grammar and editing with timed practice",
-                "Writing section board patterns",
-                "Weekly literature + full section test"
-            ],
-            History: [
-                "Nationalism in Europe and India",
-                "Global world and print culture",
-                "Democratic politics and economy themes",
-                "Weekly board-style source-based test"
-            ]
-        }
-    };
-
-    const byGrade = presets[String(grade)] || presets["10"];
-    return byGrade[String(subject)] || byGrade.Math;
+function getRevisionTemplatePreset(yearLevel, subject) {
+    const normalizedYear = BSC_CS_YEAR_LEVELS.includes(String(yearLevel)) ? String(yearLevel) : BSC_CS_YEAR_LEVELS[0];
+    const normalizedSubject = UNIFIED_BSC_SUBJECTS.includes(String(subject)) ? String(subject) : "Programming";
+    const units = BSC_CS_UNIT_MAP[normalizedSubject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
+    const yearFocus = BSC_CS_YEAR_FOCUS[normalizedYear] || "structured BSc CS progression";
+    return [
+        `${normalizedYear} focus: ${yearFocus}`,
+        `${normalizedSubject} core concepts: ${units[0]} and ${units[1]}`,
+        `${normalizedSubject} applied practice: ${units[2]} and ${units[3]}`,
+        `Mixed ${normalizedSubject} revision, PYQ drill, and timed test`
+    ];
 }
 
 function renderRevisionTemplatePreview() {
@@ -12601,14 +12720,14 @@ function renderRevisionTemplatePreview() {
     const previewList = document.getElementById('revisionTemplatePreviewList');
     if (!previewList) return;
 
-    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : '10');
-    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : 'FY BSc Computer Science');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Programming');
     const topics = getRevisionTemplatePreset(grade, subject);
 
     previewList.innerHTML = topics.map((topic, idx) => `
         <li>
             <strong>Week ${idx + 1}: ${topic}</strong>
-            <span>Grade ${grade} ${subject}</span>
+            <span>${grade} | ${subject}</span>
         </li>
     `).join('');
 }
@@ -12618,13 +12737,13 @@ function createRevisionTemplatePlan() {
     const subjectInput = document.getElementById('revisionTemplateSubject');
     const previewList = document.getElementById('revisionTemplatePreviewList');
 
-    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : '10');
-    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const grade = String(gradeInput && gradeInput.value ? gradeInput.value : 'FY BSc Computer Science');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Programming');
     const topics = getRevisionTemplatePreset(grade, subject);
 
     const createdTasks = [];
     for (let week = 1; week <= 4; week++) {
-        const text = `Grade ${grade} ${subject} Revision Week ${week}: ${topics[week - 1]}`;
+        const text = `${grade} ${subject} Revision Week ${week}: ${topics[week - 1]}`;
         const exists = tasks.some(task => String(task.text || '').trim() === text);
         if (exists) continue;
         const due = new Date();
@@ -12647,14 +12766,14 @@ function createRevisionTemplatePlan() {
 
     if (createdTasks.length === 0) {
         renderRevisionTemplatePreview();
-        alert('Revision tasks already exist for this grade and subject.');
+        alert('Revision tasks already exist for this year level and subject.');
         return;
     }
 
     saveTasks();
     renderTasks();
     renderDashboard();
-    addActivity('calendar-check', 'Revision Template Created', `${createdTasks.length} tasks for Grade ${grade} ${subject}`);
+    addActivity('calendar-check', 'Revision Template Created', `${createdTasks.length} tasks for ${grade} ${subject}`);
 
     if (previewList) {
         previewList.innerHTML = createdTasks.map(task => `
@@ -12668,46 +12787,18 @@ function createRevisionTemplatePlan() {
 
 function getSprintRevisionPlan(days, subject) {
     const totalDays = Math.max(7, Math.min(30, Number(days) || 7));
-    const normalizedSubject = String(subject || 'Math');
-    const focusLibrary = {
-        Math: [
-            'Core formulas and concepts',
-            'Worked examples from key chapters',
-            'Timed problem-solving set',
-            'Weak-topic drill and corrections',
-            'Mixed chapter practice',
-            'Previous paper questions',
-            'Mock test and error log'
-        ],
-        Science: [
-            'Concept recap and definitions',
-            'Diagrams and labelled practice',
-            'Numericals/application questions',
-            'Weak-topic correction session',
-            'Chapter-wise short tests',
-            'Previous paper questions',
-            'Mock test and corrections'
-        ],
-        English: [
-            'Reading comprehension strategy',
-            'Grammar drill and editing',
-            'Writing format practice',
-            'Literature chapter recap',
-            'Weak-topic correction session',
-            'Sample paper practice',
-            'Mock test and corrections'
-        ],
-        History: [
-            'Timeline and chronology recap',
-            'Causes-effects long-answer prep',
-            'Map/source-based practice',
-            'Weak-topic correction session',
-            'Chapter summary recall',
-            'Previous paper questions',
-            'Mock test and corrections'
-        ]
-    };
-    const focuses = focusLibrary[normalizedSubject] || focusLibrary.Math;
+    const normalizedSubject = UNIFIED_BSC_SUBJECTS.includes(String(subject)) ? String(subject) : 'Programming';
+    const units = BSC_CS_UNIT_MAP[normalizedSubject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
+    const focuses = [
+        `${units[0]} theory recap`,
+        `${units[0]} solved examples`,
+        `${units[1]} concept notes and formulas`,
+        `${units[1]} practice drill`,
+        `${units[2]} problem solving`,
+        `${units[3]} PYQ and case-based practice`,
+        'Weak-topic correction and doubt clearing',
+        'Timed mixed test and error log update'
+    ];
     const totalBlocks = totalDays <= 7 ? 7 : totalDays <= 14 ? 8 : 12;
     const plan = [];
     for (let i = 0; i < totalBlocks; i++) {
@@ -12727,7 +12818,7 @@ function renderSprintRevisionPreview() {
     if (!list) return;
 
     const days = Number(daysInput && daysInput.value ? daysInput.value : 7);
-    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Programming');
     const plan = getSprintRevisionPlan(days, subject);
     if (plan.length === 0) {
         list.innerHTML = '<li class="empty-state">No sprint plan generated.</li>';
@@ -12746,7 +12837,7 @@ function createSprintRevisionTasks() {
     const daysInput = document.getElementById('sprintRevisionDays');
     const subjectInput = document.getElementById('sprintRevisionSubject');
     const days = Number(daysInput && daysInput.value ? daysInput.value : 7);
-    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Math');
+    const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'Programming');
     const plan = getSprintRevisionPlan(days, subject);
 
     if (plan.length === 0) {
@@ -13123,7 +13214,7 @@ function renderTimerSubjectOptions() {
     const select = document.getElementById('timerSubjectSelect');
     if (!select) return;
     const existing = select.value || 'General';
-    const defaultSubjects = ['General', 'Math', 'Science', 'English', 'History', 'Geography', 'Programming'];
+    const defaultSubjects = ['General', ...UNIFIED_BSC_SUBJECTS];
     const customSubjects = subjects
         .map(s => String((s && s.name) || '').trim())
         .filter(Boolean);
