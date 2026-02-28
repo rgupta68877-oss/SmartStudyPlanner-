@@ -1108,16 +1108,31 @@
                 <div class="task-options">
                     <select id="quizSubject">
                         <option value="Any">Any Subject</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
                         <option value="Programming">Programming</option>
-                        <option value="History">History</option>
+                        <option value="Python">Python</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
+                    </select>
+                    <select id="quizSemester">
+                        <option value="Any">Any Semester</option>
+                        <option value="Sem 1">Semester 1</option>
+                        <option value="Sem 2">Semester 2</option>
+                        <option value="Sem 3">Semester 3</option>
+                        <option value="Sem 4">Semester 4</option>
+                        <option value="Sem 5">Semester 5</option>
+                        <option value="Sem 6">Semester 6</option>
                     </select>
                     <select id="quizDifficulty">
                         <option value="mixed">Similar</option>
                     </select>
-                    <input type="number" id="quizQuestionCount" min="5" max="25" value="5" placeholder="Questions">
+                    <input type="number" id="quizQuestionCount" min="5" max="100" value="5" placeholder="Questions">
                     <label>
                         <input type="checkbox" id="adaptiveQuizToggle" checked>
                         Adaptive Quiz
@@ -1226,13 +1241,21 @@
                 <div class="task-options">
                     <input type="text" id="countdownExamName" placeholder="Exam name (e.g., Midterm Math)">
                     <select id="countdownExamSubject">
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
-                        <option value="General">General</option>
+                        <option value="Python">Python</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
+                    </select>
+                    <select id="countdownExamType">
+                        <option value="internal">Internal Exam</option>
+                        <option value="external">External Exam</option>
                     </select>
                     <input type="date" id="countdownExamDate">
                 </div>
@@ -1250,6 +1273,9 @@
                     </button>
                     <button class="clear-btn" onclick="regenerateExamCountdownPlan()">
                         <i class="fas fa-arrows-rotate"></i> Regenerate Plan
+                    </button>
+                    <button class="action-btn" onclick="generateExamContentByType()">
+                        <i class="fas fa-wand-magic-sparkles"></i> Auto Internal/External Pack
                     </button>
                 </div>
                 <p id="countdownEngineSummary">Add exam details to generate revision waves, mock tests, and buffer days.</p>
@@ -1359,8 +1385,25 @@
                     </select>
                     <input type="time" id="timetableTime">
                 </div>
-                <div class="input-group">
-                    <input type="text" id="timetableSubject" placeholder="Subject (e.g., Physics)">
+                <div class="task-options">
+                    <select id="timetableYearLevel">
+                        <option value="FY BSc Computer Science">FY BSc Computer Science</option>
+                        <option value="SY BSc Computer Science">SY BSc Computer Science</option>
+                        <option value="TY BSc Computer Science">TY BSc Computer Science</option>
+                    </select>
+                    <select id="timetableSubject">
+                        <option value="Programming">Programming</option>
+                        <option value="Python">Python</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
+                    </select>
                 </div>
                 <div class="input-group">
                     <input type="text" id="timetableTopic" placeholder="Topic (optional)">
@@ -1403,14 +1446,8 @@
                         <option value="Software Engineering">Software Engineering</option>
                         <option value="Web Development">Web Development</option>
                         <option value="Python">Python</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
-                        <option value="General">General</option>
                     </select>
-                    <input type="text" id="freeNoteLevelInput" placeholder="Class/Level (e.g., Class 10)">
+                    <input type="text" id="freeNoteLevelInput" placeholder="Year/Level (e.g., FY BSc Computer Science)">
                 </div>
                 <div class="input-group">
                     <textarea id="freeNoteContentInput" rows="6" placeholder="Write note content for students to download."></textarea>
@@ -1445,12 +1482,6 @@
                         <option value="Software Engineering">Software Engineering</option>
                         <option value="Web Development">Web Development</option>
                         <option value="Python">Python</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
-                        <option value="General">General</option>
                     </select>
                 </div>
                 <ul id="freeNotesList">

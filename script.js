@@ -382,114 +382,150 @@ const DEFAULT_FREE_NOTES_LIBRARY = [
     }
 ];
 
-const STANDARD_SUBJECTS = ["Math", "Science", "English", "History", "Geography", "Programming"];
-const STANDARD_CLASSES = [7, 8, 9, 10];
-const STANDARD_CLASS_FOCUS = {
-    7: "foundation and concept clarity",
-    8: "concept strengthening and application",
-    9: "analytical thinking and problem solving",
-    10: "board-oriented mastery and revision"
-};
-const STANDARD_UNIT_MAP = {
-    Math: ["Numbers and Algebra", "Geometry and Mensuration", "Data Handling", "Applied Problems"],
-    Science: ["Matter and Materials", "Life Processes", "Force and Energy", "Environment and Sustainability"],
-    English: ["Reading Skills", "Grammar", "Writing Skills", "Literature Response"],
-    History: ["Ancient/Medieval Context", "Modern World Events", "National Movements", "Historical Analysis"],
-    Geography: ["Physical Features", "Climate and Resources", "Human Geography", "Maps and Case Studies"],
-    Programming: ["Logic and Algorithms", "Syntax and Data Types", "Control Flow and Functions", "Debugging and Projects"]
+const BSC_CS_YEAR_LEVELS = [
+    "FY BSc Computer Science",
+    "SY BSc Computer Science",
+    "TY BSc Computer Science"
+];
+
+const BSC_CS_YEAR_FOCUS = {
+    "FY BSc Computer Science": "foundations in programming, logic, and computational thinking",
+    "SY BSc Computer Science": "core systems and software concepts with practical implementation",
+    "TY BSc Computer Science": "advanced specialization, project work, and industry readiness"
 };
 
-function createStandardNoteContent(subject, classNo) {
-    const units = STANDARD_UNIT_MAP[subject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
-    const focus = STANDARD_CLASS_FOCUS[classNo] || "structured learning";
-    return [
-        `Page 1: Standard ${classNo} ${subject} Syllabus Overview`,
-        `- Learning focus: ${focus}`,
-        `- Unit 1: ${units[0]}`,
-        `- Unit 2: ${units[1]}`,
-        `- Unit 3: ${units[2]}`,
-        `- Unit 4: ${units[3]}`,
-        "",
-        `Page 2: Unit 1 Notes (${units[0]})`,
-        `- Core definitions and concept map for ${units[0]}.`,
-        `- Important rules/theorems/process steps with examples.`,
-        `- Common mistakes and correction strategy.`,
-        "",
-        `Page 3: Unit 2 Notes (${units[1]})`,
-        `- Key concepts and summary chart.`,
-        `- Solved examples for medium-level questions.`,
-        `- Short revision points for quick recall.`,
-        "",
-        `Page 4: Unit 3 Notes (${units[2]})`,
-        `- Diagram/table-based explanation where needed.`,
-        `- Standard textbook pattern questions and solutions.`,
-        `- Exam writing format for 2-mark and 3-mark answers.`,
-        "",
-        `Page 5: Unit 4 Notes (${units[3]})`,
-        `- Practical/case-based or application-based learning points.`,
-        `- High-frequency questions from previous assessments.`,
-        `- Last-minute revision checklist.`,
-        "",
-        `Page 6: Unit-wise Questions with Answers`,
-        `Q1 (${units[0]}): State one key concept and one application.`,
-        `A1: Define the concept in one line and link it to a real example from classwork.`,
-        `Q2 (${units[1]}): Solve/Explain one standard textbook-style problem.`,
-        `A2: Use step-by-step method: given data, approach, solution, and final statement.`,
-        `Q3 (${units[2]}): Write a short answer question response in exam format.`,
-        `A3: Start with keyword definition, then two valid points, then a one-line conclusion.`,
-        `Q4 (${units[3]}): Attempt one higher-order/application question.`,
-        `A4: Break the problem into parts, apply the correct concept, and justify final answer clearly.`,
-        "",
-        `Page 7: Practice Set with Answers`,
-        `Q5: List two important terms from each unit.`,
-        `A5: Any two correct unit terms with proper meaning will be accepted.`,
-        `Q6: Which unit needs more practice for you and why?`,
-        `A6: Mention one weak unit and one improvement action (daily practice/revision sheet).`,
-        `Q7: Write one 5-mark style answer from this standard.`,
-        `A7: Structure: introduction, 3-4 valid points, example/diagram, and conclusion.`,
-        `Q8: Prepare a one-page revision sheet for all units.`,
-        `A8: Include formulas/rules/keywords and 1 solved example per unit.`,
-        "",
-        `Page 8: Weekly Revision Plan`,
-        `Day 1-2: Unit 1 + Unit 2 recap`,
-        `Day 3-4: Unit 3 + Unit 4 recap`,
-        `Day 5: Mixed worksheet`,
-        `Day 6: Self-test + answer checking`,
-        `Day 7: Error log revision and quick oral recall`,
-        "",
-        `Page 9: Extra Question Bank with Answers`,
-        `Q9 (${units[0]}): Write one 3-mark and one 5-mark style answer.`,
-        `A9: 3-mark answer = definition + 2 points; 5-mark answer = intro + 4 points + conclusion.`,
-        `Q10 (${units[1]}): Solve one application-based problem.`,
-        `A10: Mention known values, approach, working steps, final answer with unit/context.`,
-        `Q11 (${units[2]}): Create one mind map from chapter headings.`,
-        `A11: Include keywords, subtopics, and one example for each branch.`,
-        `Q12 (${units[3]}): Attempt one previous-year style question.`,
-        `A12: Follow board format and underline keywords.`,
-        "",
-        `Page 10: Final Revision + Answer Writing Guide`,
-        `- Keep answers pointwise and cleanly structured.`,
-        `- For theory: intro, key points, conclusion.`,
-        `- For numericals: formula, substitution, calculation, final statement.`,
-        `- For long answers: use headings and subheadings.`,
-        `- Last 24-hour plan: quick formulas, key definitions, and one mock answer set.`
-    ].join("\n");
+const BSC_CS_YEAR_SUBJECT_MAP = {
+    "FY BSc Computer Science": ["Programming", "Python", "Data Structures", "Discrete Mathematics", "DBMS", "Web Development"],
+    "SY BSc Computer Science": ["OOP", "Operating Systems", "Computer Networks", "DBMS", "Computer Architecture", "Software Engineering"],
+    "TY BSc Computer Science": ["Software Engineering", "Computer Networks", "Operating Systems", "Web Development", "Programming", "Computer Architecture"]
+};
+
+const BSC_CS_UNIT_MAP = {
+    Programming: ["Logic Building", "Control Structures", "Functions", "Problem Solving"],
+    Python: ["Data Types", "Functions and Modules", "File Handling", "Mini Projects"],
+    "Data Structures": ["Arrays and Linked Lists", "Stacks and Queues", "Trees and Graphs", "Searching and Sorting"],
+    DBMS: ["ER Modeling", "Relational Design", "SQL Queries", "Normalization and Transactions"],
+    "Operating Systems": ["Processes and Threads", "Scheduling", "Synchronization", "Memory and File Systems"],
+    "Computer Networks": ["OSI and TCP/IP", "IP Addressing", "Routing Basics", "Transport and Application Layers"],
+    OOP: ["Classes and Objects", "Inheritance and Polymorphism", "Abstraction and Interfaces", "Exception Handling"],
+    "Discrete Mathematics": ["Logic and Proofs", "Sets and Relations", "Functions and Counting", "Graphs and Trees"],
+    "Computer Architecture": ["Number Systems", "CPU Organization", "Memory Hierarchy", "Instruction Cycle"],
+    "Software Engineering": ["SDLC Models", "Requirement Engineering", "Testing", "Agile and Maintenance"],
+    "Web Development": ["HTML/CSS", "JavaScript DOM", "Client-Server Basics", "Responsive UI Patterns"]
+};
+
+const BSC_CS_SEMESTER_SUBJECT_MAP = {
+    "Sem 1": ["Programming", "Python", "Discrete Mathematics"],
+    "Sem 2": ["Data Structures", "DBMS", "Web Development"],
+    "Sem 3": ["OOP", "Operating Systems", "Computer Architecture"],
+    "Sem 4": ["Computer Networks", "Software Engineering", "DBMS"],
+    "Sem 5": ["Programming", "Web Development", "Computer Networks"],
+    "Sem 6": ["Operating Systems", "Software Engineering", "OOP"]
+};
+
+const BSC_CS_SUBJECT_SEMESTERS = Object.entries(BSC_CS_SEMESTER_SUBJECT_MAP).reduce((acc, [semester, subjectList]) => {
+    subjectList.forEach((subject) => {
+        if (!acc[subject]) acc[subject] = [];
+        if (!acc[subject].includes(semester)) acc[subject].push(semester);
+    });
+    return acc;
+}, {});
+
+function getSemestersForSubject(subject) {
+    return BSC_CS_SUBJECT_SEMESTERS[String(subject || "").trim()] || [];
 }
 
-function buildStandardWiseNotesLibrary() {
-    return STANDARD_CLASSES.flatMap((classNo) => (
-        STANDARD_SUBJECTS.map((subject) => ({
-            id: `std-${subject.toLowerCase()}-${classNo}`,
-            title: `${subject} Standard ${classNo} Notes + Unit Q&A`,
+function pickSemesterForSubject(subject, seed = 0) {
+    const semesters = getSemestersForSubject(subject);
+    if (!semesters.length) return "";
+    return semesters[Math.abs(Number(seed) || 0) % semesters.length];
+}
+
+function createBscSemesterQuestionBankContent(subject, semester) {
+    const units = BSC_CS_UNIT_MAP[subject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
+    const lines = [
+        `${subject} - ${semester} Question Bank`,
+        "Pattern: 2 marks, 5 marks, and practical/case-based questions.",
+        ""
+    ];
+    for (let i = 0; i < 25; i++) {
+        const unit = units[i % units.length];
+        const mode = i % 5;
+        let prompt = `Explain one key concept from ${unit}.`;
+        if (mode === 1) prompt = `Write short notes on ${unit} with one example.`;
+        if (mode === 2) prompt = `Differentiate two methods related to ${unit}.`;
+        if (mode === 3) prompt = `Solve one exam-level problem from ${unit}.`;
+        if (mode === 4) prompt = `Write algorithm/flow steps for a problem from ${unit}.`;
+        lines.push(`Q${i + 1}. ${prompt}`);
+    }
+    return lines.join("\n");
+}
+
+function buildBscSemesterQuestionBanks() {
+    return Object.entries(BSC_CS_SEMESTER_SUBJECT_MAP).flatMap(([semester, subjectList]) => (
+        subjectList.map((subject) => ({
+            id: `bsc-qbank-${semester.toLowerCase().replace(/\s+/g, '-')}-${subject.toLowerCase().replace(/\s+/g, '-')}`,
+            title: `${subject} ${semester} Question Bank`,
             subject,
-            level: `Class ${classNo}`,
-            content: createStandardNoteContent(subject, classNo),
+            level: `${semester} BSc Computer Science`,
+            content: createBscSemesterQuestionBankContent(subject, semester),
             createdAt: "2026-01-01T00:00:00.000Z"
         }))
     ));
 }
 
-for (const note of buildStandardWiseNotesLibrary()) {
+function createBscYearNoteContent(subject, yearLevel) {
+    const units = BSC_CS_UNIT_MAP[subject] || ["Unit 1", "Unit 2", "Unit 3", "Unit 4"];
+    const focus = BSC_CS_YEAR_FOCUS[yearLevel] || "structured BSc CS progression";
+    return [
+        `Syllabus Overview: ${yearLevel} - ${subject}`,
+        `- Year focus: ${focus}`,
+        `- Unit 1: ${units[0]}`,
+        `- Unit 2: ${units[1]}`,
+        `- Unit 3: ${units[2]}`,
+        `- Unit 4: ${units[3]}`,
+        "",
+        "Core Revision Notes:",
+        `1) ${units[0]}: concepts + solved examples`,
+        `2) ${units[1]}: key methods + common errors`,
+        `3) ${units[2]}: exam-oriented practice`,
+        `4) ${units[3]}: applications + viva points`,
+        "",
+        "Unit-wise Questions:",
+        `Q1 (${units[0]}): Explain one core concept with example.`,
+        `Q2 (${units[1]}): Write algorithm/steps and justify output.`,
+        `Q3 (${units[2]}): Attempt one 5-mark descriptive answer.`,
+        `Q4 (${units[3]}): Attempt one practical/case-based question.`,
+        "",
+        "Weekly Study Plan:",
+        "Day 1-2: Unit 1 and Unit 2",
+        "Day 3-4: Unit 3 and Unit 4",
+        "Day 5: Mixed practice problems",
+        "Day 6: Self-test and error log",
+        "Day 7: Revision + short notes update"
+    ].join("\n");
+}
+
+function buildBscYearWiseNotesLibrary() {
+    return BSC_CS_YEAR_LEVELS.flatMap((yearLevel) => (
+        (BSC_CS_YEAR_SUBJECT_MAP[yearLevel] || []).map((subject) => ({
+            id: `bsc-${yearLevel.split(' ')[0].toLowerCase()}-${subject.toLowerCase().replace(/\s+/g, '-')}`,
+            title: `${subject} ${yearLevel} Notes + Unit Q&A`,
+            subject,
+            level: yearLevel,
+            content: createBscYearNoteContent(subject, yearLevel),
+            createdAt: "2026-01-01T00:00:00.000Z"
+        }))
+    ));
+}
+
+for (const note of buildBscYearWiseNotesLibrary()) {
+    if (!DEFAULT_FREE_NOTES_LIBRARY.some(existing => existing.id === note.id)) {
+        DEFAULT_FREE_NOTES_LIBRARY.push(note);
+    }
+}
+
+for (const note of buildBscSemesterQuestionBanks()) {
     if (!DEFAULT_FREE_NOTES_LIBRARY.some(existing => existing.id === note.id)) {
         DEFAULT_FREE_NOTES_LIBRARY.push(note);
     }
@@ -500,7 +536,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-1",
         title: "Data Structures: Arrays, Linked Lists, Stacks, Queues",
         subject: "Data Structures",
-        level: "BSc CS Sem 1",
+        level: "FY BSc Computer Science",
         content: "Core topics:\n- Array operations and complexity\n- Singly vs doubly linked list\n- Stack applications: expression evaluation\n- Queue and circular queue\n\nPractice:\n1) Reverse a linked list.\n2) Implement stack using array.\n3) Explain queue overflow/underflow.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -508,7 +544,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-2",
         title: "DBMS Fundamentals: ER Model, SQL, Normalization",
         subject: "DBMS",
-        level: "BSc CS Sem 2",
+        level: "FY BSc Computer Science",
         content: "Core topics:\n- ER diagram entities and relationships\n- Primary/foreign keys\n- SQL: SELECT, JOIN, GROUP BY\n- 1NF, 2NF, 3NF\n\nPractice:\n1) Design ER for student-course schema.\n2) Write 5 JOIN queries.\n3) Normalize sample table to 3NF.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -516,7 +552,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-3",
         title: "Operating Systems: Process, Scheduling, Deadlocks",
         subject: "Operating Systems",
-        level: "BSc CS Sem 3",
+        level: "SY BSc Computer Science",
         content: "Core topics:\n- Process vs thread\n- CPU scheduling: FCFS, SJF, RR\n- Critical section and synchronization\n- Deadlock conditions and prevention\n\nPractice:\n1) Compute waiting time in FCFS.\n2) Explain semaphore use case.\n3) Deadlock detection example.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -524,7 +560,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-4",
         title: "Computer Networks: Layers, TCP/IP, Routing Basics",
         subject: "Computer Networks",
-        level: "BSc CS Sem 4",
+        level: "SY BSc Computer Science",
         content: "Core topics:\n- OSI and TCP/IP mapping\n- IP addressing and subnetting basics\n- TCP vs UDP\n- Routing concepts and protocols overview\n\nPractice:\n1) Explain 3-way handshake.\n2) Find network/broadcast from CIDR.\n3) Compare OSI Layer 3 and Layer 4.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -532,7 +568,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-5",
         title: "Object Oriented Programming (Java): Classes and Inheritance",
         subject: "OOP",
-        level: "BSc CS Sem 2",
+        level: "SY BSc Computer Science",
         content: "Core topics:\n- Class, object, constructor\n- Encapsulation and abstraction\n- Inheritance and polymorphism\n- Interface and exception handling\n\nPractice:\n1) Build Student class with constructor overloading.\n2) Demonstrate runtime polymorphism.\n3) Custom exception example.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -540,7 +576,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-6",
         title: "Discrete Mathematics: Logic, Sets, Relations, Graphs",
         subject: "Discrete Mathematics",
-        level: "BSc CS Sem 1",
+        level: "FY BSc Computer Science",
         content: "Core topics:\n- Propositional logic and truth tables\n- Set operations and identities\n- Relations and functions\n- Graph terminology and traversal basics\n\nPractice:\n1) Prove De Morgan laws.\n2) Determine relation properties.\n3) BFS and DFS on sample graph.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -548,7 +584,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-7",
         title: "Computer Architecture: Number Systems, CPU, Memory",
         subject: "Computer Architecture",
-        level: "BSc CS Sem 3",
+        level: "SY BSc Computer Science",
         content: "Core topics:\n- Binary/octal/hex conversion\n- Instruction cycle\n- Register organization\n- Cache, RAM, ROM hierarchy\n\nPractice:\n1) Convert decimal to binary/hex.\n2) Explain fetch-decode-execute cycle.\n3) Compare SRAM and DRAM.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -556,7 +592,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-8",
         title: "Software Engineering: SDLC, Testing, Agile",
         subject: "Software Engineering",
-        level: "BSc CS Sem 4",
+        level: "TY BSc Computer Science",
         content: "Core topics:\n- SDLC phases\n- Requirement analysis and SRS\n- Testing: unit, integration, system\n- Agile sprint workflow\n\nPractice:\n1) Draft mini SRS outline.\n2) Write 5 test cases.\n3) Compare waterfall vs agile.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -564,7 +600,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-9",
         title: "Web Development: HTML, CSS, JavaScript Essentials",
         subject: "Web Development",
-        level: "BSc CS Sem 2",
+        level: "FY BSc Computer Science",
         content: "Core topics:\n- Semantic HTML layout\n- CSS box model and responsive design\n- JavaScript DOM events\n- Form validation basics\n\nPractice:\n1) Build responsive profile card.\n2) Add JS form validation.\n3) Create dynamic to-do list UI.",
         createdAt: "2026-01-01T00:00:00.000Z"
     },
@@ -572,7 +608,7 @@ const BSC_CS_NOTES_LIBRARY = [
         id: "bsc-cs-note-10",
         title: "Python Programming: Functions, Files, Modules",
         subject: "Python",
-        level: "BSc CS Sem 1",
+        level: "FY BSc Computer Science",
         content: "Core topics:\n- Functions and recursion basics\n- Lists, tuples, dictionaries\n- File handling read/write\n- Modules and packages\n\nPractice:\n1) Frequency counter using dictionary.\n2) Read CSV and summarize rows.\n3) Build menu-driven calculator.",
         createdAt: "2026-01-01T00:00:00.000Z"
     }
@@ -581,6 +617,31 @@ const BSC_CS_NOTES_LIBRARY = [
 for (const note of BSC_CS_NOTES_LIBRARY) {
     if (!DEFAULT_FREE_NOTES_LIBRARY.some(existing => existing.id === note.id)) {
         DEFAULT_FREE_NOTES_LIBRARY.push(note);
+    }
+}
+
+const REMOVED_NOTES_SUBJECTS = new Set(["Math", "Science", "English", "History", "Geography", "General"]);
+const REMOVED_NOTES_LEVEL_PATTERN = /\bClass\s*(7|8|9|10)\b/i;
+
+function shouldRemoveLegacySchoolNote(note) {
+    if (!note || typeof note !== "object") return true;
+    const subject = String(note.subject || "").trim();
+    const level = String(note.level || "").trim();
+    const title = String(note.title || "").trim();
+    if (REMOVED_NOTES_SUBJECTS.has(subject)) return true;
+    return REMOVED_NOTES_LEVEL_PATTERN.test(level) || REMOVED_NOTES_LEVEL_PATTERN.test(title);
+}
+
+function sanitizeFreeNotesLibrary(noteList) {
+    const notes = Array.isArray(noteList) ? noteList : [];
+    return notes
+        .filter(note => !shouldRemoveLegacySchoolNote(note))
+        .map(note => ({ ...note }));
+}
+
+for (let i = DEFAULT_FREE_NOTES_LIBRARY.length - 1; i >= 0; i--) {
+    if (shouldRemoveLegacySchoolNote(DEFAULT_FREE_NOTES_LIBRARY[i])) {
+        DEFAULT_FREE_NOTES_LIBRARY.splice(i, 1);
     }
 }
 
@@ -1209,10 +1270,8 @@ function loadState() {
             ? loaded.studyMaterials.map(item => ({ ...item }))
             : DEFAULT_STUDY_MATERIALS.map(item => ({ ...item })),
         freeNotesLibrary: (() => {
-            const savedNotes = Array.isArray(loaded.freeNotesLibrary)
-                ? loaded.freeNotesLibrary.map(item => ({ ...item }))
-                : [];
-            const defaultNotes = DEFAULT_FREE_NOTES_LIBRARY.map(item => ({ ...item }));
+            const savedNotes = sanitizeFreeNotesLibrary(loaded.freeNotesLibrary);
+            const defaultNotes = sanitizeFreeNotesLibrary(DEFAULT_FREE_NOTES_LIBRARY);
             if (savedNotes.length === 0) return defaultNotes;
             const existingIds = new Set(savedNotes.map(item => item.id));
             const missingDefaults = defaultNotes.filter(item => !existingIds.has(item.id));
@@ -1915,7 +1974,7 @@ function applyCloudState(data) {
         if (Array.isArray(data.timetableEntries)) timetableEntries = data.timetableEntries;
         if (Array.isArray(data.resources)) resources = data.resources;
         if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
-        if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
+        if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = sanitizeFreeNotesLibrary(data.freeNotesLibrary);
         if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
         if (Array.isArray(data.mistakeNotebook)) mistakeNotebook = normalizeMistakeNotebook(data.mistakeNotebook);
         if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
@@ -8514,7 +8573,7 @@ function renderTimetable() {
         <li class="timetable-draggable" draggable="true" ondragstart="onTimetableDragStart('${entry.id}')" ondragover="onTimetableDragOver(event)" ondrop="onTimetableDrop('${entry.id}')">
             <div class="assignment-header">
                 <span class="assignment-title">${entry.subject}</span>
-                <span class="assignment-type">${entry.day}</span>
+                <span class="assignment-type">${entry.day}${entry.yearLevel ? ` | ${entry.yearLevel}` : ''}</span>
             </div>
             <div class="assignment-meta">
                 <span class="task-due"><i class="fas fa-clock"></i> ${entry.time}</span>
@@ -8542,7 +8601,7 @@ function renderTimetable() {
                             <strong>${day}</strong>
                             ${dayEntries.length === 0
                                 ? '<p style="margin:8px 0 0;color:#9ca3af;font-size:13px;">No sessions</p>'
-                                : dayEntries.map(e => `<p style="margin:8px 0 0;font-size:13px;"><b>${e.time}</b> ${e.subject}</p>`).join('')}
+                                : dayEntries.map(e => `<p style="margin:8px 0 0;font-size:13px;"><b>${e.time}</b> ${e.subject}${e.yearLevel ? ` <span style="color:#6b7280;">(${e.yearLevel.replace(' BSc Computer Science', '')})</span>` : ''}</p>`).join('')}
                         </div>
                     `;
                 }).join('')}
@@ -8576,7 +8635,8 @@ function onTimetableDrop(targetId) {
 function addTimetableEntry() {
     const day = document.getElementById('timetableDay')?.value;
     const time = document.getElementById('timetableTime')?.value;
-    const subject = document.getElementById('timetableSubject')?.value.trim();
+    const subject = String(document.getElementById('timetableSubject')?.value || '').trim();
+    const yearLevel = String(document.getElementById('timetableYearLevel')?.value || 'FY BSc Computer Science').trim();
     const topic = document.getElementById('timetableTopic')?.value.trim();
 
     if (!day || !time || !subject) {
@@ -8589,13 +8649,14 @@ function addTimetableEntry() {
         day,
         time,
         subject,
+        yearLevel,
         topic
     });
     saveState({ timetableEntries });
     renderTimetable();
-    addActivity('calendar-alt', 'Timetable Entry Added', `${subject} on ${day}`);
+    addActivity('calendar-alt', 'Timetable Entry Added', `${subject} (${yearLevel}) on ${day}`);
 
-    document.getElementById('timetableSubject').value = '';
+    document.getElementById('timetableSubject').value = 'Programming';
     document.getElementById('timetableTopic').value = '';
 }
 
@@ -9221,8 +9282,8 @@ async function addFreeNote() {
     }
 
     const title = document.getElementById('freeNoteTitleInput')?.value.trim();
-    const subject = document.getElementById('freeNoteSubjectInput')?.value || 'General';
-    const level = document.getElementById('freeNoteLevelInput')?.value.trim() || 'General';
+    const subject = document.getElementById('freeNoteSubjectInput')?.value || 'Programming';
+    const level = document.getElementById('freeNoteLevelInput')?.value.trim() || 'FY BSc Computer Science';
     const content = document.getElementById('freeNoteContentInput')?.value.trim();
 
     if (!title || !content) {
@@ -9458,7 +9519,19 @@ for (let i = quizQuestionBank.length - 1; i >= 0; i--) {
     }
 }
 
-const QUIZ_SUBJECTS = ["Math", "Science", "English", "Programming", "History"];
+const QUIZ_SUBJECTS = [
+    "Programming",
+    "Python",
+    "Data Structures",
+    "DBMS",
+    "Operating Systems",
+    "Computer Networks",
+    "OOP",
+    "Discrete Mathematics",
+    "Computer Architecture",
+    "Software Engineering",
+    "Web Development"
+];
 const QUIZ_DIFFICULTIES = ["easy", "medium", "hard"];
 const QUIZ_MIN_PER_SUBJECT_DIFFICULTY = 25;
 
@@ -9467,8 +9540,19 @@ const autoQuestionTopics = {
     Science: ["matter", "atoms", "force", "energy", "cells", "ecosystem", "electricity", "acids and bases", "motion", "reactions"],
     English: ["grammar", "vocabulary", "tenses", "punctuation", "synonyms", "antonyms", "reading comprehension", "sentence structure", "parts of speech", "spelling"],
     Programming: ["variables", "loops", "functions", "arrays", "objects", "debugging", "algorithms", "conditionals", "syntax", "data types"],
-    History: ["ancient civilizations", "medieval period", "freedom movements", "world wars", "constitutions", "timelines", "sources", "reforms", "leaders", "historical interpretation"]
+    History: ["ancient civilizations", "medieval period", "freedom movements", "world wars", "constitutions", "timelines", "sources", "reforms", "leaders", "historical interpretation"],
+    "Data Structures": ["arrays", "linked lists", "stacks", "queues", "trees", "graphs", "hashing", "sorting", "searching", "time complexity"],
+    DBMS: ["ER models", "keys", "normalization", "joins", "transactions", "indexing", "SQL", "constraints", "views", "ACID properties"],
+    "Operating Systems": ["processes", "threads", "scheduling", "deadlocks", "memory management", "file systems", "semaphores", "paging", "virtual memory", "IPC"],
+    "Computer Networks": ["OSI model", "TCP/IP", "IP addressing", "routing", "switching", "DNS", "HTTP", "subnetting", "transport layer", "network security"],
+    OOP: ["classes", "objects", "encapsulation", "inheritance", "polymorphism", "abstraction", "interfaces", "constructors", "overloading", "exception handling"],
+    "Discrete Mathematics": ["logic", "sets", "relations", "functions", "counting", "graph theory", "trees", "proofs", "combinatorics", "recurrence"],
+    "Computer Architecture": ["number systems", "instruction cycle", "CPU", "registers", "memory hierarchy", "cache", "pipelining", "ALU", "IO", "assembly basics"],
+    "Software Engineering": ["SDLC", "requirements", "design", "testing", "agile", "version control", "risk analysis", "estimation", "maintenance", "quality assurance"],
+    "Web Development": ["HTML", "CSS", "JavaScript", "DOM", "responsive design", "forms", "APIs", "frontend architecture", "validation", "deployment"],
+    Python: ["syntax", "data structures", "functions", "modules", "file handling", "exceptions", "OOP in python", "iterators", "libraries", "testing"]
 };
+const INTERNAL_EXAM_MIN_QUIZ_QUESTIONS = 100;
 
 function createAutoQuizQuestion(subject, difficulty, idx) {
     const topics = autoQuestionTopics[subject] || ["general knowledge"];
@@ -9481,6 +9565,7 @@ function createAutoQuizQuestion(subject, difficulty, idx) {
 
     return {
         subject,
+        semester: pickSemesterForSubject(subject, idx),
         difficulty,
         question: stem,
         options: [
@@ -9516,6 +9601,12 @@ function ensureMinimumQuizQuestionsPerSubjectDifficulty(minCount) {
 }
 
 ensureMinimumQuizQuestionsPerSubjectDifficulty(QUIZ_MIN_PER_SUBJECT_DIFFICULTY);
+quizQuestionBank.forEach((question, index) => {
+    if (!question || typeof question !== "object") return;
+    if (!question.semester) {
+        question.semester = pickSemesterForSubject(question.subject, index);
+    }
+});
 let currentQuizSession = [];
 let currentQuizMode = "standard";
 let currentQuizAdaptiveEnabled = true;
@@ -9947,22 +10038,26 @@ function updateMistakeReviewById(id, isCorrect) {
 
 function generateQuizSession() {
     const subject = document.getElementById('quizSubject')?.value || 'Any';
+    const semester = document.getElementById('quizSemester')?.value || 'Any';
     const difficulty = document.getElementById('quizDifficulty')?.value || 'mixed';
-    const requestedCount = Math.max(5, Math.min(25, Number(document.getElementById('quizQuestionCount')?.value || 5)));
+    const requestedCount = Math.max(5, Math.min(100, Number(document.getElementById('quizQuestionCount')?.value || 5)));
 
     const matchesDifficulty = (q) => difficulty === 'mixed' || q.difficulty === difficulty;
     let pool = quizQuestionBank.filter(q => matchesDifficulty(q));
     if (subject !== 'Any') {
         pool = pool.filter(q => q.subject === subject);
     }
+    if (semester !== 'Any') {
+        pool = pool.filter(q => String(q.semester || '').trim() === semester);
+    }
 
     if (pool.length === 0) {
-        alert('No questions available for selected filters.');
+        alert('No questions available for selected subject/semester filters.');
         return;
     }
 
     if (pool.length < requestedCount) {
-        const selectedLabel = `${subject}${difficulty === 'mixed' ? '' : ` (${difficulty})`}`;
+        const selectedLabel = `${subject}${semester === 'Any' ? '' : ` | ${semester}`}${difficulty === 'mixed' ? '' : ` (${difficulty})`}`;
         alert(
             `Need at least ${requestedCount} unique questions for ${selectedLabel}. ` +
             `Currently available: ${pool.length}. Please add more questions first.`
@@ -10030,6 +10125,7 @@ async function submitQuiz() {
         userEmail: user ? user.email : 'unknown',
         userName: user ? user.name : 'Unknown',
         subject: document.getElementById('quizSubject')?.value || 'Any',
+        semester: document.getElementById('quizSemester')?.value || 'Any',
         score,
         total: currentQuizSession.length,
         percent,
@@ -10519,17 +10615,204 @@ function clearAnswerEvaluationForm() {
 
 function getExamCountdownFormValues() {
     const examName = String(document.getElementById('countdownExamName')?.value || '').trim();
-    const subject = String(document.getElementById('countdownExamSubject')?.value || 'General').trim() || 'General';
+    const subject = String(document.getElementById('countdownExamSubject')?.value || 'Programming').trim() || 'Programming';
+    const examType = String(document.getElementById('countdownExamType')?.value || 'internal').trim().toLowerCase() === 'external'
+        ? 'external'
+        : 'internal';
     const examDate = String(document.getElementById('countdownExamDate')?.value || '').trim();
     const revisionWaves = Math.max(1, Math.min(6, Number(document.getElementById('countdownRevisionWaves')?.value || 3)));
     const mockTests = Math.max(0, Math.min(6, Number(document.getElementById('countdownMockTests')?.value || 2)));
     const bufferDays = Math.max(0, Math.min(7, Number(document.getElementById('countdownBufferDays')?.value || 2)));
-    return { examName, subject, examDate, revisionWaves, mockTests, bufferDays };
+    return { examName, subject, examType, examDate, revisionWaves, mockTests, bufferDays };
+}
+
+function slugifyExamToken(value) {
+    const text = String(value || "").toLowerCase();
+    return text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item";
+}
+
+function ensureQuizSubjectOption(subject) {
+    const select = document.getElementById('quizSubject');
+    if (!select) return;
+    const normalized = String(subject || "").trim();
+    if (!normalized) return;
+    const exists = Array.from(select.options).some(option => String(option.value || "").trim() === normalized);
+    if (exists) return;
+    const option = document.createElement('option');
+    option.value = normalized;
+    option.textContent = normalized;
+    select.appendChild(option);
+}
+
+function createInternalExamQuestion(subject, examName, difficulty, idx) {
+    const topics = autoQuestionTopics[subject] || ["core concepts", "definitions", "applications", "problem solving", "revision"];
+    const base = topics[idx % topics.length];
+    const alt1 = topics[(idx + 1) % topics.length];
+    const alt2 = topics[(idx + 2) % topics.length];
+    const alt3 = topics[(idx + 3) % topics.length];
+    const stem = `${examName}: ${difficulty.toUpperCase()} Q${idx + 1} - Which concept best matches "${base}"?`;
+    return {
+        subject,
+        semester: pickSemesterForSubject(subject, idx),
+        difficulty,
+        question: stem,
+        options: [
+            `${base} concept`,
+            `${alt1} concept`,
+            `${alt2} concept`,
+            `${alt3} concept`
+        ],
+        answerIndex: 0
+    };
+}
+
+function ensureMinimumQuizQuestionsForSubject(subject, minCount, examName) {
+    const normalizedSubject = String(subject || "").trim() || "General";
+    const target = Math.max(1, Number(minCount) || INTERNAL_EXAM_MIN_QUIZ_QUESTIONS);
+    let total = quizQuestionBank.filter(q => q.subject === normalizedSubject).length;
+    const existingKeys = new Set(quizQuestionBank.map(q => `${q.subject}|${q.difficulty}|${q.question}`));
+    let added = 0;
+    let seed = 0;
+    const difficulties = ["easy", "medium", "hard"];
+
+    while (total + added < target) {
+        const difficulty = difficulties[seed % difficulties.length];
+        const candidate = createInternalExamQuestion(normalizedSubject, examName, difficulty, seed);
+        const key = `${candidate.subject}|${candidate.difficulty}|${candidate.question}`;
+        seed++;
+        if (existingKeys.has(key)) continue;
+        existingKeys.add(key);
+        quizQuestionBank.push(candidate);
+        added++;
+    }
+
+    return {
+        added,
+        total: quizQuestionBank.filter(q => q.subject === normalizedSubject).length
+    };
+}
+
+function upsertFreeNote(note) {
+    if (!note || typeof note !== "object" || !note.id) return;
+    const index = freeNotesLibrary.findIndex(item => item && item.id === note.id);
+    if (index >= 0) {
+        freeNotesLibrary[index] = { ...freeNotesLibrary[index], ...note };
+        return;
+    }
+    freeNotesLibrary.unshift(note);
+}
+
+function createExternalExamNotesContent(examName, subject) {
+    return [
+        `External Exam Notes: ${examName}`,
+        `Subject: ${subject}`,
+        "",
+        "Core Notes Structure:",
+        "1) Syllabus map and unit break-up",
+        "2) Key definitions and theory points",
+        "3) Formula/algorithm/diagram checklist",
+        "4) Important past-trend topics",
+        "",
+        "Revision Strategy:",
+        "- Week 1: Unit summaries + concept clarity",
+        "- Week 2: Long answers + short notes",
+        "- Week 3: Numerical/case-based practice",
+        "- Final week: Full revision + error log",
+        "",
+        "Answer Writing Tips:",
+        "- Start with definition/introduction",
+        "- Use headings, bullets, and neat structure",
+        "- Add one example/diagram where relevant",
+        "- End with short conclusion"
+    ].join("\n");
+}
+
+function createExternalQuestionBankContent(examName, subject, questionCount = 100) {
+    const topics = autoQuestionTopics[subject] || ["core concept", "application", "analysis", "problem solving", "theory"];
+    const count = Math.max(25, Number(questionCount) || 100);
+    const lines = [
+        `External Question Bank: ${examName}`,
+        `Subject: ${subject}`,
+        `Total Questions: ${count}`,
+        ""
+    ];
+
+    for (let i = 0; i < count; i++) {
+        const topic = topics[i % topics.length];
+        const style = i % 5;
+        let prompt = `Explain ${topic} with an example.`;
+        if (style === 1) prompt = `Write short notes on ${topic}.`;
+        if (style === 2) prompt = `Differentiate two key ideas in ${topic}.`;
+        if (style === 3) prompt = `Solve one exam-level problem from ${topic}.`;
+        if (style === 4) prompt = `Give a diagram/flow-based explanation for ${topic}.`;
+        lines.push(`Q${i + 1}. ${prompt}`);
+    }
+
+    return lines.join("\n");
+}
+
+function generateExamContentByType() {
+    const values = getExamCountdownFormValues();
+    const examName = String(values.examName || "").trim();
+    const subject = String(values.subject || "General").trim() || "General";
+    const examType = values.examType === "external" ? "external" : "internal";
+
+    if (!examName) {
+        alert('Enter exam name first.');
+        return;
+    }
+
+    if (examType === "internal") {
+        const result = ensureMinimumQuizQuestionsForSubject(subject, INTERNAL_EXAM_MIN_QUIZ_QUESTIONS, examName);
+        ensureQuizSubjectOption(subject);
+        const subjectSelect = document.getElementById('quizSubject');
+        if (subjectSelect) subjectSelect.value = subject;
+        const difficultySelect = document.getElementById('quizDifficulty');
+        if (difficultySelect) difficultySelect.value = 'mixed';
+        const countInput = document.getElementById('quizQuestionCount');
+        if (countInput) countInput.value = String(INTERNAL_EXAM_MIN_QUIZ_QUESTIONS);
+        navigateTo('student-quiz-weak');
+        generateQuizSession();
+        addActivity('bolt', 'Internal Exam Quiz Auto-Generated', `${examName} (${subject}) - ${result.total} questions ready`);
+        alert(`Internal exam quiz ready: ${INTERNAL_EXAM_MIN_QUIZ_QUESTIONS} questions generated for ${subject}.`);
+        return;
+    }
+
+    const examToken = slugifyExamToken(examName);
+    const subjectToken = slugifyExamToken(subject);
+    const nowIso = new Date().toISOString();
+    const level = 'External Exam';
+
+    const notesPack = {
+        id: `external-notes-${examToken}-${subjectToken}`,
+        title: `${examName} External Notes Pack`,
+        subject,
+        level,
+        content: createExternalExamNotesContent(examName, subject),
+        createdAt: nowIso
+    };
+
+    const questionBankPack = {
+        id: `external-qbank-${examToken}-${subjectToken}`,
+        title: `${examName} External Question Bank (100 Questions)`,
+        subject,
+        level,
+        content: createExternalQuestionBankContent(examName, subject, 100),
+        createdAt: nowIso
+    };
+
+    upsertFreeNote(notesPack);
+    upsertFreeNote(questionBankPack);
+    freeNotesLibrary = sanitizeFreeNotesLibrary(freeNotesLibrary);
+    saveState({ freeNotesLibrary });
+    renderFreeNotes();
+    addActivity('book-open', 'External Exam Notes + QBank Created', `${examName} (${subject})`);
+    alert(`External pack created: Notes + 100-question bank for ${examName}. Open Notes Library to view.`);
 }
 
 function buildExamCountdownPlan(values) {
     const examName = String(values.examName || '').trim();
-    const subject = String(values.subject || 'General').trim() || 'General';
+    const subject = String(values.subject || 'Programming').trim() || 'Programming';
     const examDateStr = String(values.examDate || '').trim();
     const revisionWaves = Math.max(1, Math.min(6, Number(values.revisionWaves) || 3));
     const mockTests = Math.max(0, Math.min(6, Number(values.mockTests) || 2));
@@ -10805,6 +11088,9 @@ function renderQuizPage() {
             <div class="assignment-header">
                 <span class="assignment-title">${item.score}/${item.total} (${item.percent}%)</span>
                 <span class="assignment-type">${new Date(item.createdAt).toLocaleDateString()}</span>
+            </div>
+            <div class="assignment-meta">
+                <span class="task-subject">${item.subject || 'Any'}${item.semester && item.semester !== 'Any' ? ` | ${item.semester}` : ''}</span>
             </div>
         </li>
     `).join('');
@@ -13169,7 +13455,7 @@ function importData(event) {
             if (Array.isArray(data.timetableEntries)) timetableEntries = data.timetableEntries;
             if (Array.isArray(data.resources)) resources = data.resources;
             if (Array.isArray(data.studyMaterials) && data.studyMaterials.length > 0) studyMaterials = data.studyMaterials;
-            if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = data.freeNotesLibrary;
+            if (Array.isArray(data.freeNotesLibrary) && data.freeNotesLibrary.length > 0) freeNotesLibrary = sanitizeFreeNotesLibrary(data.freeNotesLibrary);
             if (Array.isArray(data.quizScores)) quizScores = data.quizScores;
             if (Array.isArray(data.mistakeNotebook)) mistakeNotebook = normalizeMistakeNotebook(data.mistakeNotebook);
             if (Array.isArray(data.pastPaperAttempts)) pastPaperAttempts = normalizePastPaperAttempts(data.pastPaperAttempts);
