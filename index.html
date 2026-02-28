@@ -587,25 +587,35 @@
                 <h3><i class="fas fa-bell"></i> Scholarship / Exam Alerts</h3>
                 <div class="task-options">
                     <select id="alertClassFilter" onchange="renderScholarshipExamAlerts()">
-                        <option value="7">Class 7</option>
-                        <option value="8">Class 8</option>
-                        <option value="9">Class 9</option>
-                        <option value="10" selected>Class 10</option>
-                        <option value="11">Class 11</option>
-                        <option value="12">Class 12</option>
+                        <option value="FY BSc Computer Science" selected>FY BSc Computer Science</option>
+                        <option value="SY BSc Computer Science">SY BSc Computer Science</option>
+                        <option value="TY BSc Computer Science">TY BSc Computer Science</option>
+                    </select>
+                    <select id="alertSemesterFilter" onchange="renderScholarshipExamAlerts()">
+                        <option value="Any">Any Semester</option>
+                        <option value="Sem 1">Semester 1</option>
+                        <option value="Sem 2">Semester 2</option>
+                        <option value="Sem 3">Semester 3</option>
+                        <option value="Sem 4">Semester 4</option>
+                        <option value="Sem 5">Semester 5</option>
+                        <option value="Sem 6">Semester 6</option>
                     </select>
                     <select id="alertSubjectFilter" onchange="renderScholarshipExamAlerts()">
                         <option value="Any">Any Subject</option>
-                        <option value="Math">Math</option>
-                        <option value="Science">Science</option>
-                        <option value="English">English</option>
-                        <option value="History">History</option>
-                        <option value="Geography">Geography</option>
                         <option value="Programming">Programming</option>
-                        <option value="General">General</option>
+                        <option value="Python">Python</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
                     </select>
                 </div>
-                <p id="alertMatchSummary">Select class and subject to view matching scholarship/exam alerts.</p>
+                <p id="alertMatchSummary">Select year, semester, and subject to view matching scholarship/exam alerts.</p>
                 <ul id="alertMatchList">
                     <li class="empty-state">No alert match yet.</li>
                 </ul>

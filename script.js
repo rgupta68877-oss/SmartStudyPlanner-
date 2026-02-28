@@ -414,6 +414,20 @@ const BSC_CS_UNIT_MAP = {
     "Web Development": ["HTML/CSS", "JavaScript DOM", "Client-Server Basics", "Responsive UI Patterns"]
 };
 
+const UNIFIED_BSC_SUBJECTS = [
+    "Programming",
+    "Python",
+    "Data Structures",
+    "DBMS",
+    "Operating Systems",
+    "Computer Networks",
+    "OOP",
+    "Discrete Mathematics",
+    "Computer Architecture",
+    "Software Engineering",
+    "Web Development"
+];
+
 const BSC_CS_SEMESTER_SUBJECT_MAP = {
     "Sem 1": ["Programming", "Python", "Discrete Mathematics"],
     "Sem 2": ["Data Structures", "DBMS", "Web Development"],
@@ -744,12 +758,17 @@ const DEFAULT_STATE = {
     assignments: [],
     exams: [],
     subjects: [
-        { name: "Math", color: "#2193b0" },
-        { name: "Science", color: "#4caf50" },
-        { name: "English", color: "#9c27b0" },
-        { name: "History", color: "#ff9800" },
-        { name: "Geography", color: "#8bc34a" },
-        { name: "Programming", color: "#00bcd4" }
+        { name: "Programming", color: "#00bcd4" },
+        { name: "Python", color: "#4caf50" },
+        { name: "Data Structures", color: "#2193b0" },
+        { name: "DBMS", color: "#ff9800" },
+        { name: "Operating Systems", color: "#8bc34a" },
+        { name: "Computer Networks", color: "#9c27b0" },
+        { name: "OOP", color: "#e91e63" },
+        { name: "Discrete Mathematics", color: "#3f51b5" },
+        { name: "Computer Architecture", color: "#009688" },
+        { name: "Software Engineering", color: "#ff5722" },
+        { name: "Web Development", color: "#607d8b" }
     ],
     gpaHistory: [],
     pomodoroSessions: [],
@@ -3432,6 +3451,7 @@ function replanAfterMissedTasks(taskList, previousPlan, options = {}) {
 
 // ==================== DASHBOARD ====================
 function renderDashboard() {
+    syncUnifiedSubjectOptions();
     renderTimerSubjectOptions();
     renderBurnoutGuardHint();
     renderFocusShieldStatus();
@@ -5133,26 +5153,26 @@ function renderUpcomingDeadlines() {
 
 const SCHOLARSHIP_EXAM_ALERTS = [
     {
-        id: 'alert-ntse-stage',
+        id: 'alert-fy-foundation',
         type: 'Exam',
-        title: 'NTSE Stage Practice Window',
-        classMin: 10,
-        classMax: 10,
-        subjects: ['Math', 'Science', 'English'],
+        title: 'FY Foundation Mid-Sem Alert',
+        yearLevels: ['FY BSc Computer Science'],
+        semesters: ['Sem 1', 'Sem 2'],
+        subjects: ['Programming', 'Python', 'Discrete Mathematics'],
         deadlineMonthDay: '04-15',
         prepChecklist: [
-            'Revise mental ability sample paper (timed).',
-            'Solve one previous year NTSE paper.',
-            'Prepare formula and concept quick sheets.'
+            'Revise programming fundamentals and syntax sheet.',
+            'Solve one previous year internal paper.',
+            'Prepare short notes for logic and discrete math.'
         ]
     },
     {
-        id: 'alert-olympiad-stem',
+        id: 'alert-sy-core-systems',
         type: 'Scholarship',
-        title: 'STEM Olympiad Scholarship',
-        classMin: 8,
-        classMax: 12,
-        subjects: ['Math', 'Science'],
+        title: 'SY Core Systems Scholarship Window',
+        yearLevels: ['SY BSc Computer Science'],
+        semesters: ['Sem 3', 'Sem 4'],
+        subjects: ['Operating Systems', 'Computer Networks', 'OOP', 'DBMS'],
         deadlineMonthDay: '05-10',
         prepChecklist: [
             'Complete 3 chapter-level mock sets.',
@@ -5161,40 +5181,40 @@ const SCHOLARSHIP_EXAM_ALERTS = [
         ]
     },
     {
-        id: 'alert-kvpy-foundation',
+        id: 'alert-ty-career-track',
         type: 'Scholarship',
-        title: 'Research Aptitude Scholarship (Foundation)',
-        classMin: 11,
-        classMax: 12,
-        subjects: ['Science', 'Math'],
+        title: 'TY Career Track Scholarship',
+        yearLevels: ['TY BSc Computer Science'],
+        semesters: ['Sem 5', 'Sem 6'],
+        subjects: ['Software Engineering', 'Web Development', 'Computer Networks'],
         deadlineMonthDay: '06-05',
         prepChecklist: [
-            'Build concept map for Physics/Chemistry/Biology.',
-            'Practice mixed aptitude questions daily.',
+            'Build final year project concept map.',
+            'Practice mixed aptitude and coding questions daily.',
             'Take one full timed mock and analyze mistakes.'
         ]
     },
     {
-        id: 'alert-language-merit',
+        id: 'alert-database-contest',
         type: 'Scholarship',
-        title: 'Language Merit Scholarship',
-        classMin: 7,
-        classMax: 12,
-        subjects: ['English'],
+        title: 'Database Innovation Contest',
+        yearLevels: ['FY BSc Computer Science', 'SY BSc Computer Science'],
+        semesters: ['Sem 2', 'Sem 4'],
+        subjects: ['DBMS', 'Data Structures'],
         deadlineMonthDay: '04-30',
         prepChecklist: [
-            'Practice reading comprehension passages.',
-            'Write two structured long answers each week.',
-            'Improve grammar accuracy with mini-tests.'
+            'Practice SQL query writing with joins and aggregates.',
+            'Prepare ER model + normalization revision sheet.',
+            'Solve one case-study based design problem weekly.'
         ]
     },
     {
-        id: 'alert-board-prep',
+        id: 'alert-semester-finals',
         type: 'Exam',
-        title: 'Board Exam Preparation Alert',
-        classMin: 10,
-        classMax: 12,
-        subjects: ['General', 'Math', 'Science', 'English', 'History', 'Geography'],
+        title: 'Semester Final Preparation Alert',
+        yearLevels: ['FY BSc Computer Science', 'SY BSc Computer Science', 'TY BSc Computer Science'],
+        semesters: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6'],
+        subjects: [...UNIFIED_BSC_SUBJECTS],
         deadlineMonthDay: '11-30',
         prepChecklist: [
             'Finalize chapter completion tracker.',
@@ -5206,9 +5226,9 @@ const SCHOLARSHIP_EXAM_ALERTS = [
         id: 'alert-coding-talent',
         type: 'Scholarship',
         title: 'Coding Talent Grant',
-        classMin: 8,
-        classMax: 12,
-        subjects: ['Programming', 'Math'],
+        yearLevels: ['FY BSc Computer Science', 'SY BSc Computer Science', 'TY BSc Computer Science'],
+        semesters: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4', 'Sem 5', 'Sem 6'],
+        subjects: ['Programming', 'Python', 'Data Structures', 'Web Development'],
         deadlineMonthDay: '07-20',
         prepChecklist: [
             'Solve 20 topic-wise coding problems.',
@@ -5246,12 +5266,23 @@ function getAlertDaysLeft(dateStr, now = new Date()) {
 }
 
 function getScholarshipAlertMatches() {
-    const classFilter = Number(document.getElementById('alertClassFilter')?.value || 10);
+    const yearFilter = String(document.getElementById('alertClassFilter')?.value || 'FY BSc Computer Science').trim() || 'FY BSc Computer Science';
+    const semesterFilter = String(document.getElementById('alertSemesterFilter')?.value || 'Any').trim() || 'Any';
     const subjectFilter = String(document.getElementById('alertSubjectFilter')?.value || 'Any').trim() || 'Any';
     const now = new Date();
 
     return SCHOLARSHIP_EXAM_ALERTS
-        .filter(item => classFilter >= item.classMin && classFilter <= item.classMax)
+        .filter(item => {
+            const years = Array.isArray(item.yearLevels) ? item.yearLevels : [];
+            if (years.length === 0) return true;
+            return years.includes(yearFilter);
+        })
+        .filter(item => {
+            if (semesterFilter === 'Any') return true;
+            const semesters = Array.isArray(item.semesters) ? item.semesters : [];
+            if (semesters.length === 0) return true;
+            return semesters.includes(semesterFilter);
+        })
         .filter(item => {
             if (subjectFilter === 'Any') return true;
             return (item.subjects || []).some(subject => subjectMatches(subject, subjectFilter));
@@ -5271,7 +5302,7 @@ function renderScholarshipExamAlerts() {
 
     scholarshipAlertMatches = getScholarshipAlertMatches();
     if (scholarshipAlertMatches.length === 0) {
-        summaryEl.textContent = 'No matching scholarship/exam alerts for this class/subject yet.';
+        summaryEl.textContent = 'No matching scholarship/exam alerts for this year/semester/subject yet.';
         listEl.innerHTML = '<li class="empty-state">No alert match yet.</li>';
         return;
     }
@@ -5282,7 +5313,7 @@ function renderScholarshipExamAlerts() {
             <span class="deadline-type">${escapeHtml(item.type)}</span>
             <strong>${escapeHtml(item.title)}</strong>
             <span class="deadline-days">Deadline: ${escapeHtml(item.deadline)} (${item.daysLeft <= 0 ? 'Today' : `in ${item.daysLeft} days`})</span>
-            <p>Class ${item.classMin}${item.classMax !== item.classMin ? `-${item.classMax}` : ''} | ${escapeHtml((item.subjects || []).join(', '))}</p>
+            <p>${escapeHtml((item.yearLevels || []).join(', '))} | ${(item.semesters || []).length ? escapeHtml((item.semesters || []).join(', ')) : 'Any Semester'} | ${escapeHtml((item.subjects || []).join(', '))}</p>
             <p>Prep checklist: ${escapeHtml((item.prepChecklist || []).join(' | '))}</p>
             <button class="action-btn" onclick="createAlertPrepChecklistTasks('${item.id}')">
                 <i class="fas fa-list-check"></i> Add Prep Checklist Tasks
@@ -5304,7 +5335,7 @@ function createAlertPrepChecklistTasks(alertId) {
         return;
     }
 
-    const subject = (match.subjects && match.subjects[0]) ? match.subjects[0] : 'General';
+    const subject = (match.subjects && match.subjects[0]) ? match.subjects[0] : 'Programming';
     const deadline = resolveAlertDeadline(match.deadline || match.deadlineMonthDay || '');
     const today = new Date();
     const deadlineDate = deadline ? new Date(deadline) : new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000));
@@ -10193,7 +10224,7 @@ function startPastPaperPracticeTimer() {
 }
 
 function submitPastPaperScore() {
-    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'Math';
+    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'Programming';
     const obtained = Number(document.getElementById('pastPaperObtainedInput')?.value);
     const total = Number(document.getElementById('pastPaperTotalInput')?.value);
     const duration = Math.max(15, Math.min(180, Number(document.getElementById('pastPaperDurationInput')?.value || 60)));
@@ -10419,7 +10450,7 @@ function createExamStrategyPracticeTasks() {
         if (!pendingExamStrategyPlan) return;
     }
     const plan = pendingExamStrategyPlan;
-    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'General';
+    const subject = document.getElementById('pastPaperSubjectSelect')?.value || 'Programming';
     let created = 0;
 
     plan.practiceItems.forEach(item => {
@@ -11050,6 +11081,7 @@ function regenerateExamCountdownPlan() {
 }
 
 function renderQuizPage() {
+    syncUnifiedSubjectOptions();
     renderQuizQuestions();
     updateQuizSessionModeLabel();
     const sectionsInput = document.getElementById('examStrategySectionsInput');
@@ -11399,7 +11431,7 @@ async function loadQuizScoresFromServer() {
 
 // ==================== POMODORO HISTORY ====================
 function getPomodoroSubjectOptions() {
-    const defaults = ["General", "Math", "Science", "English", "History", "Geography", "Programming", "Break"];
+    const defaults = ["General", ...UNIFIED_BSC_SUBJECTS, "Break"];
     const fromSessions = pomodoroSessions
         .map(session => String((session && session.subject) || "").trim())
         .filter(Boolean);
@@ -11407,6 +11439,52 @@ function getPomodoroSubjectOptions() {
         .map(subject => String((subject && subject.name) || "").trim())
         .filter(Boolean);
     return [...new Set([...defaults, ...fromSubjects, ...fromSessions])];
+}
+
+function setSubjectSelectOptions(selectId, options = {}) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const includeAny = Boolean(options.includeAny);
+    const includeAll = Boolean(options.includeAll);
+    const includeGeneral = Boolean(options.includeGeneral);
+    const includeBreak = Boolean(options.includeBreak);
+    const preferred = String(options.preferred || "").trim();
+    const currentValue = String(select.value || "").trim();
+
+    const subjectOptions = [...UNIFIED_BSC_SUBJECTS];
+    const html = [];
+    if (includeAny) html.push('<option value="Any">Any Subject</option>');
+    if (includeAll) html.push('<option value="all">All Subjects</option>');
+    if (includeGeneral) html.push('<option value="General">General</option>');
+    subjectOptions.forEach(subject => {
+        html.push(`<option value="${subject}">${subject}</option>`);
+    });
+    if (includeBreak) html.push('<option value="Break">Break</option>');
+    select.innerHTML = html.join('');
+
+    const validValues = new Set(
+        Array.from(select.options)
+            .map(option => String(option.value || "").trim())
+            .filter(Boolean)
+    );
+    if (currentValue && validValues.has(currentValue)) {
+        select.value = currentValue;
+    } else if (preferred && validValues.has(preferred)) {
+        select.value = preferred;
+    }
+}
+
+function syncUnifiedSubjectOptions() {
+    setSubjectSelectOptions('quizSubject', { includeAny: true, preferred: 'Any' });
+    setSubjectSelectOptions('countdownExamSubject', { preferred: 'Programming' });
+    setSubjectSelectOptions('freeNoteSubjectInput', { preferred: 'Programming' });
+    setSubjectSelectOptions('freeNotesFilterSubject', { includeAll: true, preferred: 'all' });
+    setSubjectSelectOptions('timetableSubject', { preferred: 'Programming' });
+    setSubjectSelectOptions('studyGroupDoubtSubject', { includeGeneral: true, preferred: 'General' });
+    setSubjectSelectOptions('liveClassSubject', { includeGeneral: true, preferred: 'General' });
+    setSubjectSelectOptions('alertSubjectFilter', { includeAny: true, preferred: 'Any' });
+    setSubjectSelectOptions('pastPaperSubjectSelect', { preferred: 'Programming' });
 }
 
 function renderPomodoroSubjectFilter() {
