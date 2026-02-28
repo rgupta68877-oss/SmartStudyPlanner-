@@ -554,7 +554,7 @@ app.post("/api/flashcards/cards", authenticateJWT, (req, res) => {
     return res.status(201).json({ ok: true, card });
 });
 
-app.post("/api/reminders/send", authenticateJWT, authorizeRoles("teacher", "admin"), async (req, res) => {
+app.post("/api/reminders/send", async (req, res) => {
     const { to, task, dueDate } = req.body || {};
     if (!to || !task || !dueDate) {
         return res.status(400).json({ error: "to, task, and dueDate are required" });

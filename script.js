@@ -11236,10 +11236,6 @@ async function sendTaskReminderEmail() {
         alert('Only teacher/admin can send reminders.');
         return;
     }
-    if (!backendAdminToken) {
-        alert('Please click "Connect Admin Token" first, then send reminder.');
-        return;
-    }
     const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     if (!isLocalHost && API_BASE_URL === window.location.origin) {
         alert('Backend API is not configured. Set <meta name="api-base-url"> to your backend URL (for example: https://smart-study-planner-backend.onrender.com).');
@@ -11255,7 +11251,7 @@ async function sendTaskReminderEmail() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/reminders/send`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getBackendAuthHeaders() },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to, task, dueDate })
         });
         const contentType = String(response.headers.get('content-type') || '').toLowerCase();
