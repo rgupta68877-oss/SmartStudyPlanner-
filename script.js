@@ -11191,6 +11191,10 @@ async function checkReminderBackendStatus(options = {}) {
     }
 }
 
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function renderTeacherUpdatesList() {
     const list = document.getElementById('teacherUpdatesList');
     if (!list) return;
@@ -11318,17 +11322,31 @@ async function sendTaskReminderEmail() {
         alert('Please enter recipient email, task and due date.');
         return;
     }
-    const backendReady = await checkReminderBackendStatus({ silent: true, force: true });
+    let backendReady = await checkReminderBackendStatus({ silent: true, force: true });
     if (!backendReady) {
-        alert(`${reminderBackendCheck.message}. Cannot send reminder right now.`);
-        return;
+        updateReminderBackendStatusIndicator(false, 'Backend: Warming up... retrying');
+        await delay(3000);
+        backendReady = await checkReminderBackendStatus({ silent: true, force: true });
+        if (!backendReady) {
+            alert(`${reminderBackendCheck.message}. Backend may be starting/redeploying. Try again in 20-60 seconds, then check Render service logs if it persists.`);
+            return;
+        }
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/reminders/send`, {
+        let response = await fetch(`${API_BASE_URL}/api/reminders/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ to, task, dueDate })
         });
+        if (response.status === 503) {
+            updateReminderBackendStatusIndicator(false, 'Backend: 503 (warming up), retrying send...');
+            await delay(3000);
+            response = await fetch(`${API_BASE_URL}/api/reminders/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to, task, dueDate })
+            });
+        }
         const contentType = String(response.headers.get('content-type') || '').toLowerCase();
         let result = {};
         if (contentType.includes('application/json')) {
@@ -11343,6 +11361,7 @@ async function sendTaskReminderEmail() {
             }
         }
         if (!response.ok) throw new Error(result.error || `Send failed (${response.status})`);
+        updateReminderBackendStatusIndicator(true, 'Backend: Online | CORS: OK');
         alert('Reminder email sent.');
         addActivity('envelope', 'Reminder Sent', `${task} -> ${to}`);
     } catch (err) {
