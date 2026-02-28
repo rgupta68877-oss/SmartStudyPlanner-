@@ -7,6 +7,9 @@
 4. Set/verify env vars in Render:
    - `JWT_SECRET`
    - `FRONTEND_ORIGIN` = your Vercel domain (for example `https://your-app.vercel.app`)
+   - If multiple origins are needed, use comma-separated values.
+   - Do not use malformed URL or duplicate protocol (wrong: `https://https://...`).
+   - Prefer no trailing slash to keep matching clean.
    - SMTP/admin vars if you use those features.
 5. Deploy and copy backend URL, for example:
    - `https://smart-study-planner-backend.onrender.com`

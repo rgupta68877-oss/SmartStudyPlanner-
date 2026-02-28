@@ -1318,6 +1318,12 @@
             <div class="card settings-section">
                 <h3><i class="fas fa-envelope"></i> Node Mailer Task Reminder</h3>
                 <div class="task-options">
+                    <span id="reminderBackendStatus" class="peer-backend-indicator disconnected">Backend: Checking...</span>
+                    <button class="action-btn" type="button" onclick="checkReminderBackendStatus()">
+                        <i class="fas fa-heart-pulse"></i> Check Backend
+                    </button>
+                </div>
+                <div class="task-options">
                     <input type="email" id="reminderEmailTo" placeholder="Student email">
                     <input type="text" id="reminderTaskName" placeholder="Task name">
                     <input type="date" id="reminderDueDate">

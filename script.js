@@ -1396,6 +1396,11 @@ let lastAISuggestionPlan = null;
 let pendingAICreationPreview = null;
 let pendingExamCountdownPlan = null;
 let pendingExamStrategyPlan = null;
+let reminderBackendCheck = {
+    ok: false,
+    checkedAt: 0,
+    message: "Backend: Checking..."
+};
 let peerChallenges = [];
 let studyGroups = [];
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
@@ -11115,10 +11120,75 @@ function renderAdminPage() {
             : 'Read-only mode. Register/Login as teacher/admin for update and reminder actions.';
     }
     updateBackendAuthStatus();
+    checkReminderBackendStatus({ silent: true });
     renderTeacherUpdatesList();
     renderAdminQuizScores();
     loadTeacherUpdatesFromServer();
     loadQuizScoresFromServer();
+}
+
+function updateReminderBackendStatusIndicator(ok, message) {
+    const el = document.getElementById('reminderBackendStatus');
+    if (!el) return;
+    el.classList.remove('connected', 'disconnected');
+    el.classList.add(ok ? 'connected' : 'disconnected');
+    el.textContent = message || (ok ? 'Backend: Online' : 'Backend: Offline');
+}
+
+async function checkReminderBackendStatus(options = {}) {
+    const silent = Boolean(options && options.silent);
+    const force = Boolean(options && options.force);
+    const now = Date.now();
+
+    if (!force && now - reminderBackendCheck.checkedAt < 30_000) {
+        updateReminderBackendStatusIndicator(reminderBackendCheck.ok, reminderBackendCheck.message);
+        return reminderBackendCheck.ok;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+        const healthResponse = await fetch(`${API_BASE_URL}/health`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        if (!healthResponse.ok) {
+            throw new Error(`Health check failed (${healthResponse.status})`);
+        }
+
+        const apiResponse = await fetch(`${API_BASE_URL}/api/presence/online-students`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        if (!apiResponse.ok) {
+            throw new Error(`/api/presence/online-students returned ${apiResponse.status}`);
+        }
+
+        reminderBackendCheck = {
+            ok: true,
+            checkedAt: Date.now(),
+            message: 'Backend: Online | CORS: OK'
+        };
+        updateReminderBackendStatusIndicator(true, reminderBackendCheck.message);
+        return true;
+    } catch (err) {
+        const raw = String(err && err.message || '').trim();
+        const message = /Failed to fetch|NetworkError|CORS|abort/i.test(raw)
+            ? 'Backend: Unreachable or CORS blocked'
+            : `Backend: ${raw || 'offline'}`;
+        reminderBackendCheck = {
+            ok: false,
+            checkedAt: Date.now(),
+            message
+        };
+        updateReminderBackendStatusIndicator(false, message);
+        if (!silent) {
+            alert(`${message}. Check backend deploy status and FRONTEND_ORIGIN env on server.`);
+        }
+        return false;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 function renderTeacherUpdatesList() {
@@ -11246,6 +11316,11 @@ async function sendTaskReminderEmail() {
     const dueDate = document.getElementById('reminderDueDate')?.value;
     if (!to || !task || !dueDate) {
         alert('Please enter recipient email, task and due date.');
+        return;
+    }
+    const backendReady = await checkReminderBackendStatus({ silent: true, force: true });
+    if (!backendReady) {
+        alert(`${reminderBackendCheck.message}. Cannot send reminder right now.`);
         return;
     }
     try {

@@ -10,10 +10,22 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
-const ALLOWED_ORIGINS = String(process.env.FRONTEND_ORIGIN || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+function normalizeOriginValue(origin) {
+    const raw = String(origin || "").trim();
+    if (!raw) return "";
+    try {
+        return new URL(raw).origin.toLowerCase();
+    } catch (_) {
+        return raw.replace(/\/+$/, "").toLowerCase();
+    }
+}
+
+const ALLOWED_ORIGINS = [...new Set(
+    String(process.env.FRONTEND_ORIGIN || "")
+        .split(",")
+        .map((origin) => normalizeOriginValue(origin))
+        .filter(Boolean)
+)];
 
 const DATA_DIR = path.join(__dirname, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
@@ -305,8 +317,11 @@ app.use(cors({
             callback(null, true);
             return;
         }
-        callback(null, ALLOWED_ORIGINS.includes(origin));
-    }
+        const normalizedRequestOrigin = normalizeOriginValue(origin);
+        callback(null, ALLOWED_ORIGINS.includes(normalizedRequestOrigin));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use(express.json());
 
