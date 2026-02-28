@@ -11236,6 +11236,15 @@ async function sendTaskReminderEmail() {
         alert('Only teacher/admin can send reminders.');
         return;
     }
+    if (!backendAdminToken) {
+        alert('Please click "Connect Admin Token" first, then send reminder.');
+        return;
+    }
+    const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (!isLocalHost && API_BASE_URL === window.location.origin) {
+        alert('Backend API is not configured. Set <meta name="api-base-url"> to your backend URL (for example: https://smart-study-planner-backend.onrender.com).');
+        return;
+    }
     const to = document.getElementById('reminderEmailTo')?.value.trim();
     const task = document.getElementById('reminderTaskName')?.value.trim();
     const dueDate = document.getElementById('reminderDueDate')?.value;
@@ -11249,12 +11258,24 @@ async function sendTaskReminderEmail() {
             headers: { 'Content-Type': 'application/json', ...getBackendAuthHeaders() },
             body: JSON.stringify({ to, task, dueDate })
         });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Send failed');
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        let result = {};
+        if (contentType.includes('application/json')) {
+            result = await response.json().catch(() => ({}));
+        } else {
+            const text = await response.text().catch(() => '');
+            if (!response.ok) {
+                if (response.status === 404) {
+                    throw new Error('API route /api/reminders/send not found (404). Backend is not running/reachable from this frontend URL.');
+                }
+                throw new Error(`Backend returned ${response.status}. ${text.slice(0, 120)}`);
+            }
+        }
+        if (!response.ok) throw new Error(result.error || `Send failed (${response.status})`);
         alert('Reminder email sent.');
         addActivity('envelope', 'Reminder Sent', `${task} -> ${to}`);
     } catch (err) {
-        alert(`Reminder send failed: ${err.message}. Start backend server to enable mailer.`);
+        alert(`Reminder send failed: ${err.message}`);
     }
 }
 
