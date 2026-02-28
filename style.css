@@ -429,6 +429,66 @@ body {
     gap: 12px;
 }
 
+.admin-teacher-panel-card {
+    border: 2px solid #c7d2fe;
+    background: linear-gradient(135deg, #eef2ff, #f8fafc);
+}
+
+.admin-teacher-panel-card h3 {
+    color: #1e3a8a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+#adminTeacherPanelStatus {
+    margin-bottom: 10px;
+    color: #334155;
+}
+
+#adminTeacherPanelActions {
+    gap: 8px;
+}
+
+#adminTeacherPanelActions .action-btn {
+    background: #1e3a8a;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#adminTeacherPanelActions .action-btn:hover {
+    background: #1e40af;
+}
+
+.role-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75em;
+    font-weight: 700;
+    border: 1px solid transparent;
+}
+
+.role-mode-badge.student {
+    background: #e2e8f0;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+
+.role-mode-badge.teacher {
+    background: #dbeafe;
+    color: #1e3a8a;
+    border-color: #93c5fd;
+}
+
+.role-mode-badge.admin {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #fca5a5;
+}
+
 .quick-actions .action-btn .qa-label {
     display: inline-flex;
     align-items: center;

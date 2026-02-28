@@ -234,6 +234,31 @@
                 </div>
             </div>
 
+            <div class="card settings-section admin-teacher-panel-card" id="adminTeacherPanelCard">
+                <h3><i class="fas fa-user-shield"></i> Admin / Teacher Panel <span id="adminTeacherPanelBadge" class="role-mode-badge student">Student Mode</span></h3>
+                <p id="adminTeacherPanelStatus">Checking access...</p>
+                <div class="task-options" id="adminTeacherPanelActions">
+                    <button class="action-btn" onclick="navigateTo('teacher-class-updates')">
+                        <i class="fas fa-bullhorn"></i> Class Updates
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('teacher-quiz-scores')">
+                        <i class="fas fa-chart-bar"></i> Quiz Scores
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('teacher-student-progress')">
+                        <i class="fas fa-user-graduate"></i> Student Progress
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('teacher-notes-library')">
+                        <i class="fas fa-book-open"></i> Notes Library
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('teacher-reminders')">
+                        <i class="fas fa-envelope"></i> Reminders
+                    </button>
+                    <button class="action-btn" onclick="navigateTo('settings')">
+                        <i class="fas fa-cog"></i> Admin Settings
+                    </button>
+                </div>
+            </div>
+
             <div class="card consistency-rewards">
                 <h3><i class="fas fa-award"></i> Consistency Rewards</h3>
                 <p><strong id="consistencyPoints">0</strong> points this cycle</p>
@@ -1276,7 +1301,11 @@
                 <button class="action-btn" onclick="backendAdminLogout()">
                     <i class="fas fa-right-from-bracket"></i> Clear Admin Token
                 </button>
+                <button class="action-btn" onclick="verifyBackendAuthToken()">
+                    <i class="fas fa-shield-check"></i> Verify Token
+                </button>
                 <p id="backendAuthStatus">Not connected</p>
+                <p id="backendAuthMeta">Token info: N/A</p>
             </div>
             <div class="card settings-section">
                 <h3><i class="fas fa-envelope"></i> Node Mailer Task Reminder</h3>
@@ -1306,6 +1335,7 @@
             </div>
             <div class="card settings-section">
                 <h3><i class="fas fa-chart-bar"></i> Quiz Scores (Admin Side)</h3>
+                <p id="adminQuizScoresSummary">No quiz scores recorded yet.</p>
                 <ul id="adminQuizScoresList">
                     <li class="empty-state">No quiz scores recorded yet</li>
                 </ul>
@@ -1362,12 +1392,22 @@
                 </div>
                 <div class="task-options">
                     <select id="freeNoteSubjectInput">
+                        <option value="Programming">Programming</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Python">Python</option>
                         <option value="Math">Math</option>
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
                         <option value="Geography">Geography</option>
-                        <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
                     <input type="text" id="freeNoteLevelInput" placeholder="Class/Level (e.g., Class 10)">
@@ -1394,12 +1434,22 @@
                     <input type="text" id="freeNotesSearchInput" placeholder="Search notes..." oninput="searchFreeNotes()">
                     <select id="freeNotesFilterSubject" onchange="filterFreeNotes()">
                         <option value="all">All Subjects</option>
+                        <option value="Programming">Programming</option>
+                        <option value="Data Structures">Data Structures</option>
+                        <option value="DBMS">DBMS</option>
+                        <option value="Operating Systems">Operating Systems</option>
+                        <option value="Computer Networks">Computer Networks</option>
+                        <option value="OOP">OOP</option>
+                        <option value="Discrete Mathematics">Discrete Mathematics</option>
+                        <option value="Computer Architecture">Computer Architecture</option>
+                        <option value="Software Engineering">Software Engineering</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Python">Python</option>
                         <option value="Math">Math</option>
                         <option value="Science">Science</option>
                         <option value="English">English</option>
                         <option value="History">History</option>
                         <option value="Geography">Geography</option>
-                        <option value="Programming">Programming</option>
                         <option value="General">General</option>
                     </select>
                 </div>

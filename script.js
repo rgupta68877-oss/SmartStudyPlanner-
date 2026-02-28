@@ -495,6 +495,95 @@ for (const note of buildStandardWiseNotesLibrary()) {
     }
 }
 
+const BSC_CS_NOTES_LIBRARY = [
+    {
+        id: "bsc-cs-note-1",
+        title: "Data Structures: Arrays, Linked Lists, Stacks, Queues",
+        subject: "Data Structures",
+        level: "BSc CS Sem 1",
+        content: "Core topics:\n- Array operations and complexity\n- Singly vs doubly linked list\n- Stack applications: expression evaluation\n- Queue and circular queue\n\nPractice:\n1) Reverse a linked list.\n2) Implement stack using array.\n3) Explain queue overflow/underflow.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-2",
+        title: "DBMS Fundamentals: ER Model, SQL, Normalization",
+        subject: "DBMS",
+        level: "BSc CS Sem 2",
+        content: "Core topics:\n- ER diagram entities and relationships\n- Primary/foreign keys\n- SQL: SELECT, JOIN, GROUP BY\n- 1NF, 2NF, 3NF\n\nPractice:\n1) Design ER for student-course schema.\n2) Write 5 JOIN queries.\n3) Normalize sample table to 3NF.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-3",
+        title: "Operating Systems: Process, Scheduling, Deadlocks",
+        subject: "Operating Systems",
+        level: "BSc CS Sem 3",
+        content: "Core topics:\n- Process vs thread\n- CPU scheduling: FCFS, SJF, RR\n- Critical section and synchronization\n- Deadlock conditions and prevention\n\nPractice:\n1) Compute waiting time in FCFS.\n2) Explain semaphore use case.\n3) Deadlock detection example.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-4",
+        title: "Computer Networks: Layers, TCP/IP, Routing Basics",
+        subject: "Computer Networks",
+        level: "BSc CS Sem 4",
+        content: "Core topics:\n- OSI and TCP/IP mapping\n- IP addressing and subnetting basics\n- TCP vs UDP\n- Routing concepts and protocols overview\n\nPractice:\n1) Explain 3-way handshake.\n2) Find network/broadcast from CIDR.\n3) Compare OSI Layer 3 and Layer 4.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-5",
+        title: "Object Oriented Programming (Java): Classes and Inheritance",
+        subject: "OOP",
+        level: "BSc CS Sem 2",
+        content: "Core topics:\n- Class, object, constructor\n- Encapsulation and abstraction\n- Inheritance and polymorphism\n- Interface and exception handling\n\nPractice:\n1) Build Student class with constructor overloading.\n2) Demonstrate runtime polymorphism.\n3) Custom exception example.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-6",
+        title: "Discrete Mathematics: Logic, Sets, Relations, Graphs",
+        subject: "Discrete Mathematics",
+        level: "BSc CS Sem 1",
+        content: "Core topics:\n- Propositional logic and truth tables\n- Set operations and identities\n- Relations and functions\n- Graph terminology and traversal basics\n\nPractice:\n1) Prove De Morgan laws.\n2) Determine relation properties.\n3) BFS and DFS on sample graph.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-7",
+        title: "Computer Architecture: Number Systems, CPU, Memory",
+        subject: "Computer Architecture",
+        level: "BSc CS Sem 3",
+        content: "Core topics:\n- Binary/octal/hex conversion\n- Instruction cycle\n- Register organization\n- Cache, RAM, ROM hierarchy\n\nPractice:\n1) Convert decimal to binary/hex.\n2) Explain fetch-decode-execute cycle.\n3) Compare SRAM and DRAM.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-8",
+        title: "Software Engineering: SDLC, Testing, Agile",
+        subject: "Software Engineering",
+        level: "BSc CS Sem 4",
+        content: "Core topics:\n- SDLC phases\n- Requirement analysis and SRS\n- Testing: unit, integration, system\n- Agile sprint workflow\n\nPractice:\n1) Draft mini SRS outline.\n2) Write 5 test cases.\n3) Compare waterfall vs agile.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-9",
+        title: "Web Development: HTML, CSS, JavaScript Essentials",
+        subject: "Web Development",
+        level: "BSc CS Sem 2",
+        content: "Core topics:\n- Semantic HTML layout\n- CSS box model and responsive design\n- JavaScript DOM events\n- Form validation basics\n\nPractice:\n1) Build responsive profile card.\n2) Add JS form validation.\n3) Create dynamic to-do list UI.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    },
+    {
+        id: "bsc-cs-note-10",
+        title: "Python Programming: Functions, Files, Modules",
+        subject: "Python",
+        level: "BSc CS Sem 1",
+        content: "Core topics:\n- Functions and recursion basics\n- Lists, tuples, dictionaries\n- File handling read/write\n- Modules and packages\n\nPractice:\n1) Frequency counter using dictionary.\n2) Read CSV and summarize rows.\n3) Build menu-driven calculator.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+    }
+];
+
+for (const note of BSC_CS_NOTES_LIBRARY) {
+    if (!DEFAULT_FREE_NOTES_LIBRARY.some(existing => existing.id === note.id)) {
+        DEFAULT_FREE_NOTES_LIBRARY.push(note);
+    }
+}
+
 const DEFAULT_RESOURCES_LIBRARY = [
     {
         id: "res-1",
@@ -2140,10 +2229,40 @@ function getBackendAuthHeaders() {
         : {};
 }
 
+function decodeJwtPayload(token) {
+    try {
+        const safe = String(token || '').split('.')[1];
+        if (!safe) return null;
+        const base64 = safe.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        const json = atob(padded);
+        return JSON.parse(json);
+    } catch (_) {
+        return null;
+    }
+}
+
 function updateBackendAuthStatus() {
     const status = document.getElementById('backendAuthStatus');
-    if (!status) return;
-    status.textContent = backendAdminToken ? 'Connected (JWT token active)' : 'Not connected';
+    const meta = document.getElementById('backendAuthMeta');
+    if (status) {
+        status.textContent = backendAdminToken ? 'Connected (JWT token active)' : 'Not connected';
+    }
+    if (!meta) return;
+    if (!backendAdminToken) {
+        meta.textContent = 'Token info: N/A';
+        return;
+    }
+    const payload = decodeJwtPayload(backendAdminToken);
+    if (!payload) {
+        meta.textContent = 'Token info: Unable to decode token.';
+        return;
+    }
+    const email = String(payload.email || 'unknown');
+    const role = String(payload.role || 'unknown');
+    const exp = Number(payload.exp || 0);
+    const expLabel = exp > 0 ? new Date(exp * 1000).toLocaleString() : 'unknown';
+    meta.textContent = `Token info: ${email} | role: ${role} | expires: ${expLabel}`;
 }
 
 async function backendAdminLogin() {
@@ -2174,6 +2293,25 @@ function backendAdminLogout() {
     backendAdminToken = "";
     localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
     updateBackendAuthStatus();
+}
+
+async function verifyBackendAuthToken() {
+    if (!backendAdminToken) {
+        alert('No JWT token found. Connect Admin Token first.');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+            headers: { 'Content-Type': 'application/json', ...getBackendAuthHeaders() }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        const user = data && data.user ? data.user : {};
+        alert(`Token valid for ${user.name || user.email || 'user'} (${user.role || 'unknown'}).`);
+        updateBackendAuthStatus();
+    } catch (err) {
+        alert(`Token verify failed: ${err.message}`);
+    }
 }
 
 function applyAuthState() {
@@ -3271,6 +3409,7 @@ function renderDashboard() {
     renderUpcomingDeadlines();
     renderScholarshipExamAlerts();
     renderDailyTop3AdaptiveTasks();
+    renderAdminTeacherPanel();
     renderWeakTopicDetection();
     renderQuizScoreSnapshot();
     renderMistakeDueBadges();
@@ -3289,6 +3428,40 @@ function renderDashboard() {
     renderRecoveryHistory();
     renderDashboardQuestionBank();
     renderMemoryBoosterSession();
+}
+
+function renderAdminTeacherPanel() {
+    const panel = document.getElementById('adminTeacherPanelCard');
+    const status = document.getElementById('adminTeacherPanelStatus');
+    const actions = document.getElementById('adminTeacherPanelActions');
+    const badge = document.getElementById('adminTeacherPanelBadge');
+    if (!panel || !status || !actions) return;
+
+    const user = getCurrentUser();
+    const role = String((user && user.role) || 'student').toLowerCase();
+    const hasAccess = role === 'admin' || role === 'teacher';
+
+    if (badge) {
+        badge.classList.remove('student', 'teacher', 'admin');
+        const roleClass = role === 'admin' ? 'admin' : role === 'teacher' ? 'teacher' : 'student';
+        badge.classList.add(roleClass);
+        badge.textContent = roleClass === 'admin'
+            ? 'Admin Mode'
+            : roleClass === 'teacher'
+                ? 'Teacher Mode'
+                : 'Student Mode';
+    }
+
+    if (hasAccess) {
+        panel.style.display = '';
+        status.textContent = `Access: ${role}. Manage class updates, quiz scores, reminders, and settings.`;
+        actions.style.display = 'flex';
+        return;
+    }
+
+    panel.style.display = '';
+    status.textContent = 'Student view: read-only. Login as teacher/admin to use management tools.';
+    actions.style.display = 'none';
 }
 
 function renderQuizScoreSnapshot() {
@@ -10685,11 +10858,38 @@ function renderTeacherUpdatesList() {
 
 function renderAdminQuizScores() {
     const list = document.getElementById('adminQuizScoresList');
+    const summary = document.getElementById('adminQuizScoresSummary');
     if (!list) return;
     if (quizScores.length === 0) {
+        if (summary) summary.textContent = 'No quiz scores recorded yet.';
         list.innerHTML = '<li class="empty-state">No quiz scores recorded yet</li>';
         return;
     }
+
+    const totalAttempts = quizScores.length;
+    const avgPercent = Math.round(
+        quizScores.reduce((sum, score) => sum + (Number(score && score.percent) || 0), 0) / Math.max(1, totalAttempts)
+    );
+    const latest = quizScores[0];
+    const byUser = new Map();
+    quizScores.forEach(score => {
+        const name = String((score && (score.userName || score.userEmail)) || 'Unknown');
+        const current = byUser.get(name) || { sum: 0, count: 0 };
+        current.sum += Number(score && score.percent) || 0;
+        current.count += 1;
+        byUser.set(name, current);
+    });
+    const topPerformer = [...byUser.entries()]
+        .map(([name, stats]) => ({ name, avg: Math.round(stats.sum / Math.max(1, stats.count)) }))
+        .sort((a, b) => b.avg - a.avg)[0];
+
+    if (summary) {
+        const latestText = latest
+            ? `${latest.userName || latest.userEmail}: ${latest.percent}%`
+            : 'N/A';
+        summary.textContent = `Attempts: ${totalAttempts} | Avg: ${avgPercent}% | Top: ${topPerformer ? `${topPerformer.name} (${topPerformer.avg}%)` : 'N/A'} | Latest: ${latestText}`;
+    }
+
     list.innerHTML = quizScores.slice(0, 30).map(score => `
         <li>
             <div class="assignment-header">
