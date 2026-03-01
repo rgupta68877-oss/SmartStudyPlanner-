@@ -1366,6 +1366,28 @@
                 <p id="adminAccessNotice">Checking access...</p>
             </div>
             <div class="card settings-section">
+                <h3><i class="fas fa-book-open-reader"></i> NCERT Subject Manager</h3>
+                <p>Add subjects from teacher side. Students will see the same subjects in task/quiz/note dropdowns.</p>
+                <div class="task-options">
+                    <input type="text" id="newSubjectName" placeholder="Subject name (e.g., Physics)">
+                    <input type="color" id="subjectColor" value="#2193b0" title="Subject color">
+                </div>
+                <div class="task-options">
+                    <button class="add-btn" onclick="addSubject()">
+                        <i class="fas fa-plus"></i> Add Subject
+                    </button>
+                    <button class="action-btn" onclick="addNCERTSubjectsPreset()">
+                        <i class="fas fa-layer-group"></i> Add NCERT Subject Set
+                    </button>
+                    <button class="clear-btn" onclick="removeNCERTSubjectsPreset()">
+                        <i class="fas fa-trash"></i> Remove NCERT Subject Set
+                    </button>
+                </div>
+                <div id="subjectsGrid">
+                    <div class="empty-state">No subjects yet</div>
+                </div>
+            </div>
+            <div class="card settings-section">
                 <h3><i class="fas fa-envelope"></i> Node Mailer Task Reminder</h3>
                 <div class="task-options">
                     <span id="reminderBackendStatus" class="peer-backend-indicator disconnected">Backend: Checking...</span>

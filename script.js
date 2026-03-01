@@ -438,6 +438,23 @@ const LEGACY_SUBJECT_ALIASES = Object.freeze({
     geography: "Computer Architecture"
 });
 
+const NCERT_SUBJECT_PRESET = Object.freeze([
+    "Mathematics",
+    "Physics",
+    "Chemistry",
+    "Biology",
+    "English",
+    "Hindi",
+    "Economics",
+    "Accountancy",
+    "Business Studies",
+    "Political Science",
+    "History",
+    "Geography",
+    "Computer Science",
+    "Informatics Practices"
+]);
+
 const BSC_CS_SEMESTER_SUBJECT_MAP = {
     "Sem 1": ["Programming", "Python", "Discrete Mathematics"],
     "Sem 2": ["Data Structures", "DBMS", "Web Development"],
@@ -1103,12 +1120,16 @@ function normalizeDoubtTracker(value) {
         .map(item => {
             const normalized = item && typeof item === "object" ? item : {};
             const status = String(normalized.status || "unresolved");
+            const createdByRole = String(normalized.createdByRole || "student").toLowerCase();
             return {
                 id: normalized.id || `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 subject: normalizeUnifiedSubject(normalized.subject || "General", "General", { allowGeneral: true }),
                 chapter: String(normalized.chapter || "General").trim() || "General",
                 text: String(normalized.text || "").trim(),
                 status: status === "resolved" ? "resolved" : "unresolved",
+                createdBy: normalizeEmail(normalized.createdBy || ""),
+                createdByName: String(normalized.createdByName || "").trim() || "Student",
+                createdByRole: createdByRole === "teacher" || createdByRole === "admin" ? createdByRole : "student",
                 createdAt: normalized.createdAt || new Date().toISOString(),
                 resolvedAt: status === "resolved" ? (normalized.resolvedAt || new Date().toISOString()) : ""
             };
@@ -1508,6 +1529,7 @@ let voiceNoteListening = false;
 let voiceFlashcardListening = false;
 let draggedTimetableId = null;
 let backendFetchSuspendedUntil = 0;
+const ENFORCE_MANUAL_LOGIN_ON_PAGE_LOAD = true;
 
 function isBackendFetchAllowed() {
     return Date.now() >= backendFetchSuspendedUntil;
@@ -2330,6 +2352,30 @@ function getCurrentUser() {
     const user = authUsers.find(u => normalizeEmail(u.email) === normalizeEmail(authSession.email)) || null;
     if (user && !user.role) user.role = "student";
     return user;
+}
+
+function clearLocalAuthSessionState() {
+    authSession = null;
+    saveState({ authSession });
+    backendAdminToken = "";
+    localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+}
+
+async function enforceManualLoginOnPageLoad() {
+    if (!ENFORCE_MANUAL_LOGIN_ON_PAGE_LOAD) return;
+    clearLocalAuthSessionState();
+    await ensureFirebaseServices();
+    if (firebaseAuth && firebaseSdk.signOut && firebaseAuth.currentUser) {
+        suppressFirebaseAuthObserver = true;
+        try {
+            await firebaseSdk.signOut(firebaseAuth);
+        } catch (_) {
+        } finally {
+            setTimeout(() => {
+                suppressFirebaseAuthObserver = false;
+            }, 0);
+        }
+    }
 }
 
 function canAccessAdmin() {
@@ -8591,6 +8637,7 @@ function renderAnalytics() {
 function renderSubjects() {
     renderTimerSubjectOptions();
     const grid = document.getElementById('subjectsGrid');
+    if (!grid) return;
     
     if (subjects.length === 0) {
         grid.innerHTML = '<div class="empty-state">No subjects yet</div>';
@@ -8614,32 +8661,93 @@ function renderSubjects() {
 }
 
 function addSubject() {
-    const name = document.getElementById('newSubjectName').value.trim();
-    const color = document.getElementById('subjectColor').value;
+    const nameInput = document.getElementById('newSubjectName');
+    const colorInput = document.getElementById('subjectColor');
+    const name = String(nameInput && nameInput.value ? nameInput.value : '').trim();
+    const color = String(colorInput && colorInput.value ? colorInput.value : '#2193b0');
     
     if (!name) {
         alert('Please enter subject name');
         return;
     }
     
-    if (subjects.some(s => s.name === name)) {
+    if (subjects.some(s => String((s && s.name) || '').trim().toLowerCase() === name.toLowerCase())) {
         alert('Subject already exists');
         return;
     }
     
-    subjects.push({ name, color });
-    localStorage.setItem('subjects', JSON.stringify(subjects));
+    subjects.push({ name, color: color || '#2193b0' });
+    saveState({ subjects });
+    syncUnifiedSubjectOptions();
     renderSubjects();
     
     addActivity('book', 'Subject Added', name);
     
-    document.getElementById('newSubjectName').value = '';
+    if (nameInput) nameInput.value = '';
 }
 
 function deleteSubject(index) {
     subjects.splice(index, 1);
-    localStorage.setItem('subjects', JSON.stringify(subjects));
+    saveState({ subjects });
+    syncUnifiedSubjectOptions();
     renderSubjects();
+}
+
+function addNCERTSubjectsPreset() {
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can add NCERT subjects.');
+        return;
+    }
+    const ncertSubjects = NCERT_SUBJECT_PRESET;
+    const palette = [
+        "#1b9aaa", "#4caf50", "#ff9800", "#8bc34a", "#3f51b5", "#9c27b0", "#607d8b",
+        "#e91e63", "#009688", "#795548", "#673ab7", "#03a9f4", "#2196f3", "#f44336"
+    ];
+
+    let added = 0;
+    ncertSubjects.forEach((name, idx) => {
+        const exists = subjects.some(item => String((item && item.name) || '').trim().toLowerCase() === name.toLowerCase());
+        if (exists) return;
+        subjects.push({ name, color: palette[idx % palette.length] });
+        added += 1;
+    });
+
+    if (added === 0) {
+        alert('NCERT subjects already exist.');
+        return;
+    }
+
+    saveState({ subjects });
+    syncUnifiedSubjectOptions();
+    renderSubjects();
+    addActivity('book-open', 'NCERT Subjects Added', `${added} subjects added`);
+    alert(`Added ${added} NCERT subject(s). Students can use them now.`);
+}
+
+function removeNCERTSubjectsPreset() {
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can remove NCERT subjects.');
+        return;
+    }
+
+    const before = subjects.length;
+    const ncertSet = new Set(NCERT_SUBJECT_PRESET.map(name => name.toLowerCase()));
+    subjects = subjects.filter(item => {
+        const name = String((item && item.name) || '').trim().toLowerCase();
+        return !ncertSet.has(name);
+    });
+    const removed = before - subjects.length;
+
+    if (removed <= 0) {
+        alert('No NCERT subjects found to remove.');
+        return;
+    }
+
+    saveState({ subjects });
+    syncUnifiedSubjectOptions();
+    renderSubjects();
+    addActivity('trash', 'NCERT Subjects Removed', `${removed} subjects removed`);
+    alert(`Removed ${removed} NCERT subject(s).`);
 }
 
 // ==================== TIMETABLE ====================
@@ -11629,6 +11737,13 @@ function getPomodoroSubjectOptions() {
     return [...new Set([...defaults, ...fromSubjects, ...fromSessions])];
 }
 
+function getUnifiedSubjectOptions() {
+    const fromSubjectMaster = Array.isArray(subjects)
+        ? subjects.map(item => normalizeUnifiedSubject((item && item.name) || "", "", { allowGeneral: false })).filter(Boolean)
+        : [];
+    return [...new Set([...UNIFIED_BSC_SUBJECTS, ...fromSubjectMaster])];
+}
+
 function setSubjectSelectOptions(selectId, options = {}) {
     const select = document.getElementById(selectId);
     if (!select) return;
@@ -11642,7 +11757,7 @@ function setSubjectSelectOptions(selectId, options = {}) {
     const preferred = String(options.preferred || "").trim();
     const currentValue = String(select.value || "").trim();
 
-    const subjectOptions = [...UNIFIED_BSC_SUBJECTS];
+    const subjectOptions = getUnifiedSubjectOptions();
     const html = [];
     if (includeEmpty) html.push(`<option value="">${emptyLabel}</option>`);
     if (includeAny) html.push('<option value="Any">Any Subject</option>');
@@ -12894,6 +13009,9 @@ function renderDoubtTracker() {
         list.innerHTML = '<li class="empty-state">No doubts added yet</li>';
         return;
     }
+    const canResolve = canAccessAdmin();
+    const currentUser = getCurrentUser();
+    const currentEmail = normalizeEmail(currentUser && currentUser.email ? currentUser.email : "");
 
     const ordered = [...doubtTracker].sort((a, b) => {
         if (a.status !== b.status) return a.status === 'unresolved' ? -1 : 1;
@@ -12906,11 +13024,13 @@ function renderDoubtTracker() {
             <span>${item.text}</span>
             <div class="task-options">
                 <span class="assignment-type">${item.status === 'resolved' ? 'Resolved' : 'Unresolved'}</span>
+                ${canResolve ? `
                 <button class="action-btn" onclick="toggleDoubtResolved('${item.id}')">
                     <i class="fas ${item.status === 'resolved' ? 'fa-rotate-left' : 'fa-check'}"></i>
                     ${item.status === 'resolved' ? 'Mark Unresolved' : 'Mark Resolved'}
-                </button>
-                <button class="delete-btn" onclick="deleteDoubtTrackerEntry('${item.id}')"><i class="fas fa-trash"></i></button>
+                </button>` : '<span class="assignment-type">Teacher review pending</span>'}
+                ${(canResolve || (item.createdBy && normalizeEmail(item.createdBy) === currentEmail)) ? `
+                <button class="delete-btn" onclick="deleteDoubtTrackerEntry('${item.id}')"><i class="fas fa-trash"></i></button>` : ''}
             </div>
         </li>
     `).join('');
@@ -13014,6 +13134,7 @@ function renderDoubtEscalationQueue() {
     const summary = document.getElementById('doubtEscalationSummary');
     const list = document.getElementById('doubtEscalationList');
     if (!summary || !list) return;
+    const canResolve = canAccessAdmin();
 
     const unresolvedCount = (doubtTracker || []).filter(item => item && item.status !== 'resolved').length;
     const queue = getDoubtEscalationQueue(10);
@@ -13036,21 +13157,42 @@ function renderDoubtEscalationQueue() {
                 <span class="task-due">${item.closestExamDays === null ? 'No upcoming exam' : `${item.closestExamDays} day(s) to exam`}</span>
             </div>
             <div class="task-options">
-                <button class="action-btn" onclick="addEscalatedDoubtTask('${item.id}')">
+                ${canResolve ? `<button class="action-btn" onclick="addEscalatedDoubtTask('${item.id}')">
                     <i class="fas fa-list-check"></i> Add Priority Task
-                </button>
-                <button class="action-btn" onclick="toggleDoubtResolved('${item.id}')">
+                </button>` : ''}
+                ${canResolve ? `<button class="action-btn" onclick="toggleDoubtResolved('${item.id}')">
                     <i class="fas fa-check"></i> Mark Resolved
-                </button>
+                </button>` : '<span class="assignment-type">Teacher resolves escalated doubts</span>'}
             </div>
         </li>
     `).join('');
+}
+
+function addStudentDoubtUpdate(doubtEntry) {
+    const currentUser = getCurrentUser();
+    if (!currentUser || canAccessAdmin()) return;
+    const subject = String(doubtEntry && doubtEntry.subject || "General").trim() || "General";
+    const chapter = String(doubtEntry && doubtEntry.chapter || "General").trim() || "General";
+    const messageText = String(doubtEntry && doubtEntry.text || "").trim();
+    if (!messageText) return;
+
+    teacherUpdates.unshift({
+        id: `upd-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title: `Student Doubt Update: ${subject} | ${chapter}`,
+        message: `${currentUser.name || currentUser.email || "Student"} asked: ${messageText}`,
+        by: `${currentUser.name || "Student"} (student)`,
+        createdAt: new Date().toISOString()
+    });
+    teacherUpdates = teacherUpdates.slice(0, 200);
+    saveState({ teacherUpdates });
+    renderTeacherUpdatesList();
 }
 
 function addDoubtTrackerEntry() {
     const subjectInput = document.getElementById('doubtSubjectInput');
     const chapterInput = document.getElementById('doubtChapterInput');
     const textInput = document.getElementById('doubtTextInput');
+    const currentUser = getCurrentUser();
 
     const subject = String(subjectInput && subjectInput.value ? subjectInput.value : 'General').trim() || 'General';
     const chapter = String(chapterInput && chapterInput.value ? chapterInput.value : 'General').trim() || 'General';
@@ -13060,23 +13202,33 @@ function addDoubtTrackerEntry() {
         return;
     }
 
-    doubtTracker.unshift({
+    const createdByRole = String((currentUser && currentUser.role) || "student").toLowerCase();
+    const doubtEntry = {
         id: `doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         subject,
         chapter,
         text,
         status: 'unresolved',
+        createdBy: normalizeEmail(currentUser && currentUser.email ? currentUser.email : ""),
+        createdByName: String(currentUser && currentUser.name ? currentUser.name : "Student"),
+        createdByRole: createdByRole === "teacher" || createdByRole === "admin" ? createdByRole : "student",
         createdAt: new Date().toISOString(),
         resolvedAt: ''
-    });
+    };
+    doubtTracker.unshift(doubtEntry);
     saveState({ doubtTracker });
     renderDoubtTracker();
     renderDoubtEscalationQueue();
+    addStudentDoubtUpdate(doubtEntry);
     addActivity('circle-question', 'Doubt Added', `${subject} | ${chapter}`);
     if (textInput) textInput.value = '';
 }
 
 function toggleDoubtResolved(id) {
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can mark doubt resolved.');
+        return;
+    }
     const idx = doubtTracker.findIndex(item => item.id === id);
     if (idx < 0) return;
     const current = doubtTracker[idx];
@@ -13092,6 +13244,18 @@ function toggleDoubtResolved(id) {
 }
 
 function deleteDoubtTrackerEntry(id) {
+    const idx = doubtTracker.findIndex(item => item.id === id);
+    if (idx < 0) return;
+    const item = doubtTracker[idx];
+    const currentUser = getCurrentUser();
+    const canDelete = canAccessAdmin() || (
+        currentUser &&
+        normalizeEmail(item && item.createdBy || "") === normalizeEmail(currentUser.email || "")
+    );
+    if (!canDelete) {
+        alert('You can only delete your own doubt.');
+        return;
+    }
     doubtTracker = doubtTracker.filter(item => item.id !== id);
     saveState({ doubtTracker });
     renderDoubtTracker();
@@ -13933,6 +14097,7 @@ function bootstrapAuthenticatedApp() {
     renderFlashcards();
     renderQuizPage();
     renderAdminPage();
+    renderSubjects();
     renderTimetable();
     renderFreeNotes();
     renderAnalytics();
@@ -13990,13 +14155,14 @@ function ensureVisibleShellState() {
 }
 
 // ==================== INITIALIZATION ====================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Skip full app bootstrapping when script.js is loaded by lightweight test pages.
     if (!document.getElementById('page-dashboard')) {
         return;
     }
 
     try {
+        await enforceManualLoginOnPageLoad();
         ensureVisibleShellState();
         setupFirebaseAuthObserver();
         applyAuthState();
