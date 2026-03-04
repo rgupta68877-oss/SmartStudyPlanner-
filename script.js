@@ -1474,6 +1474,13 @@ let reminderBackendCheck = {
 };
 let peerChallenges = [];
 let studyGroups = [];
+let liveClassBroadcastState = {
+    active: false,
+    subject: "General",
+    startedAt: "",
+    teacherName: "",
+    teacherEmail: ""
+};
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
 let backendLastAuthError = "";
 let firebaseInitPromise = null;
@@ -1488,6 +1495,8 @@ let cloudStateLoadedForUid = "";
 let activeFirebaseUid = "";
 let presenceIntervalId = null;
 let presencePingInFlight = false;
+let presenceSocket = null;
+let liveClassSubjectListenerAttached = false;
 
 const CLOUD_SYNC_DEBOUNCE_MS = 800;
 const firebaseSdk = {
@@ -2504,6 +2513,9 @@ function applyAuthState() {
         bootstrapAuthenticatedApp();
         startPresenceTracking();
         renderProfile();
+        if (String(user.role || "student").toLowerCase() === "student") {
+            requestReminderPermission();
+        }
     } else {
         stopPresenceTracking();
         updateOnlineStudentsVisibility();
@@ -2790,6 +2802,130 @@ function updateOnlineStudentsUI(count) {
     countEl.textContent = String(safeCount);
 }
 
+function getPrimaryActiveLiveClassEntry(snapshot) {
+    const list = Array.isArray(snapshot && snapshot.activeLiveClasses) ? snapshot.activeLiveClasses : [];
+    if (list.length === 0) return null;
+    return list[0];
+}
+
+function notifyStudentLiveClassChange(previousState, nextState) {
+    const user = getCurrentUser();
+    if (!user || String(user.role || "student").toLowerCase() !== "student") return;
+    const prevActive = Boolean(previousState && previousState.active);
+    const nextActive = Boolean(nextState && nextState.active);
+    if (prevActive === nextActive) return;
+
+    const teacherName = String(nextState.teacherName || previousState.teacherName || "Teacher").trim() || "Teacher";
+    const subject = String(nextState.subject || previousState.subject || "General").trim() || "General";
+    const title = "Live Class Update";
+    const body = nextActive
+        ? `${teacherName} started a live lecture (${subject}).`
+        : `${teacherName} ended the live lecture.`;
+
+    if ("Notification" in window && Notification.permission === "granted") {
+        try {
+            new Notification(title, { body });
+        } catch (_) {}
+    } else {
+        alert(body);
+    }
+}
+
+function updateLiveClassBroadcastFromPresence(snapshot) {
+    const entry = getPrimaryActiveLiveClassEntry(snapshot);
+    const nextState = entry
+        ? {
+            active: true,
+            subject: String(entry.subject || "General").trim() || "General",
+            startedAt: String(entry.startedAt || ""),
+            teacherName: String(entry.name || "Teacher").trim() || "Teacher",
+            teacherEmail: normalizeEmail(entry.email || "")
+        }
+        : {
+            active: false,
+            subject: "General",
+            startedAt: "",
+            teacherName: "",
+            teacherEmail: ""
+        };
+
+    const changed = (
+        Boolean(liveClassBroadcastState.active) !== Boolean(nextState.active) ||
+        String(liveClassBroadcastState.startedAt || "") !== String(nextState.startedAt || "") ||
+        String(liveClassBroadcastState.teacherEmail || "") !== String(nextState.teacherEmail || "")
+    );
+    const previousState = liveClassBroadcastState;
+    liveClassBroadcastState = nextState;
+    renderLiveClassMode();
+    if (changed) {
+        notifyStudentLiveClassChange(previousState, nextState);
+    }
+}
+
+function applyPresenceSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") return;
+    updateOnlineStudentsUI(snapshot.onlineStudents);
+    updateLiveClassBroadcastFromPresence(snapshot);
+}
+
+function emitPresenceSocketUpdate() {
+    const user = getCurrentUser();
+    if (!presenceSocket || !user) return;
+    if (typeof presenceSocket.emit !== "function") return;
+    presenceSocket.emit("presence:update", {
+        clientId: getPresenceClientId(),
+        role: user.role || "student",
+        email: user.email || "",
+        name: user.name || "User",
+        liveClassActive: canAccessAdmin() ? Boolean(liveClassSession.active) : false,
+        liveClassSubject: canAccessAdmin() ? (document.getElementById('liveClassSubject')?.value || "General") : "",
+        liveClassStartedAt: canAccessAdmin() ? String(liveClassSession.startedAt || "") : ""
+    });
+}
+
+function stopPresenceSocketConnection() {
+    if (!presenceSocket) return;
+    try {
+        if (typeof presenceSocket.emit === "function") {
+            presenceSocket.emit("presence:logout", { clientId: getPresenceClientId() });
+        }
+        if (typeof presenceSocket.disconnect === "function") {
+            presenceSocket.disconnect();
+        }
+    } catch (_) {}
+    presenceSocket = null;
+}
+
+function startPresenceSocketConnection() {
+    stopPresenceSocketConnection();
+    if (!navigator.onLine) return;
+    if (typeof window.io !== "function") return;
+    const user = getCurrentUser();
+    if (!user) return;
+
+    try {
+        presenceSocket = window.io(API_BASE_URL, {
+            transports: ["websocket", "polling"],
+            reconnection: true
+        });
+    } catch (_) {
+        presenceSocket = null;
+        return;
+    }
+
+    presenceSocket.on("connect", () => {
+        emitPresenceSocketUpdate();
+    });
+
+    presenceSocket.on("presence:snapshot", (snapshot) => {
+        applyPresenceSnapshot(snapshot);
+    });
+
+    presenceSocket.on("reconnect", () => {
+        emitPresenceSocketUpdate();
+    });
+}
+
 function canViewOnlineStudentsWidget(user = getCurrentUser()) {
     return !!user && (user.role === "teacher" || user.role === "admin");
 }
@@ -2813,12 +2949,16 @@ async function pingPresence() {
             body: JSON.stringify({
                 clientId: getPresenceClientId(),
                 role: user.role || "student",
-                email: user.email || ""
+                email: user.email || "",
+                name: user.name || "User",
+                liveClassActive: canAccessAdmin() ? Boolean(liveClassSession.active) : false,
+                liveClassSubject: canAccessAdmin() ? (document.getElementById('liveClassSubject')?.value || "General") : "",
+                liveClassStartedAt: canAccessAdmin() ? String(liveClassSession.startedAt || "") : ""
             })
         });
         if (!response.ok) return;
         const data = await response.json();
-        updateOnlineStudentsUI(data.onlineStudents);
+        applyPresenceSnapshot(data);
     } catch (_) {
         suspendBackendFetch(30000);
     } finally {
@@ -2832,7 +2972,7 @@ async function refreshOnlineStudentsCount() {
         const response = await fetch(`${API_BASE_URL}/api/presence/online-students`);
         if (!response.ok) return;
         const data = await response.json();
-        updateOnlineStudentsUI(data.onlineStudents);
+        applyPresenceSnapshot(data);
     } catch (_) {
         suspendBackendFetch(30000);
     }
@@ -2840,6 +2980,7 @@ async function refreshOnlineStudentsCount() {
 
 function startPresenceTracking() {
     stopPresenceTracking();
+    startPresenceSocketConnection();
     if (canViewOnlineStudentsWidget()) {
         refreshOnlineStudentsCount();
     }
@@ -2855,6 +2996,7 @@ function startPresenceTracking() {
 }
 
 function stopPresenceTracking() {
+    stopPresenceSocketConnection();
     if (presenceIntervalId) {
         clearInterval(presenceIntervalId);
         presenceIntervalId = null;
@@ -2865,6 +3007,11 @@ function stopPresenceTracking() {
 async function notifyPresenceLogout() {
     const clientId = localStorage.getItem(PRESENCE_CLIENT_ID_KEY);
     if (!clientId) return;
+    try {
+        if (presenceSocket && typeof presenceSocket.emit === "function") {
+            presenceSocket.emit("presence:logout", { clientId });
+        }
+    } catch (_) {}
     try {
         await fetch(`${API_BASE_URL}/api/presence/logout`, {
             method: "POST",
@@ -2889,6 +3036,7 @@ function setupPresenceLifecycleListeners() {
             if (canViewOnlineStudentsWidget()) {
                 refreshOnlineStudentsCount();
             }
+            emitPresenceSocketUpdate();
             pingPresence();
         }
     });
@@ -3987,6 +4135,24 @@ function normalizeLocalStudyGroupMember(value) {
     };
 }
 
+function normalizeLocalStudyGroupDoubt(value) {
+    const doubt = value && typeof value === "object" ? value : {};
+    const status = String(doubt.status || "unresolved").trim().toLowerCase();
+    return {
+        id: String(doubt.id || `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+        text: String(doubt.text || "").trim(),
+        subject: String(doubt.subject || "General").trim() || "General",
+        createdBy: normalizeEmail(doubt.createdBy || ""),
+        createdByName: String(doubt.createdByName || "").trim() || "Student",
+        createdAt: doubt.createdAt || new Date().toISOString(),
+        status: status === "resolved" ? "resolved" : "unresolved",
+        replyText: String(doubt.replyText || "").trim(),
+        repliedBy: normalizeEmail(doubt.repliedBy || ""),
+        repliedByName: String(doubt.repliedByName || "").trim(),
+        repliedAt: doubt.repliedAt || ""
+    };
+}
+
 function normalizeLocalStudyGroup(value) {
     const group = value && typeof value === "object" ? value : {};
     const durationDays = Math.max(1, Math.min(60, Number(group.durationDays) || 30));
@@ -4005,14 +4171,7 @@ function normalizeLocalStudyGroup(value) {
         })).filter(goal => goal.text).slice(0, 200)
         : [];
     const doubts = Array.isArray(group.doubts)
-        ? group.doubts.map(doubt => ({
-            id: String(doubt && doubt.id || `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
-            text: String(doubt && doubt.text || "").trim(),
-            subject: String(doubt && doubt.subject || "General").trim() || "General",
-            createdBy: normalizeEmail(doubt && doubt.createdBy || ""),
-            createdByName: String(doubt && doubt.createdByName || "").trim() || "Student",
-            createdAt: doubt && doubt.createdAt || new Date().toISOString()
-        })).filter(doubt => doubt.text).slice(0, 500)
+        ? group.doubts.map(normalizeLocalStudyGroupDoubt).filter(doubt => doubt.text).slice(0, 500)
         : [];
     const active = getTodayDateKey() <= endDate;
     return {
@@ -4269,6 +4428,22 @@ async function joinPeerChallenge() {
         alert('Enter invite code first.');
         return;
     }
+    const joinViaBackend = async () => {
+        const response = await fetch(`${API_BASE_URL}/api/peer-challenges/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to join challenge');
+        if (input) input.value = '';
+        await loadPeerChallengesFromServer();
+        addActivity('link', 'Peer Challenge Joined', `${data.name || 'Challenge'} | Code ${code}`);
+        alert(`Joined: ${data.name || 'Challenge'}`);
+    };
     if (!backendAdminToken) {
         const user = getCurrentUser();
         const email = normalizeEmail(user && user.email || "");
@@ -4279,7 +4454,28 @@ async function joinPeerChallenge() {
         const all = loadLocalPeerChallenges();
         const idx = all.findIndex(ch => String(ch && ch.code || "").toUpperCase() === code);
         if (idx < 0) {
-            alert('Invite code not found in local mode.');
+            // Fallback: try reconnecting backend and joining by invite code online.
+            if (navigator.onLine) {
+                const password = prompt('Invite code not found locally. Enter your login password to check online invite-code challenges:');
+                if (password) {
+                    const ok = await syncLoginWithBackend(
+                        email,
+                        password,
+                        user && user.name ? user.name : "Student",
+                        user && user.role ? user.role : "student"
+                    );
+                    if (ok && backendAdminToken) {
+                        try {
+                            await joinViaBackend();
+                            return;
+                        } catch (err) {
+                            alert(`Join failed: ${err.message}`);
+                            return;
+                        }
+                    }
+                }
+            }
+            alert('Invite code not found in local mode. If teacher created this challenge on another device/browser, reconnect backend and join online.');
             return;
         }
         const challenge = normalizeLocalPeerChallenge(all[idx]);
@@ -4306,20 +4502,7 @@ async function joinPeerChallenge() {
         return;
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/peer-challenges/join`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getBackendAuthHeaders()
-            },
-            body: JSON.stringify({ code })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || 'Unable to join challenge');
-        if (input) input.value = '';
-        await loadPeerChallengesFromServer();
-        addActivity('link', 'Peer Challenge Joined', `${data.name || 'Challenge'} | Code ${code}`);
-        alert(`Joined: ${data.name || 'Challenge'}`);
+        await joinViaBackend();
     } catch (err) {
         alert(`Join failed: ${err.message}`);
     }
@@ -4431,22 +4614,44 @@ function renderStudyGroupRooms() {
         }
     }
 
+    const user = getCurrentUser();
+    const role = String((user && user.role) || "student").toLowerCase();
+    const canManageRooms = role === "teacher" || role === "admin";
+    const doubtFilterEl = document.getElementById('studyGroupDoubtFilter');
+    if (canManageRooms && doubtFilterEl && !doubtFilterEl.dataset.defaultApplied) {
+        doubtFilterEl.value = 'unresolved';
+        doubtFilterEl.dataset.defaultApplied = '1';
+    }
+    const doubtFilter = canManageRooms
+        ? String(doubtFilterEl && doubtFilterEl.value ? doubtFilterEl.value : 'all').toLowerCase()
+        : 'all';
     const activeRooms = (studyGroups || []).filter(room => room && room.status !== 'completed');
     if (activeRooms.length === 0) {
         statusEl.textContent = backendAdminToken
-            ? 'Create or join a private room to share goals and doubts.'
-            : 'Local mode active. Create or join a room on this device.';
+            ? (canManageRooms
+                ? 'Create or join a private room to share goals and doubts.'
+                : 'Join a private room using invite code. Teacher creates rooms.')
+            : (canManageRooms
+                ? 'Local mode active. Create or join a room on this device.'
+                : 'Local mode active. Join with invite code from teacher on this device.');
         listEl.innerHTML = '<li class="empty-state">No study rooms joined yet.</li>';
         return;
     }
 
     statusEl.textContent = backendAdminToken
-        ? `${activeRooms.length} room(s) active. Share goals, track streaks, and exchange doubts.`
+        ? `${activeRooms.length} room(s) active. ${canManageRooms ? 'Teacher can reply/resolve doubts.' : 'Ask doubts and check teacher replies.'}`
         : `${activeRooms.length} local room(s) active.`;
     listEl.innerHTML = activeRooms.map(room => {
         const members = Array.isArray(room.members) ? room.members : [];
         const goalsList = Array.isArray(room.goals) ? room.goals.slice(0, 3) : [];
-        const doubtsList = Array.isArray(room.doubts) ? room.doubts.slice(0, 3) : [];
+        const doubtsRaw = Array.isArray(room.doubts) ? room.doubts : [];
+        const doubtsFiltered = doubtsRaw.filter(doubt => {
+            const status = String(doubt && doubt.status || 'unresolved').toLowerCase();
+            if (doubtFilter === 'unresolved') return status !== 'resolved';
+            if (doubtFilter === 'resolved') return status === 'resolved';
+            return true;
+        });
+        const doubtsList = doubtsFiltered.slice(0, 5);
         const streakBoard = [...members]
             .sort((a, b) => Number(b.currentStreak || 0) - Number(a.currentStreak || 0))
             .slice(0, 3)
@@ -4454,6 +4659,30 @@ function renderStudyGroupRooms() {
             .join(', ') || 'No streak check-ins yet';
         const me = getCurrentStudyGroupMember(room);
         const checkedToday = Boolean(me && Array.isArray(me.checkins) && me.checkins.includes(getTodayDateKey()));
+        const doubtsMarkup = doubtsList.length > 0
+            ? `<ul class="study-group-doubts-inline">${doubtsList.map(doubt => {
+                const subject = escapeHtml(doubt.subject || 'General');
+                const question = escapeHtml(doubt.text || '');
+                const askedBy = escapeHtml(doubt.createdByName || 'Student');
+                const status = String(doubt.status || 'unresolved').toLowerCase() === 'resolved' ? 'Resolved' : 'Unresolved';
+                const reply = String(doubt.replyText || '').trim();
+                const replyBy = escapeHtml(doubt.repliedByName || 'Teacher');
+                const replyText = reply
+                    ? `<span>Reply (${replyBy}): ${escapeHtml(reply)}</span>`
+                    : '<span>Reply: Pending</span>';
+                const replyButton = canManageRooms
+                    ? `<button class="action-btn" type="button" onclick="replyToStudyGroupDoubt('${encodeURIComponent(room.id || '')}','${encodeURIComponent(doubt.id || '')}')"><i class="fas fa-reply"></i> Reply</button>`
+                    : '';
+                return `
+                    <li>
+                        <span>${subject}: ${question} (by ${askedBy})</span>
+                        <span>Status: ${status}</span>
+                        ${replyText}
+                        ${replyButton}
+                    </li>
+                `;
+            }).join('')}</ul>`
+            : (doubtsRaw.length > 0 ? 'No doubts for selected filter' : 'No doubts yet');
         return `
             <li>
                 <strong>${escapeHtml(room.name || 'Study Room')}</strong>
@@ -4463,7 +4692,8 @@ function renderStudyGroupRooms() {
                     <span class="task-due">${escapeHtml(room.startDate || '')} to ${escapeHtml(room.endDate || '')}</span>
                 </div>
                 <p><strong>Shared goals:</strong> ${goalsList.length > 0 ? goalsList.map(goal => escapeHtml(goal.text || '')).join(' | ') : 'No goals yet'}</p>
-                <p><strong>Doubt exchange:</strong> ${doubtsList.length > 0 ? doubtsList.map(doubt => `${escapeHtml(doubt.subject || 'General')}: ${escapeHtml(doubt.text || '')}`).join(' | ') : 'No doubts yet'}</p>
+                <p><strong>Doubt exchange:</strong></p>
+                ${doubtsMarkup}
                 <div class="task-options">
                     <button class="action-btn" onclick="checkInStudyGroupRoom('${encodeURIComponent(room.id || '')}')" ${checkedToday ? 'disabled' : ''}>
                         <i class="fas fa-fire"></i> ${checkedToday ? 'Checked In Today' : 'Check In'}
@@ -4497,6 +4727,10 @@ async function loadStudyGroupsFromServer() {
 async function createStudyGroupRoom() {
     const input = document.getElementById('studyGroupNameInput');
     const name = String(input && input.value ? input.value : '').trim() || 'Study Room';
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can create Study Group Rooms. Students can join using invite code.');
+        return;
+    }
     if (!backendAdminToken) {
         const user = getCurrentUser();
         const email = normalizeEmail(user && user.email || "");
@@ -4562,6 +4796,22 @@ async function joinStudyGroupRoom() {
         alert('Enter invite code first.');
         return;
     }
+    const joinViaBackend = async () => {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ code })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to join study room');
+        if (input) input.value = '';
+        await loadStudyGroupsFromServer();
+        addActivity('link', 'Study Room Joined', `${data.name || 'Study Room'} | Code ${code}`);
+        alert(`Joined: ${data.name || 'Study Room'}`);
+    };
     if (!backendAdminToken) {
         const user = getCurrentUser();
         const email = normalizeEmail(user && user.email || "");
@@ -4572,7 +4822,28 @@ async function joinStudyGroupRoom() {
         const groups = loadLocalStudyGroups();
         const idx = groups.findIndex(room => String(room && room.code || "").toUpperCase() === code);
         if (idx < 0) {
-            alert('Room not found for this invite code (local mode).');
+            // Fallback: try reconnecting backend and joining by invite code online.
+            if (navigator.onLine) {
+                const password = prompt('Invite code not found locally. Enter your login password to check online study rooms:');
+                if (password) {
+                    const ok = await syncLoginWithBackend(
+                        email,
+                        password,
+                        user && user.name ? user.name : "Student",
+                        user && user.role ? user.role : "student"
+                    );
+                    if (ok && backendAdminToken) {
+                        try {
+                            await joinViaBackend();
+                            return;
+                        } catch (err) {
+                            alert(`Join failed: ${err.message}`);
+                            return;
+                        }
+                    }
+                }
+            }
+            alert('Room not found in local mode. If teacher created this room on another device/browser, reconnect backend and join online.');
             return;
         }
         const room = normalizeLocalStudyGroup(groups[idx]);
@@ -4599,20 +4870,7 @@ async function joinStudyGroupRoom() {
         return;
     }
     try {
-        const response = await fetch(`${API_BASE_URL}/api/study-groups/join`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...getBackendAuthHeaders()
-            },
-            body: JSON.stringify({ code })
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || 'Unable to join study room');
-        if (input) input.value = '';
-        await loadStudyGroupsFromServer();
-        addActivity('link', 'Study Room Joined', `${data.name || 'Study Room'} | Code ${code}`);
-        alert(`Joined: ${data.name || 'Study Room'}`);
+        await joinViaBackend();
     } catch (err) {
         alert(`Join failed: ${err.message}`);
     }
@@ -4796,7 +5054,12 @@ async function postStudyGroupDoubt() {
             subject,
             createdBy: email,
             createdByName: user && user.name ? user.name : "Student",
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            status: "unresolved",
+            replyText: "",
+            repliedBy: "",
+            repliedByName: "",
+            repliedAt: ""
         });
         localRoom.doubts = localRoom.doubts.slice(0, 500);
         groups[idx] = normalizeLocalStudyGroup(localRoom);
@@ -4822,6 +5085,87 @@ async function postStudyGroupDoubt() {
         addActivity('circle-question', 'Study Group Doubt Shared', `${data.name || room.name}: ${subject}`);
     } catch (err) {
         alert(`Post doubt failed: ${err.message}`);
+    }
+}
+
+async function replyToStudyGroupDoubt(encodedRoomId = '', encodedDoubtId = '') {
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can reply to doubts.');
+        return;
+    }
+    const roomId = decodeURIComponent(String(encodedRoomId || '')).trim();
+    const doubtId = decodeURIComponent(String(encodedDoubtId || '')).trim();
+    if (!roomId || !doubtId) return;
+
+    const room = (studyGroups || []).find(item => String(item && item.id || '') === roomId);
+    if (!room) {
+        alert('Room not found.');
+        return;
+    }
+    const doubt = (Array.isArray(room.doubts) ? room.doubts : []).find(item => String(item && item.id || '') === doubtId);
+    if (!doubt) {
+        alert('Doubt not found.');
+        return;
+    }
+
+    const currentReply = String(doubt.replyText || '');
+    const replyText = prompt('Enter teacher reply for this doubt:', currentReply);
+    if (replyText === null) return;
+    const trimmedReply = String(replyText).trim();
+    if (!trimmedReply) {
+        alert('Reply cannot be empty.');
+        return;
+    }
+    const markResolved = confirm('Mark this doubt as resolved?');
+
+    if (!backendAdminToken) {
+        const user = getCurrentUser();
+        const email = normalizeEmail(user && user.email || "");
+        if (!email) {
+            alert('Please login first.');
+            return;
+        }
+        const groups = loadLocalStudyGroups();
+        const roomIdx = groups.findIndex(item => String(item && item.id || '') === roomId);
+        if (roomIdx < 0) {
+            alert('Room not found.');
+            return;
+        }
+        const localRoom = normalizeLocalStudyGroup(groups[roomIdx]);
+        const doubtIdx = (localRoom.doubts || []).findIndex(item => String(item && item.id || '') === doubtId);
+        if (doubtIdx < 0) {
+            alert('Doubt not found.');
+            return;
+        }
+        const target = normalizeLocalStudyGroupDoubt(localRoom.doubts[doubtIdx]);
+        target.replyText = trimmedReply;
+        target.repliedBy = email;
+        target.repliedByName = user && user.name ? user.name : "Teacher";
+        target.repliedAt = new Date().toISOString();
+        target.status = markResolved ? "resolved" : "unresolved";
+        localRoom.doubts[doubtIdx] = target;
+        groups[roomIdx] = normalizeLocalStudyGroup(localRoom);
+        saveLocalStudyGroups(groups);
+        renderStudyGroupRooms();
+        addActivity('comments', 'Study Group Doubt Replied (Local)', `${localRoom.name} | ${target.subject}`);
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/study-groups/${encodeURIComponent(roomId)}/doubts/${encodeURIComponent(doubtId)}/reply`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getBackendAuthHeaders()
+            },
+            body: JSON.stringify({ replyText: trimmedReply, markResolved })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Unable to reply to doubt');
+        await loadStudyGroupsFromServer();
+        addActivity('comments', 'Study Group Doubt Replied', `${data.name || room.name || 'Study Room'} | ${doubt.subject || 'General'}`);
+    } catch (err) {
+        alert(`Reply failed: ${err.message}`);
     }
 }
 
@@ -6542,11 +6886,48 @@ function getLiveClassDueDateValue() {
 function renderLiveClassMode() {
     const statusEl = document.getElementById('liveClassStatus');
     const toggleBtn = document.getElementById('liveClassToggleBtn');
+    const saveBtn = document.getElementById('liveClassSaveBtn');
     const dueInput = document.getElementById('liveClassActionDueDate');
+    const subjectInput = document.getElementById('liveClassSubject');
+    const notesInput = document.getElementById('liveClassQuickNotes');
+    const doubtInput = document.getElementById('liveClassDoubtText');
+    const actionInput = document.getElementById('liveClassActionItems');
     if (!statusEl || !toggleBtn) return;
     if (dueInput && !dueInput.value) {
         dueInput.value = getLiveClassDueDateValue();
     }
+    const canManageLiveClass = canAccessAdmin();
+
+    if (!canManageLiveClass) {
+        if (subjectInput) subjectInput.disabled = true;
+        if (dueInput) dueInput.disabled = true;
+        if (notesInput) notesInput.disabled = true;
+        if (doubtInput) doubtInput.disabled = true;
+        if (actionInput) actionInput.disabled = true;
+        toggleBtn.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
+
+        if (!liveClassBroadcastState.active) {
+            statusEl.textContent = 'Teacher is not in live mode right now.';
+        } else {
+            const started = liveClassBroadcastState.startedAt ? new Date(liveClassBroadcastState.startedAt) : null;
+            const timeLabel = started && !Number.isNaN(started.getTime())
+                ? started.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                : 'now';
+            const teacherLabel = liveClassBroadcastState.teacherName || 'Teacher';
+            const subjectLabel = liveClassBroadcastState.subject || 'General';
+            statusEl.textContent = `${teacherLabel} is LIVE (${subjectLabel}) since ${timeLabel}.`;
+        }
+        return;
+    }
+
+    if (subjectInput) subjectInput.disabled = false;
+    if (dueInput) dueInput.disabled = false;
+    if (notesInput) notesInput.disabled = false;
+    if (doubtInput) doubtInput.disabled = false;
+    if (actionInput) actionInput.disabled = false;
+    toggleBtn.style.display = '';
+    if (saveBtn) saveBtn.style.display = '';
 
     if (!liveClassSession.active) {
         statusEl.textContent = 'Not in class. Tap In Class when lecture starts.';
@@ -6647,12 +7028,18 @@ function saveLiveClassCapture(options = {}) {
 }
 
 function toggleLiveClassMode() {
+    if (!canAccessAdmin()) {
+        alert('Only teacher/admin can start or end Live Class mode.');
+        return;
+    }
     if (!liveClassSession.active) {
         liveClassSession = {
             active: true,
             startedAt: new Date().toISOString()
         };
         renderLiveClassMode();
+        emitPresenceSocketUpdate();
+        void pingPresence();
         addActivity('play', 'Live Class Started', 'Quick capture enabled');
         return;
     }
@@ -6663,6 +7050,8 @@ function toggleLiveClassMode() {
         startedAt: ''
     };
     renderLiveClassMode();
+    emitPresenceSocketUpdate();
+    void pingPresence();
     addActivity('stop', 'Live Class Ended', 'Session closed and draft auto-saved');
 }
 
@@ -13667,6 +14056,7 @@ function startTimer() {
                 // Save session
                 const sessionMinutes = timerModeMinutes;
                 const type = getTimerModeLabel(timerModeMinutes);
+                speakTimerCompletionMessage(sessionMinutes, type);
                 const subject = type === 'Focus' ? getSelectedTimerSubject() : 'Break';
                 pomodoroSessions.push(normalizePomodoroSession({
                     minutes: sessionMinutes,
@@ -13766,6 +14156,24 @@ function playNotificationSound() {
         osc.start();
         osc.stop(ctx.currentTime + 0.5);
     } catch(e) {}
+}
+
+function speakTimerCompletionMessage(minutes, type) {
+    if (!("speechSynthesis" in window) || typeof window.SpeechSynthesisUtterance !== "function") return;
+    const safeMinutes = Math.max(1, Number(minutes) || 0);
+    const isFocus = String(type || "").toLowerCase() === "focus";
+    const message = isFocus
+        ? (safeMinutes === 120
+            ? "Your study time is over. Two hours completed."
+            : `Your study time is over. ${safeMinutes} minutes completed.`)
+        : "Break timer complete.";
+    try {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    } catch (_) {}
 }
 
 function requestReminderPermission() {
@@ -14124,6 +14532,16 @@ function bootstrapAuthenticatedApp() {
         recurringCheck.addEventListener('change', function() {
             recurringType.disabled = !this.checked;
         });
+    }
+
+    const liveClassSubject = document.getElementById('liveClassSubject');
+    if (liveClassSubject && !liveClassSubjectListenerAttached) {
+        liveClassSubject.addEventListener('change', () => {
+            if (!canAccessAdmin() || !liveClassSession.active) return;
+            emitPresenceSocketUpdate();
+            void pingPresence();
+        });
+        liveClassSubjectListenerAttached = true;
     }
 }
 

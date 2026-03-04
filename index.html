@@ -314,7 +314,7 @@
 
             <div class="card consistency-rewards">
                 <h3><i class="fas fa-people-roof"></i> Study Group Rooms</h3>
-                <div class="task-options">
+                <div class="task-options" data-ui-role="teacher admin">
                     <input type="text" id="studyGroupNameInput" placeholder="Room name (default: Study Room)">
                     <button class="add-btn" onclick="createStudyGroupRoom()">
                         <i class="fas fa-plus"></i> Create Room
@@ -354,6 +354,14 @@
                     <button class="action-btn" onclick="postStudyGroupDoubt()">
                         <i class="fas fa-circle-question"></i> Ask Doubt
                     </button>
+                </div>
+                <div class="task-options" data-ui-role="teacher admin">
+                    <label for="studyGroupDoubtFilter"><strong>Doubt Filter:</strong></label>
+                    <select id="studyGroupDoubtFilter" onchange="renderStudyGroupRooms()">
+                        <option value="all">All</option>
+                        <option value="unresolved">Unresolved</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
                 </div>
                 <p id="studyGroupStatus">Create or join a private room to share goals and doubts.</p>
                 <ul id="studyGroupList">
@@ -570,7 +578,7 @@
                     <button class="add-btn" id="liveClassToggleBtn" onclick="toggleLiveClassMode()">
                         <i class="fas fa-play"></i> In Class
                     </button>
-                    <button class="action-btn" onclick="saveLiveClassCapture()">
+                    <button class="action-btn" id="liveClassSaveBtn" onclick="saveLiveClassCapture()">
                         <i class="fas fa-floppy-disk"></i> Save Quick Capture
                     </button>
                 </div>
@@ -2112,6 +2120,7 @@
     const app = initializeApp(firebaseConfig);
     window.firebaseApp = app;
 </script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

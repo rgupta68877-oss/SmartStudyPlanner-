@@ -2,12 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const http = require("http");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const { Server: SocketIOServer } = require("socket.io");
 require("dotenv").config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 function normalizeOriginValue(origin) {
@@ -37,6 +40,7 @@ const PEER_CHALLENGES_FILE = path.join(DATA_DIR, "peer-challenges.json");
 const STUDY_GROUPS_FILE = path.join(DATA_DIR, "study-groups.json");
 const PRESENCE_TTL_MS = Math.max(30_000, Number(process.env.PRESENCE_TTL_MS || 60_000));
 const presenceByClientId = new Map();
+const socketClientIdBySocketId = new Map();
 
 if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -169,13 +173,19 @@ function normalizeStudyGroupGoal(value) {
 
 function normalizeStudyGroupDoubt(value) {
     const doubt = value && typeof value === "object" ? value : {};
+    const status = String(doubt.status || "unresolved").trim().toLowerCase();
     return {
         id: String(doubt.id || `group-doubt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
         text: String(doubt.text || "").trim(),
         subject: String(doubt.subject || "General").trim() || "General",
         createdBy: String(doubt.createdBy || "").trim().toLowerCase(),
         createdByName: String(doubt.createdByName || "").trim() || "Student",
-        createdAt: doubt.createdAt || new Date().toISOString()
+        createdAt: doubt.createdAt || new Date().toISOString(),
+        status: status === "resolved" ? "resolved" : "unresolved",
+        replyText: String(doubt.replyText || "").trim(),
+        repliedBy: String(doubt.repliedBy || "").trim().toLowerCase(),
+        repliedByName: String(doubt.repliedByName || "").trim(),
+        repliedAt: doubt.repliedAt || ""
     };
 }
 
@@ -270,6 +280,7 @@ function getPresenceSnapshot() {
     cleanupPresence(now);
     let onlineStudents = 0;
     let onlineTotal = 0;
+    const liveClassesByTeacherEmail = new Map();
 
     for (const meta of presenceByClientId.values()) {
         if (!meta) continue;
@@ -277,11 +288,29 @@ function getPresenceSnapshot() {
         if (meta.role === "student") {
             onlineStudents += 1;
         }
+        if ((meta.role === "teacher" || meta.role === "admin") && meta.liveClassActive) {
+            const key = String(meta.email || "").trim().toLowerCase() || `teacher-${Math.random().toString(36).slice(2, 8)}`;
+            const prev = liveClassesByTeacherEmail.get(key);
+            if (!prev || Number(prev.lastSeen || 0) < Number(meta.lastSeen || 0)) {
+                liveClassesByTeacherEmail.set(key, {
+                    email: String(meta.email || "").trim().toLowerCase(),
+                    name: String(meta.name || "").trim() || "Teacher",
+                    role: meta.role,
+                    subject: String(meta.liveClassSubject || "General").trim() || "General",
+                    startedAt: String(meta.liveClassStartedAt || "").trim(),
+                    lastSeen: Number(meta.lastSeen || now)
+                });
+            }
+        }
     }
+
+    const activeLiveClasses = Array.from(liveClassesByTeacherEmail.values())
+        .sort((a, b) => Number(a.lastSeen || 0) - Number(b.lastSeen || 0));
 
     return {
         onlineStudents,
         onlineTotal,
+        activeLiveClasses,
         asOf: new Date(now).toISOString()
     };
 }
@@ -325,26 +354,85 @@ app.use(cors({
 }));
 app.use(express.json());
 
+const io = new SocketIOServer(server, {
+    cors: {
+        origin: ALLOWED_ORIGINS.length === 0 ? true : ALLOWED_ORIGINS,
+        methods: ["GET", "POST"]
+    }
+});
+
+function upsertPresence(clientIdRaw, payload = {}) {
+    const clientId = String(clientIdRaw || "").trim().slice(0, 128);
+    if (!clientId) return null;
+
+    const role = normalizePresenceRole(payload.role);
+    const email = String(payload.email || "").trim().toLowerCase().slice(0, 256);
+    const name = String(payload.name || "").trim().slice(0, 128) || "User";
+    const liveClassActive = Boolean(payload.liveClassActive) && (role === "teacher" || role === "admin");
+    const liveClassSubject = liveClassActive
+        ? (String(payload.liveClassSubject || "General").trim().slice(0, 64) || "General")
+        : "";
+    const liveClassStartedAt = liveClassActive
+        ? String(payload.liveClassStartedAt || "").trim().slice(0, 64)
+        : "";
+
+    const meta = {
+        role,
+        email,
+        name,
+        liveClassActive,
+        liveClassSubject,
+        liveClassStartedAt,
+        lastSeen: Date.now()
+    };
+    presenceByClientId.set(clientId, meta);
+    return { clientId, meta };
+}
+
+function emitPresenceSnapshot() {
+    const snapshot = getPresenceSnapshot();
+    io.emit("presence:snapshot", snapshot);
+    return snapshot;
+}
+
+io.on("connection", (socket) => {
+    socket.emit("presence:snapshot", getPresenceSnapshot());
+
+    socket.on("presence:update", (payload = {}) => {
+        const saved = upsertPresence(payload.clientId, payload);
+        if (!saved) return;
+        socketClientIdBySocketId.set(socket.id, saved.clientId);
+        emitPresenceSnapshot();
+    });
+
+    socket.on("presence:logout", (payload = {}) => {
+        const clientId = String(payload.clientId || socketClientIdBySocketId.get(socket.id) || "").trim().slice(0, 128);
+        if (clientId) {
+            presenceByClientId.delete(clientId);
+        }
+        socketClientIdBySocketId.delete(socket.id);
+        emitPresenceSnapshot();
+    });
+
+    socket.on("disconnect", () => {
+        const clientId = socketClientIdBySocketId.get(socket.id);
+        if (!clientId) return;
+        presenceByClientId.delete(clientId);
+        socketClientIdBySocketId.delete(socket.id);
+        emitPresenceSnapshot();
+    });
+});
+
 app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "smart-study-planner-backend" });
 });
 
 app.post("/api/presence/ping", (req, res) => {
-    const clientId = String(req.body?.clientId || "").trim().slice(0, 128);
-    if (!clientId) {
+    const saved = upsertPresence(req.body?.clientId, req.body || {});
+    if (!saved) {
         return res.status(400).json({ error: "clientId is required" });
     }
-
-    const role = normalizePresenceRole(req.body?.role);
-    const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 256);
-
-    presenceByClientId.set(clientId, {
-        role,
-        email,
-        lastSeen: Date.now()
-    });
-
-    return res.json(getPresenceSnapshot());
+    return res.json(emitPresenceSnapshot());
 });
 
 app.get("/api/presence/online-students", (_req, res) => {
@@ -356,7 +444,12 @@ app.post("/api/presence/logout", (req, res) => {
     if (clientId) {
         presenceByClientId.delete(clientId);
     }
-    return res.json(getPresenceSnapshot());
+    socketClientIdBySocketId.forEach((mappedClientId, socketId) => {
+        if (mappedClientId === clientId) {
+            socketClientIdBySocketId.delete(socketId);
+        }
+    });
+    return res.json(emitPresenceSnapshot());
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -749,7 +842,7 @@ app.get("/api/study-groups", authenticateJWT, (req, res) => {
     return res.json(mine);
 });
 
-app.post("/api/study-groups", authenticateJWT, (req, res) => {
+app.post("/api/study-groups", authenticateJWT, authorizeRoles("teacher", "admin"), (req, res) => {
     const name = String(req.body?.name || "").trim() || "Study Room";
     const durationDays = Math.max(1, Math.min(60, Number(req.body?.durationDays) || 30));
     const userEmail = String(req.user?.email || "").trim().toLowerCase();
@@ -929,7 +1022,12 @@ app.post("/api/study-groups/:id/doubts", authenticateJWT, (req, res) => {
         subject,
         createdBy: userEmail,
         createdByName: userName,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        status: "unresolved",
+        replyText: "",
+        repliedBy: "",
+        repliedByName: "",
+        repliedAt: ""
     }));
     group.doubts = group.doubts.slice(0, 500);
     groups[idx] = normalizeStudyGroup(group);
@@ -937,10 +1035,51 @@ app.post("/api/study-groups/:id/doubts", authenticateJWT, (req, res) => {
     return res.json(groups[idx]);
 });
 
-app.listen(PORT, () => {
+app.post("/api/study-groups/:id/doubts/:doubtId/reply", authenticateJWT, authorizeRoles("teacher", "admin"), (req, res) => {
+    const id = String(req.params?.id || "").trim();
+    const doubtId = String(req.params?.doubtId || "").trim();
+    const replyText = String(req.body?.replyText || "").trim();
+    const markResolved = Boolean(req.body?.markResolved);
+    if (!id) return res.status(400).json({ error: "Study group id is required" });
+    if (!doubtId) return res.status(400).json({ error: "Doubt id is required" });
+    if (!replyText) return res.status(400).json({ error: "Reply text is required" });
+
+    const userEmail = String(req.user?.email || "").trim().toLowerCase();
+    const userName = String(req.user?.name || userEmail || "Teacher");
+    const groups = getStudyGroups();
+    const groupIdx = groups.findIndex((group) => group.id === id);
+    if (groupIdx < 0) return res.status(404).json({ error: "Study group not found" });
+
+    const group = groups[groupIdx];
+    const isMember = group.members.some((member) => member.email === userEmail);
+    if (!isMember) return res.status(403).json({ error: "Join this study group first" });
+
+    const doubtIdx = group.doubts.findIndex((doubt) => String(doubt.id || "") === doubtId);
+    if (doubtIdx < 0) return res.status(404).json({ error: "Doubt not found" });
+
+    const updatedDoubt = normalizeStudyGroupDoubt({
+        ...group.doubts[doubtIdx],
+        replyText,
+        repliedBy: userEmail,
+        repliedByName: userName,
+        repliedAt: new Date().toISOString(),
+        status: markResolved ? "resolved" : "unresolved"
+    });
+
+    group.doubts[doubtIdx] = updatedDoubt;
+    groups[groupIdx] = normalizeStudyGroup(group);
+    saveStudyGroups(groups);
+    return res.json(groups[groupIdx]);
+});
+
+server.listen(PORT, () => {
     console.log(`Backend running on http://localhost:${PORT}`);
 });
 
 setInterval(() => {
+    const before = presenceByClientId.size;
     cleanupPresence();
+    if (presenceByClientId.size !== before) {
+        emitPresenceSnapshot();
+    }
 }, Math.max(15_000, Math.floor(PRESENCE_TTL_MS / 2)));
