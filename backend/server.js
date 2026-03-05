@@ -262,6 +262,32 @@ function authorizeRoles(...roles) {
     };
 }
 
+function getUserFromRequest(req, { allowBodyFallback = false } = {}) {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (token) {
+        try {
+            const payload = jwt.verify(token, JWT_SECRET);
+            return {
+                email: String(payload.email || "").trim().toLowerCase(),
+                name: String(payload.name || payload.email || "Student").trim() || "Student",
+                role: ["student", "teacher", "admin"].includes(payload.role) ? payload.role : "student"
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+    if (!allowBodyFallback) return null;
+
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) return null;
+    return {
+        email,
+        name: String(req.body?.name || email || "Student").trim() || "Student",
+        role: ["student", "teacher", "admin"].includes(req.body?.role) ? req.body.role : "student"
+    };
+}
+
 function normalizePresenceRole(role) {
     const normalized = String(role || "").trim().toLowerCase();
     return ["student", "teacher", "admin"].includes(normalized) ? normalized : "student";
@@ -747,15 +773,19 @@ app.post("/api/peer-challenges", authenticateJWT, (req, res) => {
     return res.status(201).json(challenge);
 });
 
-app.post("/api/peer-challenges/join", authenticateJWT, (req, res) => {
+app.post("/api/peer-challenges/join", (req, res) => {
     const code = String(req.body?.code || "").trim().toUpperCase();
     if (!code) {
         return res.status(400).json({ error: "Invite code is required" });
     }
 
-    const userEmail = String(req.user?.email || "").trim().toLowerCase();
-    const userName = String(req.user?.name || userEmail || "Student");
-    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+    const user = getUserFromRequest(req, { allowBodyFallback: true });
+    if (!user || !user.email) {
+        return res.status(401).json({ error: "Login required to join challenge" });
+    }
+    const userEmail = user.email;
+    const userName = user.name;
+    const userRole = user.role;
 
     const challenges = getPeerChallenges();
     const idx = challenges.findIndex((challenge) => String(challenge.code || "").toUpperCase() === code);
@@ -889,15 +919,19 @@ app.post("/api/study-groups", authenticateJWT, authorizeRoles("teacher", "admin"
     return res.status(201).json(room);
 });
 
-app.post("/api/study-groups/join", authenticateJWT, (req, res) => {
+app.post("/api/study-groups/join", (req, res) => {
     const code = String(req.body?.code || "").trim().toUpperCase();
     if (!code) {
         return res.status(400).json({ error: "Invite code is required" });
     }
 
-    const userEmail = String(req.user?.email || "").trim().toLowerCase();
-    const userName = String(req.user?.name || userEmail || "Student");
-    const userRole = ["student", "teacher", "admin"].includes(req.user?.role) ? req.user.role : "student";
+    const user = getUserFromRequest(req, { allowBodyFallback: true });
+    if (!user || !user.email) {
+        return res.status(401).json({ error: "Login required to join study group" });
+    }
+    const userEmail = user.email;
+    const userName = user.name;
+    const userRole = user.role;
     const groups = getStudyGroups();
     const idx = groups.findIndex((group) => String(group.code || "").toUpperCase() === code);
     if (idx < 0) {

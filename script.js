@@ -35,6 +35,7 @@ const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
 const FOCUS_SHIELD_SETTINGS_KEY = "focusShieldSettings";
 const LOCAL_PEER_CHALLENGES_KEY = "localPeerChallenges";
 const LOCAL_STUDY_GROUPS_KEY = "localStudyGroups";
+const LIVE_CLASS_BROADCAST_KEY = "liveClassBroadcastState";
 const PRESENCE_CLIENT_ID_KEY = "presenceClientId";
 const PRESENCE_PING_INTERVAL_MS = 15000;
 const DEFAULT_STUDY_MATERIALS = [
@@ -1481,6 +1482,7 @@ let liveClassBroadcastState = {
     teacherName: "",
     teacherEmail: ""
 };
+let liveClassStorageListenerAttached = false;
 let backendAdminToken = localStorage.getItem(BACKEND_AUTH_TOKEN_KEY) || "";
 let backendLastAuthError = "";
 let firebaseInitPromise = null;
@@ -2389,7 +2391,8 @@ async function enforceManualLoginOnPageLoad() {
 
 function canAccessAdmin() {
     const user = getCurrentUser();
-    return Boolean(user && (user.role === "admin" || user.role === "teacher"));
+    const role = String(user && user.role || "").toLowerCase();
+    return Boolean(user && (role === "admin" || role === "teacher"));
 }
 
 function canManageSharedNotes() {
@@ -2831,6 +2834,67 @@ function notifyStudentLiveClassChange(previousState, nextState) {
     }
 }
 
+function readLocalLiveClassBroadcast() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(LIVE_CLASS_BROADCAST_KEY) || "{}");
+        if (!raw || typeof raw !== "object") return null;
+        return {
+            active: Boolean(raw.active),
+            subject: String(raw.subject || "General").trim() || "General",
+            startedAt: String(raw.startedAt || ""),
+            teacherName: String(raw.teacherName || "").trim(),
+            teacherEmail: normalizeEmail(raw.teacherEmail || ""),
+            updatedAt: String(raw.updatedAt || "")
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function writeLocalLiveClassBroadcast(nextState) {
+    try {
+        localStorage.setItem(LIVE_CLASS_BROADCAST_KEY, JSON.stringify({
+            active: Boolean(nextState && nextState.active),
+            subject: String(nextState && nextState.subject || "General").trim() || "General",
+            startedAt: String(nextState && nextState.startedAt || ""),
+            teacherName: String(nextState && nextState.teacherName || "").trim(),
+            teacherEmail: normalizeEmail(nextState && nextState.teacherEmail || ""),
+            updatedAt: new Date().toISOString()
+        }));
+    } catch (_) {}
+}
+
+function applyLocalLiveClassBroadcast() {
+    const localState = readLocalLiveClassBroadcast();
+    if (!localState) return;
+
+    const nextState = {
+        active: Boolean(localState.active),
+        subject: String(localState.subject || "General"),
+        startedAt: String(localState.startedAt || ""),
+        teacherName: String(localState.teacherName || ""),
+        teacherEmail: String(localState.teacherEmail || "")
+    };
+    const changed = (
+        Boolean(liveClassBroadcastState.active) !== Boolean(nextState.active) ||
+        String(liveClassBroadcastState.startedAt || "") !== String(nextState.startedAt || "") ||
+        String(liveClassBroadcastState.teacherEmail || "") !== String(nextState.teacherEmail || "")
+    );
+    const previousState = liveClassBroadcastState;
+    liveClassBroadcastState = nextState;
+    renderLiveClassMode();
+    if (changed) notifyStudentLiveClassChange(previousState, nextState);
+}
+
+function setupLiveClassStorageListener() {
+    if (liveClassStorageListenerAttached) return;
+    liveClassStorageListenerAttached = true;
+    window.addEventListener("storage", (event) => {
+        if (event.key !== LIVE_CLASS_BROADCAST_KEY) return;
+        applyLocalLiveClassBroadcast();
+    });
+}
+
 function updateLiveClassBroadcastFromPresence(snapshot) {
     const entry = getPrimaryActiveLiveClassEntry(snapshot);
     const nextState = entry
@@ -2856,6 +2920,9 @@ function updateLiveClassBroadcastFromPresence(snapshot) {
     );
     const previousState = liveClassBroadcastState;
     liveClassBroadcastState = nextState;
+    if (nextState && nextState.teacherEmail) {
+        writeLocalLiveClassBroadcast(nextState);
+    }
     renderLiveClassMode();
     if (changed) {
         notifyStudentLiveClassChange(previousState, nextState);
@@ -2927,7 +2994,8 @@ function startPresenceSocketConnection() {
 }
 
 function canViewOnlineStudentsWidget(user = getCurrentUser()) {
-    return !!user && (user.role === "teacher" || user.role === "admin");
+    const role = String(user && user.role || "").toLowerCase();
+    return !!user && (role === "teacher" || role === "admin");
 }
 
 function updateOnlineStudentsVisibility() {
@@ -4428,14 +4496,23 @@ async function joinPeerChallenge() {
         alert('Enter invite code first.');
         return;
     }
+    const user = getCurrentUser();
+    const email = normalizeEmail(user && user.email || "");
     const joinViaBackend = async () => {
+        if (!email) throw new Error('Please login first.');
+        const payload = { code };
+        if (!backendAdminToken) {
+            payload.email = email;
+            payload.name = user && user.name ? user.name : "Student";
+            payload.role = user && user.role ? user.role : "student";
+        }
         const response = await fetch(`${API_BASE_URL}/api/peer-challenges/join`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...getBackendAuthHeaders()
             },
-            body: JSON.stringify({ code })
+            body: JSON.stringify(payload)
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Unable to join challenge');
@@ -4445,8 +4522,6 @@ async function joinPeerChallenge() {
         alert(`Joined: ${data.name || 'Challenge'}`);
     };
     if (!backendAdminToken) {
-        const user = getCurrentUser();
-        const email = normalizeEmail(user && user.email || "");
         if (!email) {
             alert('Please login first.');
             return;
@@ -4454,28 +4529,17 @@ async function joinPeerChallenge() {
         const all = loadLocalPeerChallenges();
         const idx = all.findIndex(ch => String(ch && ch.code || "").toUpperCase() === code);
         if (idx < 0) {
-            // Fallback: try reconnecting backend and joining by invite code online.
+            // Fallback: try joining online directly with logged-in user identity.
             if (navigator.onLine) {
-                const password = prompt('Invite code not found locally. Enter your login password to check online invite-code challenges:');
-                if (password) {
-                    const ok = await syncLoginWithBackend(
-                        email,
-                        password,
-                        user && user.name ? user.name : "Student",
-                        user && user.role ? user.role : "student"
-                    );
-                    if (ok && backendAdminToken) {
-                        try {
-                            await joinViaBackend();
-                            return;
-                        } catch (err) {
-                            alert(`Join failed: ${err.message}`);
-                            return;
-                        }
-                    }
+                try {
+                    await joinViaBackend();
+                    return;
+                } catch (err) {
+                    alert(`Join failed: ${err.message}`);
+                    return;
                 }
             }
-            alert('Invite code not found in local mode. If teacher created this challenge on another device/browser, reconnect backend and join online.');
+            alert('Invite code not found in local mode.');
             return;
         }
         const challenge = normalizeLocalPeerChallenge(all[idx]);
@@ -4581,17 +4645,19 @@ async function checkInPeerChallenge(encodedId) {
 function renderStudyGroupRoomSelect() {
     const select = document.getElementById('studyGroupRoomSelect');
     if (!select) return;
-    const options = (studyGroups || []).map(room => `<option value="${escapeHtmlAttribute(room.id || '')}">${escapeHtml(room.name || 'Study Room')} (${escapeHtml(room.code || '-')})</option>`);
+    const visibleRooms = getVisibleStudyGroupsForCurrentUser(studyGroups || []);
+    const options = visibleRooms.map(room => `<option value="${escapeHtmlAttribute(room.id || '')}">${escapeHtml(room.name || 'Study Room')} (${escapeHtml(room.code || '-')})</option>`);
     const current = select.value;
     select.innerHTML = `<option value="">Select room</option>${options.join('')}`;
-    if ((studyGroups || []).some(room => room.id === current)) select.value = current;
+    if (visibleRooms.some(room => room.id === current)) select.value = current;
 }
 
 function getCurrentStudyGroupRoom() {
     const select = document.getElementById('studyGroupRoomSelect');
     const selectedId = String(select && select.value ? select.value : '').trim();
     if (!selectedId) return null;
-    return (studyGroups || []).find(room => String(room.id || '') === selectedId) || null;
+    const visibleRooms = getVisibleStudyGroupsForCurrentUser(studyGroups || []);
+    return visibleRooms.find(room => String(room.id || '') === selectedId) || null;
 }
 
 function getCurrentStudyGroupMember(room) {
@@ -4599,6 +4665,19 @@ function getCurrentStudyGroupMember(room) {
     if (!user || !room || !Array.isArray(room.members)) return null;
     const email = normalizeEmail(user.email || '');
     return room.members.find(member => normalizeEmail(member && member.email || '') === email) || null;
+}
+
+function getVisibleStudyGroupsForCurrentUser(rooms = []) {
+    const user = getCurrentUser();
+    const role = String((user && user.role) || "student").toLowerCase();
+    const email = normalizeEmail(user && user.email || "");
+    const list = Array.isArray(rooms) ? rooms : [];
+    if (!email) return [];
+    if (role === "teacher" || role === "admin") return list;
+    return list.filter(room => {
+        const members = Array.isArray(room && room.members) ? room.members : [];
+        return members.some(member => normalizeEmail(member && member.email || "") === email);
+    });
 }
 
 function renderStudyGroupRooms() {
@@ -4625,7 +4704,8 @@ function renderStudyGroupRooms() {
     const doubtFilter = canManageRooms
         ? String(doubtFilterEl && doubtFilterEl.value ? doubtFilterEl.value : 'all').toLowerCase()
         : 'all';
-    const activeRooms = (studyGroups || []).filter(room => room && room.status !== 'completed');
+    const visibleRooms = getVisibleStudyGroupsForCurrentUser(studyGroups || []);
+    const activeRooms = visibleRooms.filter(room => room && room.status !== 'completed');
     if (activeRooms.length === 0) {
         statusEl.textContent = backendAdminToken
             ? (canManageRooms
@@ -4796,14 +4876,23 @@ async function joinStudyGroupRoom() {
         alert('Enter invite code first.');
         return;
     }
+    const user = getCurrentUser();
+    const email = normalizeEmail(user && user.email || "");
     const joinViaBackend = async () => {
+        if (!email) throw new Error('Please login first.');
+        const payload = { code };
+        if (!backendAdminToken) {
+            payload.email = email;
+            payload.name = user && user.name ? user.name : "Student";
+            payload.role = user && user.role ? user.role : "student";
+        }
         const response = await fetch(`${API_BASE_URL}/api/study-groups/join`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...getBackendAuthHeaders()
             },
-            body: JSON.stringify({ code })
+            body: JSON.stringify(payload)
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || 'Unable to join study room');
@@ -4813,8 +4902,6 @@ async function joinStudyGroupRoom() {
         alert(`Joined: ${data.name || 'Study Room'}`);
     };
     if (!backendAdminToken) {
-        const user = getCurrentUser();
-        const email = normalizeEmail(user && user.email || "");
         if (!email) {
             alert('Please login first.');
             return;
@@ -4822,28 +4909,17 @@ async function joinStudyGroupRoom() {
         const groups = loadLocalStudyGroups();
         const idx = groups.findIndex(room => String(room && room.code || "").toUpperCase() === code);
         if (idx < 0) {
-            // Fallback: try reconnecting backend and joining by invite code online.
+            // Fallback: try joining online directly with logged-in user identity.
             if (navigator.onLine) {
-                const password = prompt('Invite code not found locally. Enter your login password to check online study rooms:');
-                if (password) {
-                    const ok = await syncLoginWithBackend(
-                        email,
-                        password,
-                        user && user.name ? user.name : "Student",
-                        user && user.role ? user.role : "student"
-                    );
-                    if (ok && backendAdminToken) {
-                        try {
-                            await joinViaBackend();
-                            return;
-                        } catch (err) {
-                            alert(`Join failed: ${err.message}`);
-                            return;
-                        }
-                    }
+                try {
+                    await joinViaBackend();
+                    return;
+                } catch (err) {
+                    alert(`Join failed: ${err.message}`);
+                    return;
                 }
             }
-            alert('Room not found in local mode. If teacher created this room on another device/browser, reconnect backend and join online.');
+            alert('Room not found in local mode.');
             return;
         }
         const room = normalizeLocalStudyGroup(groups[idx]);
@@ -7033,10 +7109,19 @@ function toggleLiveClassMode() {
         return;
     }
     if (!liveClassSession.active) {
+        const user = getCurrentUser();
+        const localNextState = {
+            active: true,
+            subject: String(document.getElementById('liveClassSubject')?.value || "General"),
+            startedAt: new Date().toISOString(),
+            teacherName: String(user && user.name || "Teacher"),
+            teacherEmail: normalizeEmail(user && user.email || "")
+        };
         liveClassSession = {
             active: true,
-            startedAt: new Date().toISOString()
+            startedAt: localNextState.startedAt
         };
+        writeLocalLiveClassBroadcast(localNextState);
         renderLiveClassMode();
         emitPresenceSocketUpdate();
         void pingPresence();
@@ -7049,6 +7134,14 @@ function toggleLiveClassMode() {
         active: false,
         startedAt: ''
     };
+    const user = getCurrentUser();
+    writeLocalLiveClassBroadcast({
+        active: false,
+        subject: String(document.getElementById('liveClassSubject')?.value || "General"),
+        startedAt: "",
+        teacherName: String(user && user.name || "Teacher"),
+        teacherEmail: normalizeEmail(user && user.email || "")
+    });
     renderLiveClassMode();
     emitPresenceSocketUpdate();
     void pingPresence();
@@ -14488,6 +14581,8 @@ function bootstrapAuthenticatedApp() {
     if (appBootstrapped) return;
     appBootstrapped = true;
 
+    setupLiveClassStorageListener();
+    applyLocalLiveClassBroadcast();
     loadTheme();
     setupNetworkStatusListeners();
     setupPresenceLifecycleListeners();
