@@ -120,7 +120,7 @@
             <li class="nav-item" data-page="teacher-quiz-scores" data-nav-role="teacher admin">
                 <a href="#quiz"><i class="fas fa-chart-bar"></i> Quiz Scores</a>
             </li>
-            <li class="nav-item" data-page="teacher-student-progress" data-nav-role="teacher admin">
+            <li class="nav-item" data-page="teacher-student-progress" data-nav-role="admin">
                 <a href="#analytics"><i class="fas fa-chart-line"></i> Student Progress</a>
             </li>
             <li class="nav-item" data-page="teacher-notes-library" data-nav-role="teacher admin">
@@ -132,7 +132,7 @@
             <li class="nav-item" data-page="teacher-reminders" data-nav-role="teacher admin">
                 <a href="#admin"><i class="fas fa-envelope"></i> Reminders</a>
             </li>
-            <li class="nav-item" data-page="settings" data-nav-role="teacher admin">
+            <li class="nav-item" data-page="settings" data-nav-role="admin">
                 <a href="#settings"><i class="fas fa-cog"></i> Settings</a>
             </li>
         </ul>
@@ -238,22 +238,22 @@
                 <h3><i class="fas fa-user-shield"></i> Admin / Teacher Panel <span id="adminTeacherPanelBadge" class="role-mode-badge student">Student Mode</span></h3>
                 <p id="adminTeacherPanelStatus">Checking access...</p>
                 <div class="task-options" id="adminTeacherPanelActions">
-                    <button class="action-btn" onclick="navigateTo('teacher-class-updates')">
+                    <button class="action-btn" data-panel-role="teacher admin" onclick="navigateTo('teacher-class-updates')">
                         <i class="fas fa-bullhorn"></i> Class Updates
                     </button>
-                    <button class="action-btn" onclick="navigateTo('teacher-quiz-scores')">
+                    <button class="action-btn" data-panel-role="teacher admin" onclick="navigateTo('teacher-quiz-scores')">
                         <i class="fas fa-chart-bar"></i> Quiz Scores
                     </button>
-                    <button class="action-btn" onclick="navigateTo('teacher-student-progress')">
+                    <button class="action-btn" data-panel-role="admin" onclick="navigateTo('teacher-student-progress')">
                         <i class="fas fa-user-graduate"></i> Student Progress
                     </button>
-                    <button class="action-btn" onclick="navigateTo('teacher-notes-library')">
+                    <button class="action-btn" data-panel-role="teacher admin" onclick="navigateTo('teacher-notes-library')">
                         <i class="fas fa-book-open"></i> Notes Library
                     </button>
-                    <button class="action-btn" onclick="navigateTo('teacher-reminders')">
+                    <button class="action-btn" data-panel-role="teacher admin" onclick="navigateTo('teacher-reminders')">
                         <i class="fas fa-envelope"></i> Reminders
                     </button>
-                    <button class="action-btn" onclick="navigateTo('settings')">
+                    <button class="action-btn" data-panel-role="admin" onclick="navigateTo('settings')">
                         <i class="fas fa-cog"></i> Admin Settings
                     </button>
                 </div>

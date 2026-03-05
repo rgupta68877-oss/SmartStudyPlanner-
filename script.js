@@ -1589,7 +1589,7 @@ const SIDEBAR_DEFAULT_PAGE = {
 
 const SIDEBAR_PAGES_BY_ROLE = {
     student: new Set(["dashboard", "tasks", "calendar", "flashcards", "student-quiz-weak", "student-timer", "goals", "profile"]),
-    teacher: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings"]),
+    teacher: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-notes-library", "timetable", "teacher-reminders"]),
     admin: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings"])
 };
 
@@ -1601,6 +1601,12 @@ function getCurrentSidebarRole() {
     const user = getCurrentUser();
     if (!user) return "student";
     return (user.role === "teacher" || user.role === "admin") ? user.role : "student";
+}
+
+function getDashboardTitleByRole(role) {
+    if (role === "admin") return "Admin Dashboard";
+    if (role === "teacher") return "Teacher Dashboard";
+    return "Student Dashboard";
 }
 
 function isSidebarPageAllowed(page) {
@@ -1690,7 +1696,12 @@ function navigateTo(page) {
         'teacher-notes-library': 'Notes Library',
         'teacher-reminders': 'Reminders'
     };
-    document.getElementById('pageTitle').textContent = titles[page] || titles[targetPage] || 'Dashboard';
+    const requestedTitle = titles[page] || titles[targetPage] || 'Dashboard';
+    if (targetPage === "dashboard") {
+        document.getElementById('pageTitle').textContent = getDashboardTitleByRole(getCurrentSidebarRole());
+    } else {
+        document.getElementById('pageTitle').textContent = requestedTitle;
+    }
 
     // Refresh page data
     if (targetPage === 'dashboard') renderDashboard();
@@ -3843,8 +3854,15 @@ function renderAdminTeacherPanel() {
     }
 
     if (hasAccess) {
+        const panelButtons = Array.from(actions.querySelectorAll('[data-panel-role]'));
+        panelButtons.forEach(button => {
+            const roles = String(button.getAttribute('data-panel-role') || '').split(/\s+/).filter(Boolean);
+            button.style.display = roles.includes(role) ? '' : 'none';
+        });
         panel.style.display = '';
-        status.textContent = `Access: ${role}. Manage class updates, quiz scores, reminders, and settings.`;
+        status.textContent = role === 'admin'
+            ? 'Access: admin. Full controls enabled, including student progress and settings.'
+            : 'Access: teacher. Classroom controls enabled for updates, quiz scores, notes, timetable, and reminders.';
         actions.style.display = 'flex';
         return;
     }
