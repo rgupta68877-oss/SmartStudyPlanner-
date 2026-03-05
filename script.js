@@ -1475,6 +1475,7 @@ let reminderBackendCheck = {
 };
 let peerChallenges = [];
 let studyGroups = [];
+let profilePhotoDraft = null;
 let liveClassBroadcastState = {
     active: false,
     subject: "General",
@@ -1589,8 +1590,8 @@ const SIDEBAR_DEFAULT_PAGE = {
 
 const SIDEBAR_PAGES_BY_ROLE = {
     student: new Set(["dashboard", "tasks", "calendar", "flashcards", "student-quiz-weak", "student-timer", "goals", "profile"]),
-    teacher: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-notes-library", "timetable", "teacher-reminders"]),
-    admin: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings"])
+    teacher: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-notes-library", "timetable", "teacher-reminders", "profile"]),
+    admin: new Set(["dashboard", "teacher-class-updates", "teacher-quiz-scores", "teacher-student-progress", "teacher-notes-library", "timetable", "teacher-reminders", "settings", "profile"])
 };
 
 function resolvePageAlias(page) {
@@ -1829,6 +1830,7 @@ function upsertLocalUser(userLike, preferredRole = "student") {
             profile: {
                 studyGoal: "",
                 bio: "",
+                photoDataUrl: "",
                 ...(authUsers[idx].profile || {})
             }
         };
@@ -1843,7 +1845,8 @@ function upsertLocalUser(userLike, preferredRole = "student") {
         role: preferredRole || "student",
         profile: {
             studyGoal: "",
-            bio: ""
+            bio: "",
+            photoDataUrl: ""
         },
         createdAt: new Date().toISOString()
     };
@@ -1885,6 +1888,7 @@ async function syncCurrentUserProfileToCloud() {
         profile: {
             studyGoal: "",
             bio: "",
+            photoDataUrl: "",
             ...(localUser?.profile || {})
         },
         createdAt: localUser?.createdAt || new Date().toISOString(),
@@ -1925,6 +1929,7 @@ async function loadCurrentUserProfileFromCloud() {
                 profile: {
                     studyGoal: "",
                     bio: "",
+                    photoDataUrl: "",
                     ...(profileDoc.profile || authUsers[idx].profile || {})
                 },
                 createdAt: profileDoc.createdAt || authUsers[idx].createdAt
@@ -2311,6 +2316,7 @@ async function syncLoginWithBackend(email, password, fallbackName = "Student", f
         if (response.ok && data && data.token) {
             backendAdminToken = data.token;
             localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+            applyBackendIdentityToLocalUser(data && data.user, email, fallbackName, fallbackRole);
             return true;
         }
         backendLastAuthError = `HTTP ${response.status}: ${data && data.error ? data.error : 'Backend auth failed'}`;
@@ -2318,6 +2324,52 @@ async function syncLoginWithBackend(email, password, fallbackName = "Student", f
         backendLastAuthError = err && err.message ? err.message : 'Network error while connecting backend';
     }
     return false;
+}
+
+function applyBackendIdentityToLocalUser(backendUser, emailFallback = "", nameFallback = "Student", roleFallback = "student") {
+    const safeEmail = normalizeEmail(
+        (backendUser && backendUser.email) ||
+        emailFallback ||
+        (authSession && authSession.email) ||
+        ""
+    );
+    if (!safeEmail) return;
+
+    const safeRole = (() => {
+        const role = String((backendUser && backendUser.role) || roleFallback || "student").toLowerCase();
+        return ["student", "teacher", "admin"].includes(role) ? role : "student";
+    })();
+    const safeName = String((backendUser && backendUser.name) || nameFallback || "Student").trim() || "Student";
+
+    const idx = authUsers.findIndex(u => normalizeEmail(u.email) === safeEmail);
+    if (idx >= 0) {
+        authUsers[idx] = {
+            ...authUsers[idx],
+            name: safeName,
+            role: safeRole,
+            profile: {
+                studyGoal: "",
+                bio: "",
+                photoDataUrl: "",
+                ...(authUsers[idx].profile || {})
+            }
+        };
+    } else {
+        authUsers.push({
+            id: `user-${Date.now()}`,
+            name: safeName,
+            email: safeEmail,
+            role: safeRole,
+            profile: {
+                studyGoal: "",
+                bio: "",
+                photoDataUrl: ""
+            },
+            createdAt: new Date().toISOString()
+        });
+    }
+
+    saveState({ authUsers });
 }
 
 function hasAnyFlashcards(flashcardState) {
@@ -2429,6 +2481,37 @@ function decodeJwtPayload(token) {
     }
 }
 
+function syncCurrentSessionRoleFromBackendToken() {
+    const user = getCurrentUser();
+    if (!user || !backendAdminToken) return user;
+
+    const payload = decodeJwtPayload(backendAdminToken);
+    if (!payload) return user;
+
+    const tokenEmail = normalizeEmail(payload.email || "");
+    const tokenRoleRaw = String(payload.role || "").toLowerCase();
+    const tokenRole = ["student", "teacher", "admin"].includes(tokenRoleRaw) ? tokenRoleRaw : "";
+    if (!tokenEmail || !tokenRole) return user;
+    if (normalizeEmail(user.email || "") !== tokenEmail) return user;
+    if (String(user.role || "student").toLowerCase() === tokenRole) return user;
+
+    const idx = authUsers.findIndex(u => normalizeEmail(u.email) === tokenEmail);
+    if (idx < 0) return user;
+
+    authUsers[idx] = {
+        ...authUsers[idx],
+        role: tokenRole,
+        profile: {
+            studyGoal: "",
+            bio: "",
+            photoDataUrl: "",
+            ...(authUsers[idx].profile || {})
+        }
+    };
+    saveState({ authUsers });
+    return authUsers[idx];
+}
+
 function updateBackendAuthStatus() {
     const status = document.getElementById('backendAuthStatus');
     const meta = document.getElementById('backendAuthMeta');
@@ -2514,14 +2597,14 @@ function applyAuthState() {
         return;
     }
 
-    const user = getCurrentUser();
+    let user = getCurrentUser();
+    user = syncCurrentSessionRoleFromBackendToken() || user;
 
     if (user) {
         if (authContainer) authContainer.style.display = "none";
         if (appContainer) appContainer.style.display = "flex";
         updateOnlineStudentsVisibility();
-        const currentUserName = document.getElementById("currentUserName");
-        if (currentUserName) currentUserName.textContent = user.name || "User";
+        updateCurrentUserBadge();
         applyRoleBasedSidebar();
         applyRoleBasedUIVisibility();
         bootstrapAuthenticatedApp();
@@ -2531,6 +2614,7 @@ function applyAuthState() {
             requestReminderPermission();
         }
     } else {
+        updateCurrentUserBadge();
         stopPresenceTracking();
         updateOnlineStudentsVisibility();
         if (appContainer) appContainer.style.display = "none";
@@ -2603,7 +2687,8 @@ async function registerUser() {
         passwordHash,
         profile: {
             studyGoal: "",
-            bio: ""
+            bio: "",
+            photoDataUrl: ""
         },
         createdAt: new Date().toISOString()
     };
@@ -2740,6 +2825,7 @@ function renderProfile() {
     const user = getCurrentUser();
     if (!user) return;
     const profile = user.profile || {};
+    profilePhotoDraft = null;
     const nameEl = document.getElementById("profileName");
     const emailEl = document.getElementById("profileEmail");
     const goalEl = document.getElementById("profileStudyGoal");
@@ -2748,6 +2834,122 @@ function renderProfile() {
     if (emailEl) emailEl.value = user.email || "";
     if (goalEl) goalEl.value = profile.studyGoal || "";
     if (bioEl) bioEl.value = profile.bio || "";
+    setProfilePhotoPreview(profile.photoDataUrl || "");
+    updateCurrentUserBadge();
+}
+
+function updateCurrentUserBadge() {
+    const user = getCurrentUser();
+    const currentUserName = document.getElementById("currentUserName");
+    const photoEl = document.getElementById("currentUserPhoto");
+    const fallbackEl = document.getElementById("currentUserPhotoFallback");
+    const photoDataUrl = String(user && user.profile && user.profile.photoDataUrl || "");
+
+    if (currentUserName) currentUserName.textContent = user && user.name ? user.name : "Guest";
+    if (!photoEl || !fallbackEl) return;
+
+    if (photoDataUrl) {
+        photoEl.src = photoDataUrl;
+        photoEl.style.display = "block";
+        fallbackEl.style.display = "none";
+        return;
+    }
+    photoEl.removeAttribute("src");
+    photoEl.style.display = "none";
+    fallbackEl.style.display = "";
+}
+
+function setProfilePhotoPreview(photoDataUrl) {
+    const previewEl = document.getElementById("profilePhotoPreview");
+    const placeholderEl = document.getElementById("profilePhotoPlaceholder");
+    const statusEl = document.getElementById("profilePhotoStatus");
+    const safeValue = String(photoDataUrl || "");
+    if (!previewEl || !placeholderEl) return;
+
+    if (safeValue) {
+        previewEl.src = safeValue;
+        previewEl.style.display = "block";
+        placeholderEl.style.display = "none";
+        if (statusEl) statusEl.textContent = "Profile picture ready.";
+        return;
+    }
+
+    previewEl.removeAttribute("src");
+    previewEl.style.display = "none";
+    placeholderEl.style.display = "flex";
+    if (statusEl) statusEl.textContent = "No profile picture selected.";
+}
+
+function openProfilePhotoPicker() {
+    const input = document.getElementById("profilePhotoInput");
+    if (!input) return;
+    input.click();
+}
+
+async function onProfilePhotoSelected(event) {
+    const input = event && event.target ? event.target : null;
+    const file = input && input.files ? input.files[0] : null;
+    if (!file) return;
+
+    if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+        alert("Please select an image file.");
+        if (input) input.value = "";
+        return;
+    }
+    if (Number(file.size || 0) > 5 * 1024 * 1024) {
+        alert("Image is too large. Please upload a file under 5 MB.");
+        if (input) input.value = "";
+        return;
+    }
+
+    const statusEl = document.getElementById("profilePhotoStatus");
+    if (statusEl) statusEl.textContent = "Processing image...";
+
+    try {
+        const rawDataUrl = await readFileAsDataUrl(file);
+        const optimizedDataUrl = await optimizeProfilePhotoDataUrl(rawDataUrl, 256);
+        profilePhotoDraft = optimizedDataUrl;
+        setProfilePhotoPreview(optimizedDataUrl);
+    } catch (_) {
+        alert("Failed to process image. Try another picture.");
+        if (statusEl) statusEl.textContent = "Could not process selected image.";
+    } finally {
+        if (input) input.value = "";
+    }
+}
+
+function removeProfilePhoto() {
+    profilePhotoDraft = "";
+    setProfilePhotoPreview("");
+}
+
+function optimizeProfilePhotoDataUrl(dataUrl, maxSize = 256) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const side = Math.max(1, Number(maxSize) || 256);
+            const canvas = document.createElement("canvas");
+            canvas.width = side;
+            canvas.height = side;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                resolve(dataUrl);
+                return;
+            }
+
+            const srcW = Math.max(1, img.width || side);
+            const srcH = Math.max(1, img.height || side);
+            const srcSide = Math.min(srcW, srcH);
+            const sx = Math.floor((srcW - srcSide) / 2);
+            const sy = Math.floor((srcH - srcSide) / 2);
+            ctx.drawImage(img, sx, sy, srcSide, srcSide, 0, 0, side, side);
+
+            const jpg = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(String(jpg || dataUrl));
+        };
+        img.onerror = () => reject(new Error("invalid-image"));
+        img.src = dataUrl;
+    });
 }
 
 async function saveProfile() {
@@ -2760,19 +2962,23 @@ async function saveProfile() {
 
     const idx = authUsers.findIndex(u => u.id === user.id);
     if (idx < 0) return;
+    const existingPhoto = String(authUsers[idx].profile && authUsers[idx].profile.photoDataUrl || "");
+    const photoDataUrl = profilePhotoDraft === null ? existingPhoto : String(profilePhotoDraft || "");
+
     authUsers[idx] = {
         ...authUsers[idx],
         name,
         profile: {
             ...(authUsers[idx].profile || {}),
             studyGoal,
-            bio
+            bio,
+            photoDataUrl
         }
     };
     saveState({ authUsers });
+    profilePhotoDraft = null;
     addActivity('user', 'Profile Updated', 'Profile changes saved');
-    const currentUserName = document.getElementById("currentUserName");
-    if (currentUserName) currentUserName.textContent = name;
+    updateCurrentUserBadge();
     await ensureFirebaseServices();
     if (firebaseAuth && firebaseSdk.updateProfile && firebaseAuth.currentUser) {
         try {
@@ -3810,6 +4016,8 @@ function renderDashboard() {
     renderUpcomingDeadlines();
     renderScholarshipExamAlerts();
     renderDailyTop3AdaptiveTasks();
+    renderTeacherDashboardStats();
+    renderRoleDashboardHub();
     renderAdminTeacherPanel();
     renderWeakTopicDetection();
     renderQuizScoreSnapshot();
@@ -3829,6 +4037,64 @@ function renderDashboard() {
     renderRecoveryHistory();
     renderDashboardQuestionBank();
     renderMemoryBoosterSession();
+}
+
+function renderTeacherDashboardStats() {
+    const studentCountEl = document.getElementById('teacherStatStudents');
+    const updatesCountEl = document.getElementById('teacherStatUpdates');
+    const quizAttemptsEl = document.getElementById('teacherStatQuizAttempts');
+    const roomsCountEl = document.getElementById('teacherStatRooms');
+    const staffCountEl = document.getElementById('teacherStatTeachers');
+    if (!studentCountEl || !updatesCountEl || !quizAttemptsEl || !roomsCountEl || !staffCountEl) return;
+
+    const users = Array.isArray(authUsers) ? authUsers : [];
+    const studentCount = users.filter(item => String(item && item.role || '').toLowerCase() === 'student').length;
+    const staffCount = users.filter(item => {
+        const role = String(item && item.role || '').toLowerCase();
+        return role === 'teacher' || role === 'admin';
+    }).length;
+
+    studentCountEl.textContent = String(studentCount);
+    updatesCountEl.textContent = String(Array.isArray(teacherUpdates) ? teacherUpdates.length : 0);
+    quizAttemptsEl.textContent = String(Array.isArray(quizScores) ? quizScores.length : 0);
+    roomsCountEl.textContent = String(Array.isArray(studyGroups) ? studyGroups.length : 0);
+    staffCountEl.textContent = String(staffCount);
+}
+
+function renderRoleDashboardHub() {
+    const role = getCurrentSidebarRole();
+    const roleTitleEl = document.getElementById('teacherDashboardHubRole');
+    const totalUpdatesEl = document.getElementById('teacherDashTotalUpdates');
+    const todayUpdatesEl = document.getElementById('teacherDashTodayUpdates');
+    const quizAttemptsEl = document.getElementById('teacherDashQuizAttempts');
+    const roomsEl = document.getElementById('teacherDashRooms');
+
+    if (roleTitleEl) {
+        roleTitleEl.textContent = role === 'admin' ? 'Admin Control' : 'Teacher Control';
+    }
+
+    if (!totalUpdatesEl || !todayUpdatesEl || !quizAttemptsEl || !roomsEl) return;
+
+    const now = new Date();
+    const todayKey = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0')
+    ].join('-');
+
+    const updates = Array.isArray(teacherUpdates) ? teacherUpdates : [];
+    const updateCountToday = updates.filter(item => {
+        const created = String(item && item.createdAt || '');
+        return created.slice(0, 10) === todayKey;
+    }).length;
+
+    const totalQuizAttempts = Array.isArray(quizScores) ? quizScores.length : 0;
+    const totalRooms = Array.isArray(studyGroups) ? studyGroups.length : 0;
+
+    totalUpdatesEl.textContent = String(updates.length);
+    todayUpdatesEl.textContent = String(updateCountToday);
+    quizAttemptsEl.textContent = String(totalQuizAttempts);
+    roomsEl.textContent = String(totalRooms);
 }
 
 function renderAdminTeacherPanel() {
