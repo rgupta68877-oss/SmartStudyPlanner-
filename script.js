@@ -24,6 +24,8 @@ const API_BASE_URL = (() => {
     const safeMeta = (() => {
         const metaValue = String(fromMeta || "").trim();
         if (!metaValue) return "";
+        // When the app is opened locally, prefer the local backend instead of a deployed API URL.
+        if (isLocalHost && !/localhost|127\.0\.0\.1/i.test(metaValue)) return "";
         // Ignore localhost-only meta config when app is running on a non-local host.
         if (!isLocalHost && /localhost|127\.0\.0\.1/i.test(metaValue)) return "";
         return metaValue;
@@ -1501,6 +1503,15 @@ let presencePingInFlight = false;
 let presenceSocket = null;
 let liveClassSubjectListenerAttached = false;
 
+function setBackendAuthToken(token) {
+    backendAdminToken = String(token || "").trim();
+    if (backendAdminToken) {
+        localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+    } else {
+        localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+    }
+}
+
 const CLOUD_SYNC_DEBOUNCE_MS = 800;
 const firebaseSdk = {
     createUserWithEmailAndPassword: null,
@@ -2269,12 +2280,13 @@ async function syncRegisterWithBackend(name, email, password, role) {
             data = await response.json().catch(() => ({}));
         }
         if (response.ok && data && data.token) {
-            backendAdminToken = data.token;
-            localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+            setBackendAuthToken(data.token);
             return true;
         }
+        setBackendAuthToken("");
         backendLastAuthError = `HTTP ${response.status}: ${data && data.error ? data.error : 'Backend register/login failed'}`;
     } catch (err) {
+        setBackendAuthToken("");
         backendLastAuthError = err && err.message ? err.message : 'Network error while connecting backend';
     }
     return false;
@@ -2314,13 +2326,14 @@ async function syncLoginWithBackend(email, password, fallbackName = "Student", f
             }
         }
         if (response.ok && data && data.token) {
-            backendAdminToken = data.token;
-            localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+            setBackendAuthToken(data.token);
             applyBackendIdentityToLocalUser(data && data.user, email, fallbackName, fallbackRole);
             return true;
         }
+        setBackendAuthToken("");
         backendLastAuthError = `HTTP ${response.status}: ${data && data.error ? data.error : 'Backend auth failed'}`;
     } catch (err) {
+        setBackendAuthToken("");
         backendLastAuthError = err && err.message ? err.message : 'Network error while connecting backend';
     }
     return false;
@@ -2431,8 +2444,7 @@ function getCurrentUser() {
 function clearLocalAuthSessionState() {
     authSession = null;
     saveState({ authSession });
-    backendAdminToken = "";
-    localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+    setBackendAuthToken("");
 }
 
 async function enforceManualLoginOnPageLoad() {
@@ -2550,8 +2562,7 @@ async function backendAdminLogin() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Login failed');
-        backendAdminToken = data.token || "";
-        localStorage.setItem(BACKEND_AUTH_TOKEN_KEY, backendAdminToken);
+        setBackendAuthToken(data.token || "");
         updateBackendAuthStatus();
         alert('Backend auth connected.');
     } catch (err) {
@@ -2560,8 +2571,7 @@ async function backendAdminLogin() {
 }
 
 function backendAdminLogout() {
-    backendAdminToken = "";
-    localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+    setBackendAuthToken("");
     updateBackendAuthStatus();
 }
 
@@ -2710,6 +2720,10 @@ async function loginUser() {
         return;
     }
 
+    if (normalizeEmail(authSession && authSession.email) !== email) {
+        setBackendAuthToken("");
+    }
+
     await ensureFirebaseServices();
 
     if (firebaseAuth && firebaseSdk.signInWithEmailAndPassword) {
@@ -2741,6 +2755,16 @@ async function loginUser() {
             setAuthMessage(getFirebaseAuthErrorMessage(err?.code), true);
             return;
         }
+    }
+
+    const backendLoginOk = await syncLoginWithBackend(email, password, email.split("@")[0] || "Student", "student");
+    if (backendLoginOk) {
+        authSession = { email };
+        saveState({ authSession });
+        await loadFlashcardsFromBackend();
+        setAuthMessage("Login successful.");
+        applyAuthState();
+        return;
     }
 
     const user = authUsers.find(u => normalizeEmail(u.email) === email);
@@ -2816,8 +2840,7 @@ async function logoutUser() {
     }
     authSession = null;
     saveState({ authSession });
-    backendAdminToken = "";
-    localStorage.removeItem(BACKEND_AUTH_TOKEN_KEY);
+    setBackendAuthToken("");
     applyAuthState();
 }
 
