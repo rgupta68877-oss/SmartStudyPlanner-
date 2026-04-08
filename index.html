@@ -321,6 +321,40 @@
                 </div>
             </div>
 
+            <div class="dashboard-role-grid" data-ui-role="student">
+                <div class="card student-spotlight-card">
+                    <h3><i class="fas fa-crosshairs"></i> Student Mission Control</h3>
+                    <div class="student-spotlight-stats">
+                        <div class="student-spotlight-item">
+                            <span class="student-spotlight-value" id="studentFocusPendingCount">0</span>
+                            <span class="student-spotlight-label">Pending Now</span>
+                        </div>
+                        <div class="student-spotlight-item">
+                            <span class="student-spotlight-value" id="studentFocusDueSoonCount">0</span>
+                            <span class="student-spotlight-label">Due Soon</span>
+                        </div>
+                        <div class="student-spotlight-item">
+                            <span class="student-spotlight-value" id="studentFocusWeakCount">0</span>
+                            <span class="student-spotlight-label">Weak Subjects</span>
+                        </div>
+                    </div>
+                    <ul id="studentFocusSummaryList">
+                        <li class="empty-state">Your daily focus summary will appear here.</li>
+                    </ul>
+                </div>
+
+                <div class="card student-alerts-card">
+                    <div class="student-alerts-header">
+                        <h3><i class="fas fa-bell"></i> Class Alerts</h3>
+                        <span class="role-mode-badge student" id="studentAlertCountBadge">0 alerts</span>
+                    </div>
+                    <p>Homework, task updates, and class notices posted by your teacher will appear here.</p>
+                    <ul id="studentTeacherAlertsList">
+                        <li class="empty-state">No class alerts yet.</li>
+                    </ul>
+                </div>
+            </div>
+
             <div class="card settings-section admin-teacher-panel-card" id="adminTeacherPanelCard" data-ui-role="teacher admin">
                 <h3><i class="fas fa-user-shield"></i> Admin / Teacher Panel <span id="adminTeacherPanelBadge" class="role-mode-badge student">Student Mode</span></h3>
                 <p id="adminTeacherPanelStatus">Checking access...</p>
@@ -344,6 +378,14 @@
                         <i class="fas fa-cog"></i> Admin Settings
                     </button>
                 </div>
+            </div>
+
+            <div class="card teacher-updates-spotlight" id="teacherUpdatesSpotlightCard" data-ui-role="teacher admin">
+                <h3><i class="fas fa-clipboard"></i> Staff Update Snapshot</h3>
+                <p id="teacherUpdatesSpotlightSummary">No class update activity yet.</p>
+                <ul id="teacherUpdatesSpotlightList">
+                    <li class="empty-state">Post a class update to see it here.</li>
+                </ul>
             </div>
 
             <div class="card consistency-rewards">
@@ -2229,7 +2271,6 @@
 <script src="script.js"></script>
 </body>
 </html>
-
 
 
 

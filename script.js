@@ -34,6 +34,7 @@ const API_BASE_URL = (() => {
     return String(fromEnv).replace(/\/+$/, "");
 })();
 const BACKEND_AUTH_TOKEN_KEY = "backendAdminToken";
+const STUDENT_TEACHER_ALERT_SEEN_KEY = "studentTeacherAlertSeenIds";
 const FOCUS_SHIELD_SETTINGS_KEY = "focusShieldSettings";
 const LOCAL_PEER_CHALLENGES_KEY = "localPeerChallenges";
 const LOCAL_STUDY_GROUPS_KEY = "localStudyGroups";
@@ -1417,6 +1418,7 @@ let dailyPlan = initialState.dailyPlan;
 let recoveryPlan = initialState.recoveryPlan;
 let authUsers = initialState.authUsers;
 let authSession = initialState.authSession;
+let teacherUpdatesLastFetchAt = 0;
 
 // Timer
 let timerInterval = null;
@@ -1808,7 +1810,7 @@ async function hashPassword(password) {
 function getFirebaseAuthErrorMessage(code) {
     switch (code) {
         case "auth/email-already-in-use":
-            return "This email is already registered.";
+            return "This email is already registered. Please login or use Forgot password.";
         case "auth/invalid-email":
             return "Please enter a valid email address.";
         case "auth/weak-password":
@@ -1816,7 +1818,7 @@ function getFirebaseAuthErrorMessage(code) {
         case "auth/invalid-credential":
         case "auth/wrong-password":
         case "auth/user-not-found":
-            return "Incorrect email or password.";
+            return "Incorrect email or password. If this email already exists, use Forgot password.";
         case "auth/too-many-requests":
             return "Too many attempts. Please try again later.";
         default:
@@ -4001,6 +4003,10 @@ function renderDashboard() {
     renderTimerSubjectOptions();
     renderBurnoutGuardHint();
     renderFocusShieldStatus();
+    if (Date.now() - teacherUpdatesLastFetchAt > 30_000) {
+        teacherUpdatesLastFetchAt = Date.now();
+        loadTeacherUpdatesFromServer();
+    }
     const completed = tasks.filter(t => t.done).length;
     document.getElementById('totalTasks').textContent = tasks.length;
     document.getElementById('completedTasks').textContent = completed;
@@ -4040,8 +4046,10 @@ function renderDashboard() {
     renderScholarshipExamAlerts();
     renderDailyTop3AdaptiveTasks();
     renderTeacherDashboardStats();
+    renderStudentDashboardPanels();
     renderRoleDashboardHub();
     renderAdminTeacherPanel();
+    renderTeacherUpdatesSpotlight();
     renderWeakTopicDetection();
     renderQuizScoreSnapshot();
     renderMistakeDueBadges();
@@ -4082,6 +4090,166 @@ function renderTeacherDashboardStats() {
     quizAttemptsEl.textContent = String(Array.isArray(quizScores) ? quizScores.length : 0);
     roomsCountEl.textContent = String(Array.isArray(studyGroups) ? studyGroups.length : 0);
     staffCountEl.textContent = String(staffCount);
+}
+
+function inferTeacherUpdateCategory(update) {
+    const title = String(update && update.title || "").toLowerCase();
+    const message = String(update && update.message || "").toLowerCase();
+    const combined = `${title} ${message}`;
+    if (/(homework|worksheet|assignment|submit|upload)/i.test(combined)) return "homework";
+    if (/(task|practice|project|deadline|due)/i.test(combined)) return "task";
+    if (/(exam|quiz|test)/i.test(combined)) return "assessment";
+    return "announcement";
+}
+
+function getStudentRelevantTeacherUpdates(limit = 6) {
+    return (Array.isArray(teacherUpdates) ? teacherUpdates : [])
+        .filter(update => String(update && update.by || "").toLowerCase().includes("teacher") || String(update && update.by || "").toLowerCase().includes("admin"))
+        .map(update => ({ ...update, category: inferTeacherUpdateCategory(update) }))
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+        .slice(0, limit);
+}
+
+function getSeenStudentTeacherAlertIds() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(STUDENT_TEACHER_ALERT_SEEN_KEY) || "[]");
+        return Array.isArray(raw) ? raw.map(item => String(item || "")) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function saveSeenStudentTeacherAlertIds(ids) {
+    const safeIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map(item => String(item || "")).filter(Boolean))).slice(0, 100);
+    localStorage.setItem(STUDENT_TEACHER_ALERT_SEEN_KEY, JSON.stringify(safeIds));
+}
+
+function notifyStudentAboutTeacherUpdates() {
+    const user = getCurrentUser();
+    if (!user || String(user.role || "student").toLowerCase() !== "student") return;
+
+    const relevantUpdates = getStudentRelevantTeacherUpdates(20);
+    const currentIds = relevantUpdates.map(update => String(update.id || ""));
+    const seenIds = getSeenStudentTeacherAlertIds();
+
+    if (seenIds.length === 0) {
+        saveSeenStudentTeacherAlertIds(currentIds);
+        return;
+    }
+
+    const unseenUpdates = relevantUpdates.filter(update => update.id && !seenIds.includes(String(update.id || "")));
+    if (unseenUpdates.length === 0) return;
+
+    unseenUpdates.slice(0, 2).forEach(update => {
+        const title = update.category === "homework"
+            ? "New Homework Posted"
+            : update.category === "task"
+                ? "New Task Update"
+                : "New Class Update";
+        const body = `${update.title}: ${update.message}`;
+        if ("Notification" in window && Notification.permission === "granted") {
+            try {
+                new Notification(title, { body });
+            } catch (_) {}
+        } else {
+            showQuickActionToast(title, body);
+        }
+    });
+
+    saveSeenStudentTeacherAlertIds([...seenIds, ...currentIds]);
+}
+
+function renderStudentDashboardPanels() {
+    const pendingCountEl = document.getElementById('studentFocusPendingCount');
+    const dueSoonCountEl = document.getElementById('studentFocusDueSoonCount');
+    const weakCountEl = document.getElementById('studentFocusWeakCount');
+    const summaryList = document.getElementById('studentFocusSummaryList');
+    const alertBadge = document.getElementById('studentAlertCountBadge');
+    const alertsList = document.getElementById('studentTeacherAlertsList');
+
+    const pendingTasks = tasks.filter(task => task && !task.done);
+    const dueSoonTasks = pendingTasks.filter(task => {
+        if (!task.dueDate) return false;
+        const days = daysUntil(task.dueDate, new Date());
+        return Number.isFinite(days) && days >= 0 && days <= 3;
+    });
+    const weakSubjects = Array.isArray(smartSettings && smartSettings.weakSubjects) ? smartSettings.weakSubjects.filter(Boolean) : [];
+    const rankedTasks = rankTasks(pendingTasks, { now: new Date(), weakSubjects, exams }).slice(0, 2);
+    const relevantUpdates = getStudentRelevantTeacherUpdates(5);
+
+    if (pendingCountEl) pendingCountEl.textContent = String(pendingTasks.length);
+    if (dueSoonCountEl) dueSoonCountEl.textContent = String(dueSoonTasks.length);
+    if (weakCountEl) weakCountEl.textContent = String(weakSubjects.length);
+
+    if (summaryList) {
+        const summaryItems = [];
+        if (rankedTasks[0]) {
+            summaryItems.push(`<li><strong>Start with:</strong> ${escapeHtml(rankedTasks[0].text)}${rankedTasks[0].subject ? ` (${escapeHtml(rankedTasks[0].subject)})` : ''}</li>`);
+        }
+        if (dueSoonTasks[0]) {
+            summaryItems.push(`<li><strong>Due next:</strong> ${escapeHtml(dueSoonTasks[0].text)} by ${escapeHtml(formatDate(dueSoonTasks[0].dueDate))}</li>`);
+        }
+        if (weakSubjects.length > 0) {
+            summaryItems.push(`<li><strong>Weak focus:</strong> ${escapeHtml(weakSubjects.slice(0, 3).join(', '))}</li>`);
+        }
+        summaryList.innerHTML = summaryItems.length > 0
+            ? summaryItems.join('')
+            : '<li class="empty-state">Add tasks, due dates, or weak subjects to build your focus summary.</li>';
+    }
+
+    if (alertBadge) {
+        const count = relevantUpdates.length;
+        alertBadge.textContent = count === 1 ? '1 alert' : `${count} alerts`;
+    }
+
+    if (alertsList) {
+        alertsList.innerHTML = relevantUpdates.length > 0
+            ? relevantUpdates.map(update => `
+                <li class="student-alert-item priority-${update.category}">
+                    <div class="student-alert-topline">
+                        <span class="student-alert-title">${escapeHtml(update.title || 'Class Update')}</span>
+                        <span class="student-alert-tag">${escapeHtml(update.category)}</span>
+                    </div>
+                    <p>${escapeHtml(update.message || '')}</p>
+                    <div class="student-alert-meta">
+                        <span>${escapeHtml(update.by || 'Teacher')}</span>
+                        <span>${escapeHtml(new Date(update.createdAt || Date.now()).toLocaleString())}</span>
+                    </div>
+                </li>
+            `).join('')
+            : '<li class="empty-state">No class alerts yet.</li>';
+    }
+}
+
+function renderTeacherUpdatesSpotlight() {
+    const summaryEl = document.getElementById('teacherUpdatesSpotlightSummary');
+    const listEl = document.getElementById('teacherUpdatesSpotlightList');
+    if (!summaryEl || !listEl) return;
+
+    const updates = (Array.isArray(teacherUpdates) ? teacherUpdates : [])
+        .filter(update => String(update && update.by || "").toLowerCase().includes("teacher") || String(update && update.by || "").toLowerCase().includes("admin"))
+        .slice(0, 4)
+        .map(update => ({ ...update, category: inferTeacherUpdateCategory(update) }));
+
+    summaryEl.textContent = updates.length > 0
+        ? `${updates.length} recent class update(s). Homework and task posts will be highlighted for students.`
+        : 'No class update activity yet.';
+
+    listEl.innerHTML = updates.length > 0
+        ? updates.map(update => `
+            <li class="teacher-update-spotlight-item">
+                <div class="teacher-update-spotlight-topline">
+                    <span class="teacher-update-spotlight-title">${escapeHtml(update.title || 'Class Update')}</span>
+                    <span class="student-alert-tag">${escapeHtml(update.category)}</span>
+                </div>
+                <p>${escapeHtml(update.message || '')}</p>
+                <div class="teacher-update-spotlight-meta">
+                    <span>${escapeHtml(update.by || 'Teacher')}</span>
+                    <span>${escapeHtml(new Date(update.createdAt || Date.now()).toLocaleString())}</span>
+                </div>
+            </li>
+        `).join('')
+        : '<li class="empty-state">Post a class update to see it here.</li>';
 }
 
 function renderRoleDashboardHub() {
@@ -12397,12 +12565,15 @@ async function postTeacherUpdate() {
         id: `upd-${Date.now()}`,
         title,
         message,
+        category: inferTeacherUpdateCategory({ title, message }),
         by: user ? `${user.name} (${user.role})` : 'Teacher',
         createdAt: new Date().toISOString()
     };
     teacherUpdates.unshift(update);
+    teacherUpdates = teacherUpdates.slice(0, 200);
     saveState({ teacherUpdates });
     renderTeacherUpdatesList();
+    renderTeacherUpdatesSpotlight();
     addActivity('bullhorn', 'Teacher Update Posted', title);
     document.getElementById('teacherUpdateTitle').value = '';
     document.getElementById('teacherUpdateMessage').value = '';
@@ -12492,9 +12663,18 @@ async function loadTeacherUpdatesFromServer() {
         if (!response.ok) return;
         const data = await response.json();
         if (Array.isArray(data) && data.length > 0) {
+            const previousIds = new Set((Array.isArray(teacherUpdates) ? teacherUpdates : []).map(item => String(item && item.id || "")));
             teacherUpdates = data;
+            teacherUpdatesLastFetchAt = Date.now();
             saveState({ teacherUpdates });
             renderTeacherUpdatesList();
+            renderStudentDashboardPanels();
+            renderTeacherUpdatesSpotlight();
+            if (data.some(item => item && item.id && !previousIds.has(String(item.id)))) {
+                notifyStudentAboutTeacherUpdates();
+            }
+        } else {
+            teacherUpdatesLastFetchAt = Date.now();
         }
     } catch (_) {}
 }
